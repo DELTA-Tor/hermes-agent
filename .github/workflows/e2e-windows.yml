@@ -329,25 +329,6 @@ jobs:
           archive: false
           overwrite: true
 
-      - name: Convert screen recording to compact GIF
-        if: always()
-        shell: pwsh
-        run: |
-          ffmpeg -y -i recording.mkv `
-            -vf "fps=15,scale=800:-1:flags=lanczos,split=2[s0][s1];[s0]palettegen=max_colors=64[p];[s1][p]paletteuse=dither=bayer" `
-            recording.gif
-
-      - name: Upload compact GIF
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        id: upload-gif
-        if: always()
-        with:
-          name: screen-recording-gif-${{ github.sha }}
-          path: recording.gif
-          retention-days: 1
-          archive: false
-          overwrite: true
-
       - name: Link screen recording in job summary
         shell: pwsh
         env:
@@ -357,8 +338,6 @@ jobs:
           Add-Content $env:GITHUB_STEP_SUMMARY "## Installer screen recording"
           Add-Content $env:GITHUB_STEP_SUMMARY ""
           Add-Content $env:GITHUB_STEP_SUMMARY "[download recording.mkv]($env:MKV_URL)"
-          Add-Content $env:GITHUB_STEP_SUMMARY ""
-          Add-Content $env:GITHUB_STEP_SUMMARY "![recording.gif]($env:GIF_URL)"
 
       - name: Bootstrap Installer log
         shell: pwsh

@@ -42,8 +42,8 @@ ClickCenterOfImageInWindow(winTitle, imageFile, timeoutMs := 10000, intervalMs :
     WinGetPos(&wx, &wy, &ww, &wh, winTitle)
 
     img := LoadPicture(imageFile, , &imgType)
-    width := imgType.W
-    height := imgType.H
+    width := img.W
+    height := img.H
 
     startTime := A_TickCount
 
