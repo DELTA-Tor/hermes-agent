@@ -5,22 +5,16 @@
 logPath := A_Args.Length >= 1 ? A_Args[1] : "ahk.log"
 
 Log(text) {
+    msg := Format("[autohotkey] {}`n", text)
     ToolTip(text)
-    FileAppend(Format("{}`n", text), '*')
-    FileAppend(Format("{}`n", text), logPath)
+    FileAppend(msg, '*')
+    FileAppend(msg, logPath)
 }
 
 OnError(LogError)
 
 LogError(err, mode) {
-    FileAppend(
-        "Unhandled error: " err.Message "`n",
-        "*"
-    )
-    FileAppend(
-        "Unhandled error: " err.Message "`n",
-        logPath
-    )
+    Log(Format("Unhandled error: {}", err.Message))
     ExitApp(1)
     return -1  ; suppress the standard error dialog
 }
@@ -66,6 +60,9 @@ ClickCenterOfImageInWindow(winTitle, imageFile, timeoutMs := 10000, intervalMs :
 
     hBitmap := LoadPicture(imageFile)
 
+    if !hBitmap {
+        throw Error("LoadPicture failed: " imageFile)
+    }
     bm := Buffer(32, 0) ; BITMAP structure on x64
     DllCall("GetObject", "Ptr", hBitmap, "Int", bm.Size, "Ptr", bm)
 
@@ -104,9 +101,9 @@ try {
 WinGetPos(&x, &y, &w, &h, winTitle)
 Log(Format("Window found at x={1} y={2} w={3} h={4}`n", x, y, w, h))
 
-ClickCenterOfImageInWindow(winTitle, "install-button.png")
+ClickCenterOfImageInWindow(winTitle, A_ScriptDir "\install-button.png")
 
-ClickCenterOfImageInWindow(winTitle, "launch-button.png", 1000 * 60 * 8)
+ClickCenterOfImageInWindow(winTitle, A_ScriptDir "\launch-button.png", 1000 * 60 * 8)
 
 Sleep(2000)
 
