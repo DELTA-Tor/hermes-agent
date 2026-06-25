@@ -8942,16 +8942,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             # ordering is deterministic: raw print() and _cprint() flush to different
             # buffers under patch_stdout and interleave nondeterministically (the bar
             # would race above/below the Plan line across states). Keep one path.
-            pb = usage.plan_bar
-            if pb is not None and pb.total_usd > 0:
-                bar, _ = self._billing_spend_bar(pb.spent_usd, pb.total_usd)
-                _pct_s = f" · {pb.pct_used}% used" if pb.pct_used is not None else ""
-                _label = (usage.plan_name or "plan").ljust(8)[:8]
-                _cprint(f"  {_label}[{bar}]  ${pb.remaining_usd:,.2f} left of ${pb.total_usd:,.2f}{_pct_s}")
-                printed_any = True
-            tb = usage.topup_bar
-            if tb is not None and tb.remaining_usd > 0:
-                _cprint(f"  {'top-up'.ljust(8)}[{'█' * 10}]  ${tb.remaining_usd:,.2f} · never expires")
+            for _bar_ln in self._usage_bar_lines(usage, usage.plan_name):
+                _cprint(_bar_ln)
                 printed_any = True
             if usage.has_topup and usage.total_spendable_usd is not None:
                 _cprint(f"  Total spendable: ${usage.total_spendable_usd:,.2f}")
@@ -9079,17 +9071,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         print(f"  {'─' * 41}")
 
         # Two-bar dollar usage view — plan name labels the plan bar.
-        pb = getattr(usage, "plan_bar", None) if usage else None
-        if pb is not None and pb.total_usd > 0:
-            bar, _ = self._billing_spend_bar(pb.spent_usd, pb.total_usd)
-            _pct = pb.pct_used
-            _pct_s = f" · {_pct}% used" if _pct is not None else ""
-            _label = (plan_name or "plan").ljust(8)[:8]
-            print(f"  {_label}[{bar}]  ${pb.remaining_usd:,.2f} left of ${pb.total_usd:,.2f}{_pct_s}")
-        tb = getattr(usage, "topup_bar", None) if usage else None
-        if tb is not None and tb.remaining_usd > 0:
-            full = "█" * 10
-            print(f"  {'top-up'.ljust(8)}[{full}]  ${tb.remaining_usd:,.2f} · never expires")
+        for _bar_ln in self._usage_bar_lines(usage, plan_name):
+            print(_bar_ln)
         if usage and getattr(usage, "has_topup", False) and getattr(usage, "total_spendable_usd", None) is not None:
             print(f"  Total spendable: ${usage.total_spendable_usd:,.2f}")
 
@@ -9243,15 +9226,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         print(f"  {'─' * 41}")
 
         # Two-bar dollar usage view (plan name on the plan bar; top-up below).
-        pb = getattr(usage, "plan_bar", None) if usage else None
-        if pb is not None and pb.total_usd > 0:
-            bar, _ = self._billing_spend_bar(pb.spent_usd, pb.total_usd)
-            _pct_s = f" · {pb.pct_used}% used" if pb.pct_used is not None else ""
-            _label = (getattr(usage, "plan_name", None) or "plan").ljust(8)[:8]
-            print(f"  {_label}[{bar}]  ${pb.remaining_usd:,.2f} left of ${pb.total_usd:,.2f}{_pct_s}")
-        tb = getattr(usage, "topup_bar", None) if usage else None
-        if tb is not None and tb.remaining_usd > 0:
-            print(f"  {'top-up'.ljust(8)}[{'█' * 10}]  ${tb.remaining_usd:,.2f} · never expires")
+        for _bar_ln in self._usage_bar_lines(usage, getattr(usage, "plan_name", None)):
+            print(_bar_ln)
 
         ar = state.auto_reload
         if ar is not None:
@@ -9343,6 +9319,26 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         filled = max(0, min(cells, filled))
         bar = ("█" * filled) + ("░" * (cells - filled))
         return bar, pct
+
+    def _usage_bar_lines(self, usage, plan_name) -> list:
+        """The plan + top-up dollar bars as ready-to-print lines (filled = remaining).
+
+        Returns [] when there's nothing to draw. The caller resolves ``plan_name``
+        (the plan-bar label) and picks its own print fn — block ordering differs
+        per surface (``_cprint`` vs ``print`` under patch_stdout). One source of
+        truth for the bar format across /usage, /subscription, and /topup.
+        """
+        lines: list = []
+        pb = getattr(usage, "plan_bar", None) if usage else None
+        if pb is not None and pb.total_usd > 0:
+            bar, _ = self._billing_spend_bar(pb.spent_usd, pb.total_usd)
+            pct_s = f" · {pb.pct_used}% used" if pb.pct_used is not None else ""
+            label = (plan_name or "plan").ljust(8)[:8]
+            lines.append(f"  {label}[{bar}]  ${pb.remaining_usd:,.2f} left of ${pb.total_usd:,.2f}{pct_s}")
+        tb = getattr(usage, "topup_bar", None) if usage else None
+        if tb is not None and tb.remaining_usd > 0:
+            lines.append(f"  {'top-up'.ljust(8)}[{'█' * 10}]  ${tb.remaining_usd:,.2f} · never expires")
+        return lines
 
     def _billing_open_portal(self, state):
         url = getattr(state, "portal_url", None)
