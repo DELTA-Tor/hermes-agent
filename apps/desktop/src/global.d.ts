@@ -522,6 +522,10 @@ export interface HermesApiRequest {
   path: string
   method?: string
   body?: unknown
+  // Single-file multipart upload (FastAPI UploadFile endpoints). Mutually
+  // exclusive with `body`; bytes transfer over IPC as a structured-clone
+  // ArrayBuffer. Token-mode backends only.
+  upload?: { filename: string; contentType?: string; bytes: ArrayBuffer }
   timeoutMs?: number
   // Route this REST call to a specific profile's backend. Omit for the primary
   // (window) backend. Read-only cross-profile data is served by the primary, so

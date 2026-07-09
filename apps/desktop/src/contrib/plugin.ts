@@ -12,7 +12,7 @@
  * through the plugin host loader (next phase); this is that seam.
  */
 
-import { pluginRest, type PluginRestOptions } from '@/hermes'
+import { pluginRest, type PluginRestOptions, pluginSocket } from '@/hermes'
 import { readKey, writeKey } from '@/lib/storage'
 
 import { registry } from './registry'
@@ -44,6 +44,11 @@ export interface PluginContext {
    *  `plugin_api.py` — profile-aware, namespace-scoped by construction. Use
    *  `host.request` for gateway JSON-RPC. */
   rest: <T>(path: string, opts?: PluginRestOptions) => Promise<T>
+  /** Live twin of `rest`: a WebSocket to this plugin's own namespace
+   *  ('/events'), JSON frames to `onMessage`, auto-reconnect, disposer
+   *  returned. Resolves to a no-op on OAuth remotes — treat it as an
+   *  accelerator over your polling, never a replacement. */
+  socket: (path: string, onMessage: (data: unknown) => void) => () => void
   /** Plugin-scoped persistence. */
   storage: PluginStorage
 }
@@ -100,6 +105,7 @@ export function createPluginContext(pluginId: string, onDispose?: (dispose: () =
     register: c => track(registry.register(scope(c))),
     registerMany: cs => track(registry.registerMany(cs.map(scope))),
     rest: <T>(path: string, opts?: PluginRestOptions) => pluginRest<T>(pluginId, path, opts),
+    socket: (path, onMessage) => track(pluginSocket(pluginId, path, onMessage)),
     storage: createPluginStorage(pluginId)
   }
 }

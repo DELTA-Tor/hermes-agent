@@ -200,6 +200,8 @@ function profileScoped(): { profile?: string } {
 export interface PluginRestOptions {
   method?: string
   body?: unknown
+  /** Single-file multipart upload (see HermesApiRequest.upload). */
+  upload?: { filename: string; contentType?: string; bytes: ArrayBuffer }
   timeoutMs?: number
 }
 
@@ -227,9 +229,72 @@ export async function pluginRest<T>(pluginId: string, path: string, opts: Plugin
     path: `/api/plugins/${pluginId}${suffix}`,
     method: opts.method,
     body: opts.body,
+    upload: opts.upload,
     timeoutMs: opts.timeoutMs,
     ...profileScoped()
   })
+}
+
+/** The plugin WebSocket door — the live twin of `pluginRest`, scoped the same
+ *  way: `path` is relative to `/api/plugins/<pluginId>` ('/events' → the
+ *  plugin's own event stream). Token-mode backends auth via the same query
+ *  credential the app's own sockets use; OAuth remotes resolve null (callers
+ *  keep their polling fallback — every consumer must have one anyway, since a
+ *  socket can drop). Auto-reconnects with backoff until disposed. */
+export function pluginSocket(
+  pluginId: string,
+  path: string,
+  onMessage: (data: unknown) => void
+): () => void {
+  const suffix = path.startsWith('/') ? path : `/${path}`
+
+  if (suffix.split(/[?#]/, 1)[0].split('/').includes('..')) {
+    throw new Error(`pluginSocket: illegal path traversal in "${path}"`)
+  }
+
+  let socket: null | WebSocket = null
+  let disposed = false
+  let attempt = 0
+
+  const connect = async () => {
+    const connection = await window.hermesDesktop.getConnection().catch(() => null)
+
+    // No bridge / OAuth cookie auth (WS tickets are single-use, core-managed):
+    // stay on the polling fallback rather than half-working.
+    if (disposed || !connection || connection.authMode === 'oauth') {
+      return
+    }
+
+    const base = connection.baseUrl.replace(/^http/, 'ws')
+    const join = suffix.includes('?') ? '&' : '?'
+    socket = new WebSocket(`${base}/api/plugins/${pluginId}${suffix}${join}token=${encodeURIComponent(connection.token)}`)
+
+    socket.onmessage = event => {
+      attempt = 0
+
+      try {
+        onMessage(JSON.parse(String(event.data)))
+      } catch {
+        // Non-JSON frame — plugin streams are JSON by contract; skip it.
+      }
+    }
+
+    socket.onclose = () => {
+      socket = null
+
+      if (!disposed) {
+        attempt += 1
+        window.setTimeout(() => void connect(), Math.min(30_000, 1_000 * 2 ** attempt))
+      }
+    }
+  }
+
+  void connect()
+
+  return () => {
+    disposed = true
+    socket?.close()
+  }
 }
 
 export async function listSessions(
