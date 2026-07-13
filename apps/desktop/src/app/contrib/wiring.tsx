@@ -170,6 +170,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   const {
     activeSessionIdRef,
     ensureSessionState,
+    resetViewSync,
     runtimeIdByStoredSessionIdRef,
     selectedStoredSessionIdRef,
     sessionStateByRuntimeIdRef,
@@ -375,6 +376,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     getRouteToken,
     navigate,
     requestGateway,
+    resetViewSync,
     runtimeIdByStoredSessionIdRef,
     selectedStoredSessionId,
     selectedStoredSessionIdRef,

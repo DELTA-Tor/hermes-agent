@@ -1329,6 +1329,9 @@ export interface Translations {
       newWorktreeTitle: string
       newWorktreeDesc: string
       branchPlaceholder: string
+      branchOff: () => { after: string; before: string }
+      baseBranchPlaceholder: string
+      baseBranchNone: string
       startWorkFailed: string
       convertBranch: string
       convertBranchTitle: string
@@ -1718,6 +1721,16 @@ export interface Translations {
       recentActivity: string
       viewAllLogs: string
       messagingPlatforms: string
+    }
+    approvalMode: {
+      title: string
+      ariaLabel: (mode: string) => string
+      manual: string
+      manualDescription: string
+      smart: string
+      smartDescription: string
+      off: string
+      offDescription: string
     }
     statusbar: {
       unknown: string

@@ -1,5 +1,4 @@
-type Method = string
-import type { ExecFileSyncOptionsWithStringEncoding } from 'node:child_process'
+
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -30,6 +29,7 @@ import {
 } from 'electron'
 import nodePty from 'node-pty'
 
+import { stopBackendChild as stopBackendChildImpl } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { buildDesktopBackendEnv, normalizeHermesHomeRoot } from './backend-env'
 import { canImportHermesCli, verifyHermesCli } from './backend-probes'
@@ -84,7 +84,7 @@ import {
   reviewUnstage
 } from './git-review-ops'
 import { gitRootForIpc } from './git-root'
-import { addWorktree, listBranches, listWorktrees, removeWorktree, switchBranch } from './git-worktree-ops'
+import { addWorktree, listBaseBranches, listBranches, listWorktrees, removeWorktree, switchBranch } from './git-worktree-ops'
 import {
   DATA_URL_READ_MAX_BYTES,
   DEFAULT_FETCH_TIMEOUT_MS,
@@ -96,6 +96,7 @@ import {
 } from './hardening'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
 import { serializeJsonBody, setJsonRequestHeaders } from './oauth-net-request'
+import { decideProfileDeleteAction, profileNameFromDeleteRequest, resolveRouteProfile } from './profile-delete-routing'
 import {
   buildSessionWindowUrl,
   chatWindowWebPreferences,
@@ -125,6 +126,8 @@ import {
   MIN_HEIGHT as WINDOW_MIN_HEIGHT,
   MIN_WIDTH as WINDOW_MIN_WIDTH
 } from './window-state'
+import { hiddenWindowsChildOptions } from './windows-child-options'
+import { buildPathExtCandidates, chooseUpdaterArgs, getVenvSitePackagesEntries, resolveVenvHermesCommand } from './windows-hermes-path'
 import { readWindowsUserEnvVar } from './windows-user-env'
 import { isPackagedInstallPath as isPackagedInstallPathUnderRoots } from './workspace-cwd'
 import { readWslWindowsClipboardImage } from './wsl-clipboard-image'
@@ -151,14 +154,6 @@ const APP_ROOT = app.getAppPath()
 // ESM loader is broken on Electron 40's Node (ERR_INVALID_RETURN_PROPERTY_VALUE).
 // Dev (`npm run dev`) and prod both load the esbuild output from dist/.
 const PRELOAD_PATH = path.join(APP_ROOT, 'dist', 'electron-preload.js')
-
-function hiddenWindowsChildOptions(options: any = {}): ExecFileSyncOptionsWithStringEncoding {
-  if (!IS_WINDOWS || Object.prototype.hasOwnProperty.call(options, 'windowsHide')) {
-    return options as any
-  }
-
-  return { ...options, windowsHide: true } as any
-}
 
 // Remote displays (SSH X11 forwarding, VNC, RDP) make Chromium's GPU
 // compositor flicker — accelerated layers can't be presented cleanly over the
@@ -1430,9 +1425,7 @@ function findOnPath(command) {
   // shell-script shim named `hermes` — must not shadow `hermes.cmd`/`hermes.exe`.
   // The empty entry is kept LAST so callers that already include the extension
   // (py.exe, pwsh.exe, powershell.exe) still resolve.
-  const extensions = IS_WINDOWS
-    ? [...(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean), '']
-    : ['']
+  const extensions = buildPathExtCandidates(process.env.PATHEXT, IS_WINDOWS)
 
   for (const entry of pathEntries) {
     for (const extension of extensions) {
@@ -1452,71 +1445,21 @@ function isCommandScript(command) {
 }
 
 function unwrapWindowsVenvHermesCommand(command, backendArgs) {
-  if (!IS_WINDOWS || !command || isCommandScript(command)) {
-    return null
-  }
-
-  const resolved = path.resolve(String(command))
-
-  if (!/^hermes(?:\.exe)?$/i.test(path.basename(resolved))) {
-    return null
-  }
-
-  const scriptsDir = path.dirname(resolved)
-
-  if (path.basename(scriptsDir).toLowerCase() !== 'scripts') {
-    return null
-  }
-
-  const venvRoot = path.dirname(scriptsDir)
-  const python = getVenvPython(venvRoot)
-
-  if (!fileExists(python)) {
-    return null
-  }
-
-  const root = path.dirname(venvRoot)
-
-  // Smoke-test the venv interpreter before trusting it. A venv whose update
-  // died mid-`pip install` still has python.exe + hermes.exe on disk, but the
-  // backend dies on its first import (e.g. ModuleNotFoundError: dotenv) before
-  // the gateway ever binds. Returning it here also BYPASSED the caller's
-  // `--version` probe, so Retry/"Repair install" re-resolved the same broken
-  // venv forever instead of falling through to the bootstrap installer.
-  // Mirror isActiveRuntimeUsable(): probe with the checkout on PYTHONPATH so a
-  // healthy source-tree venv passes.
-  if (
-    !canImportHermesCli(python, {
-      env: {
-        PYTHONPATH: [...(directoryExists(root) ? [root] : []), process.env.PYTHONPATH]
-          .filter(Boolean)
-          .join(path.delimiter)
-      }
-    })
-  ) {
-    rememberLog(
-      `Ignoring venv Hermes at ${python}: runtime import probe failed (broken/partial venv); falling through to bootstrap.`
-    )
-
-    return null
-  }
-
-  return {
-    label: `existing Hermes Python at ${python}`,
-    command: python,
-    args: ['-m', 'hermes_cli.main', ...backendArgs],
-    bootstrap: false,
-    env: buildDesktopBackendEnv({
-      hermesHome: HERMES_HOME,
-      pythonPathEntries: [...(directoryExists(root) ? [root] : []), ...getVenvSitePackagesEntries(venvRoot)],
-      venvRoot
-    }),
-    kind: 'python',
-    // Surfaced so backendSupportsServe() can read this runtime's source for the
-    // `serve` capability check instead of falling back to a heavyweight probe.
-    root,
-    shell: false
-  }
+  return resolveVenvHermesCommand(command, backendArgs, {
+    isWindows: IS_WINDOWS,
+    isCommandScript,
+    fileExists,
+    directoryExists,
+    canImportHermesCli,
+    getVenvPython,
+    getVenvSitePackagesEntries,
+    buildDesktopBackendEnv,
+    hermesHome: HERMES_HOME,
+    resolvePath: (...segments) => path.resolve(...segments),
+    dirname: p => path.dirname(p),
+    basename: p => path.basename(p),
+    rememberLog
+  })
 }
 
 // Does the resolved runtime understand the `serve` subcommand? The desktop
@@ -1864,45 +1807,6 @@ function getVenvPython(venvRoot) {
 // console python also restores stdout, so the backend announces its port on the
 // normal HERMES_DASHBOARD_READY stdout line and no ready-file side channel is
 // needed.
-
-function getVenvSitePackagesEntries(venvRoot) {
-  const entries = []
-
-  if (!venvRoot) {
-    return entries
-  }
-
-  if (IS_WINDOWS) {
-    const sitePackages = path.join(venvRoot, 'Lib', 'site-packages')
-
-    if (directoryExists(sitePackages)) {
-      entries.push(sitePackages)
-    }
-
-    return entries
-  }
-
-  const version = (() => {
-    try {
-      const cfg = fs.readFileSync(path.join(venvRoot, 'pyvenv.cfg'), 'utf8')
-      const match = cfg.match(/^version_info\s*=\s*(\d+\.\d+)/im)
-
-      return match ? match[1].trim() : null
-    } catch {
-      return null
-    }
-  })()
-
-  if (version) {
-    const sitePackages = path.join(venvRoot, 'lib', `python${version}`, 'site-packages')
-
-    if (directoryExists(sitePackages)) {
-      entries.push(sitePackages)
-    }
-  }
-
-  return entries
-}
 
 function makeDashboardReadyFile() {
   const dir = path.join(app.getPath('userData'), 'backend-ready')
@@ -2674,7 +2578,7 @@ async function handOffWindowsBootstrapRecovery(reason) {
   const haveRealInstall =
     fileExists(venvPython) || fileExists(venvHermes) || fileExists(path.join(updateRoot, '.hermes-bootstrap-complete'))
 
-  const updaterArgs = haveRealInstall ? ['--update', '--branch', branch] : ['--repair', '--branch', branch]
+  const updaterArgs = chooseUpdaterArgs(haveRealInstall, branch)
 
   await releaseBackendLockForUpdate(updateRoot)
 
@@ -4833,7 +4737,8 @@ import {
   installZoomReassertOnWindowEvents,
   percentToZoomLevel,
   ZOOM_STORAGE_KEY,
-  zoomLevelToPercent
+  zoomLevelToPercent,
+  zoomWiringForWindowKind
 } from './zoom'
 
 function setAndPersistZoomLevel(window, zoomLevel) {
@@ -6254,7 +6159,7 @@ async function fetchJsonForProfile(profile, path) {
 }
 
 // Issue an arbitrary method against a profile's resolved backend, parsed JSON.
-async function requestJsonForProfile(profile: string, path: string, method: Method, body?: string) {
+async function requestJsonForProfile(profile: string, path: string, method: string, body?: string) {
   const conn = await ensureBackend(profile)
   const url = `${conn.baseUrl}${path}`
   const opts = { method, body, timeoutMs: DEFAULT_FETCH_TIMEOUT_MS }
@@ -6407,19 +6312,7 @@ function resetBootProgressForReconnect() {
 }
 
 function stopBackendChild(child) {
-  if (!child || child.killed) {
-    return
-  }
-
-  try {
-    if (IS_WINDOWS && Number.isInteger(child.pid)) {
-      forceKillProcessTree(child.pid)
-    } else {
-      child.kill('SIGTERM')
-    }
-  } catch {
-    // Already gone.
-  }
+  stopBackendChildImpl(child, { forceKillProcessTree, isWindows: IS_WINDOWS })
 }
 
 // Soft gateway-mode apply: tear down the primary without resetting boot UI or
@@ -6772,59 +6665,38 @@ function stopAllPoolBackends() {
   }
 }
 
-function profileNameFromDeleteRequest(request) {
-  if (!request || String(request.method || 'GET').toUpperCase() !== 'DELETE') {
-    return null
-  }
-
-  const match = String(request.path || '').match(/^\/api\/profiles\/([^/?#]+)(?:[?#].*)?$/)
-
-  if (!match) {
-    return null
-  }
-
-  let raw = ''
-
-  try {
-    raw = decodeURIComponent(match[1])
-  } catch {
-    return null
-  }
-
-  const name = raw.trim()
-
-  if (!name) {
-    return null
-  }
-
-  if (name.toLowerCase() === 'default') {
-    return 'default'
-  }
-
-  return name.toLowerCase()
-}
-
 // Returns the profile name whose backend was torn down, or null when the
 // request is not a profile-delete.  The caller uses this to skip ensureBackend
 // for the just-torn-down profile — otherwise ensureBackend respawns a pool
 // backend whose ensure_hermes_home() recreates the deleted profile directory.
+//
+// The routing *decision* (which branch fires, what profile name gets
+// returned) lives in the pure decideProfileDeleteAction() in
+// profile-delete-routing.ts; this function only performs the side effects
+// that decision calls for.
 async function prepareProfileDeleteRequest(request) {
   const profile = profileNameFromDeleteRequest(request)
 
-  if (!profile || profile === 'default' || !PROFILE_NAME_RE.test(profile)) {
+  const decision = decideProfileDeleteAction(profile, {
+    isDefaultProfile: p => p === 'default',
+    isValidProfileName: p => PROFILE_NAME_RE.test(p),
+    primaryProfileKey
+  })
+
+  if (decision.action === 'noop') {
     return null
   }
 
-  if (profile === primaryProfileKey()) {
+  if (decision.action === 'teardown-primary') {
     writeActiveDesktopProfile('default')
     await teardownPrimaryBackendAndWait()
 
-    return profile
+    return decision.profile
   }
 
-  await teardownPoolBackendAndWait(profile)
+  await teardownPoolBackendAndWait(decision.profile)
 
-  return profile
+  return decision.profile
 }
 
 async function startHermes() {
@@ -7152,7 +7024,7 @@ function spawnSecondaryWindow({
   win.on('enter-full-screen', () => sendWindowStateChanged(true))
   win.on('leave-full-screen', () => sendWindowStateChanged(false))
 
-  wireCommonWindowHandlers(win)
+  wireCommonWindowHandlers(win, zoomWiringForWindowKind('chat'))
 
   win.loadURL(
     buildSessionWindowUrl(sessionId, {
@@ -7262,9 +7134,9 @@ function spawnPetOverlayWindow(bounds) {
     // Not supported everywhere — best effort.
   }
 
-  // Pet overlay opts out of global UI zoom (see wireCommonWindowHandlers): it
+  // Pet overlay opts out of global UI zoom (see zoomWiringForWindowKind): it
   // owns its window-fit + scale, and inheriting zoom would crop the sprite.
-  wireCommonWindowHandlers(win, { zoom: false })
+  wireCommonWindowHandlers(win, zoomWiringForWindowKind('petOverlay'))
 
   win.once('ready-to-show', () => {
     if (!win.isDestroyed()) {
@@ -7396,7 +7268,7 @@ function createWindow() {
   // window-all-closed from quitting on Windows/Linux).
   mainWindow.on('closed', () => closePetOverlay())
 
-  wireCommonWindowHandlers(mainWindow)
+  wireCommonWindowHandlers(mainWindow, zoomWiringForWindowKind('chat'))
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     rememberLog(`[renderer] render-process-gone reason=${details?.reason} exitCode=${details?.exitCode}`)
@@ -8011,7 +7883,7 @@ ipcMain.handle('hermes:api', async (_event, request) => {
   // backend instead of spawning a fresh pool backend.  A freshly spawned
   // backend calls ensure_hermes_home() which recreates the profile directory,
   // defeating the deletion and leaving a zombie process.
-  const routeProfile = tornDownProfile ? null : profile
+  const routeProfile = resolveRouteProfile(tornDownProfile, profile)
   const connection = await ensureBackend(routeProfile)
   const timeoutMs = resolveTimeoutMs(request?.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
 
@@ -8651,6 +8523,10 @@ ipcMain.handle('hermes:git:branchSwitch', async (_event, repoPath, branch) =>
 )
 
 ipcMain.handle('hermes:git:branchList', async (_event, repoPath) => listBranches(repoPath, resolveGitBinary()))
+
+ipcMain.handle('hermes:git:baseBranchList', async (_event, repoPath) =>
+  listBaseBranches(repoPath, resolveGitBinary())
+)
 
 // Compact repo status (branch, ahead/behind, change counts + files) for the
 // composer coding rail. Returns null on a non-repo / remote backend so the rail

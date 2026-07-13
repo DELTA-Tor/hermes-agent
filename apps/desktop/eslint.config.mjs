@@ -133,6 +133,9 @@ export default [
     }
   },
   {
-    ignores: ['*.config.*']
+    files: ['**/*.test.tsx'],
+    rules: {
+      'no-restricted-globals': ['warn', 'document']
+    }
   }
 ]
