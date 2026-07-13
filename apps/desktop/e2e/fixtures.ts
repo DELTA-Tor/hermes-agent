@@ -411,15 +411,7 @@ providers:
  * electron-builder's output layout under release/.
  */
 function resolvePackagedBinaryPath(): string {
-  // The Hermes-Setup.exe in Downloads is the Tauri installer, not the
-  // Electron desktop binary — it's only launchable on Windows. Only use
-  // it as the packaged binary on win32.
   if (process.platform === 'win32') {
-    const downloadsExe = path.join(os.homedir(), 'Downloads', 'Hermes-Setup.exe')
-
-    if (fs.existsSync(downloadsExe)) {
-      return downloadsExe
-    }
     return path.join(RELEASE_ROOT, 'win-unpacked', 'Hermes.exe')
   }
 
