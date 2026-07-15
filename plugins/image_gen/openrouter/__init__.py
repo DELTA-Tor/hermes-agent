@@ -53,6 +53,16 @@ DEFAULT_MODEL = "openai/gpt-5.4-image-2"
 _FALLBACK_MODEL = "google/gemini-3-pro-image"
 _DEFAULT_MODEL_CHAIN = (DEFAULT_MODEL, _FALLBACK_MODEL)
 
+# CONSERVATIVE (upper-bound) per-image cost constants for budgeting/telemetry
+# only — OpenRouter passes through upstream list pricing plus fees, and users
+# can override the model freely, so unknown ids fall back to the highest
+# constant in the table. Never billing truth.
+_COST_ESTIMATES_USD = {
+    "openai/gpt-5.4-image-2": 0.30,
+    "google/gemini-3-pro-image": 0.24,
+}
+_DEFAULT_COST_ESTIMATE_USD = max(_COST_ESTIMATES_USD.values())
+
 # Semantic aspect ratio (the image_gen contract) → OpenRouter's image_config
 # aspect_ratio strings.
 _ASPECT_RATIOS = {
@@ -470,6 +480,9 @@ class OpenRouterCompatImageProvider(ImageGenProvider):
                 prompt=prompt,
                 aspect_ratio=aspect,
                 provider=self._name,
+                cost_estimate_usd=_COST_ESTIMATES_USD.get(
+                    model_id, _DEFAULT_COST_ESTIMATE_USD
+                ),
             )
 
         return last_error or error_response(

@@ -139,6 +139,77 @@ def get_active_provider() -> Optional[ImageGenProvider]:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Prompt-keyword provider routing
+# ---------------------------------------------------------------------------
+#
+# When the user has NOT pinned a backend via ``image_gen.provider``, the
+# prompt itself may name one ("draw this with nano banana", "use gpt image").
+# ``select_provider_for_prompt`` maps such mentions to a registered provider:
+#
+#   "nano banana" / "gemini"      → gemini
+#   "gpt" / "dalle" / "dall-e"    → openai
+#   (no keyword)                  → gemini  (default)
+#
+# The chosen provider must be registered AND available (credentials present);
+# otherwise ``None`` is returned so the caller falls through to the legacy
+# resolution chain (config → single-provider → FAL). Explicit config always
+# wins — this function must only be consulted when ``image_gen.provider`` is
+# unset.
+
+_PROMPT_PROVIDER_HINTS: List[tuple] = [
+    ("gemini", (r"nano[\s_-]?banana", r"\bgemini\b")),
+    ("openai", (r"\bgpt\b", r"\bgpt[\s_-]?image\b", r"\bdall[\s·_-]?e\b", r"\bdalle\b")),
+]
+
+DEFAULT_PROMPT_PROVIDER = "gemini"
+
+
+def select_provider_for_prompt(
+    prompt: str,
+    *,
+    allow_default: bool = True,
+) -> Optional[ImageGenProvider]:
+    """Pick a provider from prompt keywords (config-unset path only).
+
+    ``allow_default=False`` restricts routing to *explicit* keyword hits —
+    callers pass this when the user has expressed a different preference
+    elsewhere (e.g. a pinned ``image_gen.model``) that should win over the
+    gemini default but lose to an explicit "use nano banana" in the prompt.
+
+    Returns the matched provider instance when it is registered and
+    ``is_available()``, else ``None`` (caller falls back to the legacy
+    chain). Never raises.
+    """
+    import re
+
+    text = prompt.lower() if isinstance(prompt, str) else ""
+
+    candidate: Optional[str] = None
+    for provider_name, patterns in _PROMPT_PROVIDER_HINTS:
+        if any(re.search(pattern, text) for pattern in patterns):
+            candidate = provider_name
+            break
+    if candidate is None:
+        if not allow_default:
+            return None
+        candidate = DEFAULT_PROMPT_PROVIDER
+
+    provider = get_provider(candidate)
+    if provider is None:
+        return None
+    try:
+        if not provider.is_available():
+            return None
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "prompt-routed image_gen provider %s.is_available() raised %s",
+            candidate, exc,
+        )
+        return None
+    return provider
+
+
 def _reset_for_tests() -> None:
     """Clear the registry. **Test-only.**"""
     with _lock:

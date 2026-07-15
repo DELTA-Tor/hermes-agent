@@ -346,6 +346,7 @@ def success_response(
     aspect_ratio: str,
     provider: str,
     modality: str = "text",
+    cost_estimate_usd: Optional[float] = None,
     extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build a uniform success response dict.
@@ -353,8 +354,11 @@ def success_response(
     ``image`` may be an HTTP URL or an absolute filesystem path (for b64
     providers like OpenAI). ``modality`` is ``"text"`` (text-to-image) or
     ``"image"`` (image-to-image / editing) — indicates which endpoint was
-    actually hit, useful for diagnostics. Callers that need to pass through
-    additional backend-specific fields can supply ``extra``.
+    actually hit, useful for diagnostics. ``cost_estimate_usd`` is a
+    conservative (upper-bound) per-image cost constant declared in the
+    provider's model catalog — a budgeting/telemetry estimate, never a
+    billing truth. Callers that need to pass through additional
+    backend-specific fields can supply ``extra``.
     """
     payload: Dict[str, Any] = {
         "success": True,
@@ -365,6 +369,8 @@ def success_response(
         "modality": modality,
         "provider": provider,
     }
+    if cost_estimate_usd is not None:
+        payload["cost_estimate_usd"] = float(cost_estimate_usd)
     if extra:
         for k, v in extra.items():
             payload.setdefault(k, v)

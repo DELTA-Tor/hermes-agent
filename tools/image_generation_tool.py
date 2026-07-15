@@ -1389,6 +1389,76 @@ def _dispatch_to_plugin_provider(
     return json.dumps(result)
 
 
+def _dispatch_to_prompt_routed_provider(
+    prompt: str,
+    aspect_ratio: str,
+    image_url: Optional[str] = None,
+    reference_image_urls: Optional[list] = None,
+):
+    """Route by prompt keywords when no ``image_gen.provider`` is configured.
+
+    Mapping (see ``agent.image_gen_registry.select_provider_for_prompt``):
+    'nano banana'/'gemini' → gemini · 'gpt'/'dalle' → openai · default gemini.
+
+    Precedence guardrails:
+    - Explicit ``image_gen.provider`` config always wins (this helper is only
+      reached when it's unset — ``_dispatch_to_plugin_provider`` returned None).
+    - A pinned ``image_gen.model`` (e.g. a FAL catalog id or ``krea-2-*``)
+      suppresses the *default*-gemini leg but still honors explicit keyword
+      mentions in the prompt.
+    - The routed provider must be registered and available; otherwise we
+      return ``None`` and the legacy chain (managed Krea → FAL) proceeds
+      unchanged.
+
+    Returns a JSON string on dispatch, or ``None`` to fall through.
+    """
+    try:
+        from agent.image_gen_registry import select_provider_for_prompt
+        from hermes_cli.plugins import _ensure_plugins_discovered
+
+        _ensure_plugins_discovered()
+        allow_default = _read_configured_image_model() is None
+        provider = select_provider_for_prompt(prompt, allow_default=allow_default)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("prompt-based image_gen routing skipped: %s", exc)
+        return None
+
+    if provider is None:
+        return None
+
+    kwargs: Dict[str, Any] = {"prompt": prompt, "aspect_ratio": aspect_ratio}
+    try:
+        if isinstance(image_url, str) and image_url.strip():
+            kwargs["image_url"] = image_url.strip()
+        norm_refs = None
+        if reference_image_urls is not None:
+            from agent.image_gen_provider import normalize_reference_images
+
+            norm_refs = normalize_reference_images(reference_image_urls)
+        if norm_refs:
+            kwargs["reference_image_urls"] = norm_refs
+        result = provider.generate(**kwargs)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Prompt-routed image gen provider '%s' raised: %s",
+            getattr(provider, "name", "?"), exc,
+        )
+        return json.dumps({
+            "success": False,
+            "image": None,
+            "error": f"Provider '{getattr(provider, 'name', '?')}' error: {exc}",
+            "error_type": "provider_exception",
+        })
+    if not isinstance(result, dict):
+        return json.dumps({
+            "success": False,
+            "image": None,
+            "error": "Provider returned a non-dict result",
+            "error_type": "provider_contract",
+        })
+    return json.dumps(result)
+
+
 # ---------------------------------------------------------------------------
 # Managed-mode Krea routing
 # ---------------------------------------------------------------------------
@@ -1517,6 +1587,19 @@ def _handle_image_generate(args, **kw):
     )
     if dispatched is not None:
         return _postprocess_image_generate_result(dispatched, task_id=task_id)
+
+    # Prompt-keyword routing: no ``image_gen.provider`` configured — honor an
+    # explicit provider mention in the prompt ('nano banana'/'gemini' →
+    # gemini, 'gpt'/'dalle' → openai) and default to gemini when the user has
+    # no pinned model either. Falls through (None) when the routed provider
+    # is unavailable, keeping the legacy Krea/FAL chain intact.
+    prompt_routed = _dispatch_to_prompt_routed_provider(
+        prompt, aspect_ratio,
+        image_url=image_url,
+        reference_image_urls=reference_image_urls,
+    )
+    if prompt_routed is not None:
+        return _postprocess_image_generate_result(prompt_routed, task_id=task_id)
 
     # Managed-mode Krea routing: when no explicit plugin provider is configured
     # but the selected model is a native ``krea-2-*`` id, a portal user routes to

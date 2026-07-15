@@ -49,6 +49,9 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://api.krea.ai"
 
 # Map our short model IDs to Krea's URL path segment.
+# ``cost_estimate_usd`` is a CONSERVATIVE (upper-bound) per-image constant
+# derived from the listed price tiers (rounded UP over the most expensive
+# variant per model) — budgeting/telemetry only, never billing truth.
 _MODELS: Dict[str, Dict[str, Any]] = {
     "krea-2-medium": {
         "display": "Krea 2 Medium",
@@ -56,6 +59,7 @@ _MODELS: Dict[str, Dict[str, Any]] = {
         "strengths": "Illustration, anime, painting, expressive styles. Faster + cheaper.",
         "price": "$0.030 (text) / $0.035 (style refs) / $0.040 (moodboards)",
         "path": "medium",
+        "cost_estimate_usd": 0.04,
     },
     "krea-2-large": {
         "display": "Krea 2 Large",
@@ -63,6 +67,7 @@ _MODELS: Dict[str, Dict[str, Any]] = {
         "strengths": "Photorealism, raw textured looks (motion blur, grain), expressive styles.",
         "price": "$0.060 (text) / $0.065 (style refs) / $0.070 (moodboards)",
         "path": "large",
+        "cost_estimate_usd": 0.07,
     },
     "krea-2-medium-turbo": {
         "display": "Krea 2 Medium Turbo",
@@ -70,6 +75,7 @@ _MODELS: Dict[str, Dict[str, Any]] = {
         "strengths": "Fastest Krea 2 — medium quality at lower latency / cost.",
         "price": "$0.015 (text) / $0.0175 (style refs)",
         "path": "medium-turbo",
+        "cost_estimate_usd": 0.02,
     },
 }
 
@@ -729,6 +735,7 @@ class KreaImageGenProvider(ImageGenProvider):
             aspect_ratio=aspect,
             provider="krea",
             modality=modality,
+            cost_estimate_usd=meta.get("cost_estimate_usd"),
             extra=extra,
         )
 

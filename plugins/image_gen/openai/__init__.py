@@ -51,24 +51,31 @@ logger = logging.getLogger(__name__)
 
 API_MODEL = "gpt-image-2"
 
+# ``cost_estimate_usd`` is a CONSERVATIVE (upper-bound) per-image constant
+# per quality tier at our largest size (1536x1024), for budgeting/telemetry
+# only (list ≈ low $0.011-0.016 / medium $0.042-0.063 / high $0.17-0.25 per
+# image). Prices drift; we round UP so budget lanes never under-count.
 _MODELS: Dict[str, Dict[str, Any]] = {
     "gpt-image-2-low": {
         "display": "GPT Image 2 (Low)",
         "speed": "~15s",
         "strengths": "Fast iteration, lowest cost",
         "quality": "low",
+        "cost_estimate_usd": 0.02,
     },
     "gpt-image-2-medium": {
         "display": "GPT Image 2 (Medium)",
         "speed": "~40s",
         "strengths": "Balanced — default",
         "quality": "medium",
+        "cost_estimate_usd": 0.07,
     },
     "gpt-image-2-high": {
         "display": "GPT Image 2 (High)",
         "speed": "~2min",
         "strengths": "Highest fidelity, strongest prompt adherence",
         "quality": "high",
+        "cost_estimate_usd": 0.30,
     },
 }
 
@@ -403,6 +410,7 @@ class OpenAIImageGenProvider(ImageGenProvider):
             aspect_ratio=aspect,
             provider="openai",
             modality=modality,
+            cost_estimate_usd=meta["cost_estimate_usd"],
             extra=extra,
         )
 
