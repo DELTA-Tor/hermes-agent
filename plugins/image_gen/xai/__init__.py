@@ -49,20 +49,30 @@ logger = logging.getLogger(__name__)
 # Model catalog
 # ---------------------------------------------------------------------------
 
+# ``cost_estimate_usd`` is a CONSERVATIVE (upper-bound) per-image constant
+# for budgeting/telemetry only (xAI image list pricing has hovered around
+# $0.07/image for the standard model). Prices drift; we round UP so budget
+# lanes never under-count.
 _MODELS: Dict[str, Dict[str, Any]] = {
     "grok-imagine-image": {
         "display": "Grok Imagine Image",
         "speed": "~5-10s",
         "strengths": "Fast, high-quality",
+        "cost_estimate_usd": 0.10,
     },
     "grok-imagine-image-quality": {
         "display": "Grok Imagine Image (Quality)",
         "speed": "~10-20s",
         "strengths": "Higher fidelity / detail; slower than the standard model.",
+        "cost_estimate_usd": 0.15,
     },
 }
 
 DEFAULT_MODEL = "grok-imagine-image"
+
+# Fallback when ``model_id`` isn't in the catalog (defensive; edit path pins
+# the quality model which IS in the catalog).
+_DEFAULT_COST_ESTIMATE_USD = 0.15
 
 # xAI aspect ratios (more options than FAL/OpenAI)
 _XAI_ASPECT_RATIOS = {
@@ -480,6 +490,9 @@ class XAIImageGenProvider(ImageGenProvider):
             aspect_ratio=aspect,
             provider="xai",
             modality=modality,
+            cost_estimate_usd=_MODELS.get(model_id, {}).get(
+                "cost_estimate_usd", _DEFAULT_COST_ESTIMATE_USD
+            ),
             extra=extra,
         )
 

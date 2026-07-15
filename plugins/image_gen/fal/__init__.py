@@ -37,6 +37,28 @@ from agent.image_gen_provider import (
 logger = logging.getLogger(__name__)
 
 
+# CONSERVATIVE (upper-bound) per-image cost constants for budgeting/telemetry,
+# derived from the ``price`` strings in ``tools.image_generation_tool.FAL_MODELS``
+# (rounded UP over each model's most expensive listed variant; flux-2-pro
+# includes the chained Clarity Upscaler pass). Unknown / future models fall
+# back to the highest constant so budget lanes never under-count. Never
+# billing truth.
+_COST_ESTIMATES_USD: Dict[str, float] = {
+    "fal-ai/flux-2/klein/9b": 0.02,
+    "fal-ai/flux-2-pro": 0.15,
+    "fal-ai/z-image/turbo": 0.02,
+    "fal-ai/nano-banana-pro": 0.20,
+    "fal-ai/gpt-image-1.5": 0.07,
+    "fal-ai/gpt-image-2": 0.10,
+    "fal-ai/ideogram/v3": 0.10,
+    "fal-ai/recraft/v4/pro/text-to-image": 0.30,
+    "fal-ai/qwen-image": 0.05,
+    "fal-ai/krea/v2/medium/text-to-image": 0.05,
+    "fal-ai/krea/v2/large/text-to-image": 0.08,
+}
+_DEFAULT_COST_ESTIMATE_USD = max(_COST_ESTIMATES_USD.values())
+
+
 class FalImageGenProvider(ImageGenProvider):
     """FAL.ai image generation backend.
 
@@ -198,6 +220,13 @@ class FalImageGenProvider(ImageGenProvider):
                 response["model"] = model_id
             except Exception:  # noqa: BLE001
                 pass
+        if response.get("success"):
+            response.setdefault(
+                "cost_estimate_usd",
+                _COST_ESTIMATES_USD.get(
+                    str(response.get("model") or ""), _DEFAULT_COST_ESTIMATE_USD
+                ),
+            )
         return response
 
 

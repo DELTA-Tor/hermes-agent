@@ -72,24 +72,31 @@ def _is_image_generation_unsupported_error(status_code: int, body: str) -> bool:
 
 API_MODEL = "gpt-image-2"
 
+# ``cost_estimate_usd`` mirrors the ``openai`` plugin: a CONSERVATIVE
+# (upper-bound) per-image constant per quality tier for budgeting/telemetry.
+# Codex-auth usage may be subscription-covered — the estimate still reports
+# the equivalent API list price so budget lanes stay comparable.
 _MODELS: Dict[str, Dict[str, Any]] = {
     "gpt-image-2-low": {
         "display": "GPT Image 2 (Low)",
         "speed": "~15s",
         "strengths": "Fast iteration, lowest cost",
         "quality": "low",
+        "cost_estimate_usd": 0.02,
     },
     "gpt-image-2-medium": {
         "display": "GPT Image 2 (Medium)",
         "speed": "~40s",
         "strengths": "Balanced — default",
         "quality": "medium",
+        "cost_estimate_usd": 0.07,
     },
     "gpt-image-2-high": {
         "display": "GPT Image 2 (High)",
         "speed": "~2min",
         "strengths": "Highest fidelity, strongest prompt adherence",
         "quality": "high",
+        "cost_estimate_usd": 0.30,
     },
 }
 
@@ -627,6 +634,7 @@ class OpenAICodexImageGenProvider(ImageGenProvider):
             aspect_ratio=aspect,
             provider="openai-codex",
             modality="image" if input_images else "text",
+            cost_estimate_usd=meta["cost_estimate_usd"],
             extra={"size": size, "quality": meta["quality"], "input_image_count": len(input_images)},
         )
 
