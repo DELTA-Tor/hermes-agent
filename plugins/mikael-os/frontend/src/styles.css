@@ -152,17 +152,20 @@
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
 }
 
-/* concept-data badge — always visible, unmistakable */
+/* concept-data badge — always present + unmistakable, but a calm cyan pill
+ * (outline + quiet fill) rather than a loud amber alarm, per the reference. */
 .mos__concept {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 7px 12px;
   border-radius: var(--mos-pill);
   font-size: 12px; font-weight: 600; letter-spacing: 0.3px;
-  color: #0b1220;
-  background: linear-gradient(90deg, var(--mos-amber), #f5d67a);
-  border: 1px solid rgba(255, 210, 120, 0.6);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+  color: var(--mos-cyan-bright);
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.42);
+  box-shadow: 0 0 14px -6px rgba(56, 189, 248, 0.6), 0 0 0 1px rgba(56, 189, 248, 0.06) inset;
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
 }
+.mos__concept .mos__icon { color: var(--mos-cyan); }
 
 /* ---------------------------- stage (constellation) ------------------------ */
 .mos__stagewrap {
@@ -247,21 +250,56 @@
 .mos--amber { --mos-accent: var(--mos-amber); }
 .mos--neutral { --mos-accent: #9fb2c9; }
 
-/* decorative tilted orbit rings behind each node */
+/* decorative tilted orbit rings behind each node, each carrying small glowing
+ * satellite points that drift along the elliptical path (static under reduced
+ * motion). offset-path keeps the dot locked to the ring's own coordinate space,
+ * so it inherits the ring's tilt and traces the visible ellipse. */
 .mos__orbitring {
   position: absolute; left: 22px; top: 50%;
   width: 150px; height: 66px;
   transform: translate(-50%, -50%) rotate(-18deg);
   border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--mos-accent) 26%, transparent);
-  opacity: 0.5;
+  border: 1px solid color-mix(in srgb, var(--mos-accent) 30%, transparent);
+  opacity: 0.55;
   pointer-events: none;
 }
 .mos__orbitring--2 {
   width: 96px; height: 42px;
   transform: translate(-50%, -50%) rotate(16deg);
-  opacity: 0.32;
+  opacity: 0.36;
 }
+.mos__nodewrap.is-active .mos__orbitring {
+  border-color: color-mix(in srgb, var(--mos-accent) 44%, transparent);
+  opacity: 0.72;
+}
+
+.mos__sat {
+  position: absolute; top: 0; left: 0;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--mos-accent) 88%, #ffffff);
+  box-shadow: 0 0 6px 1px var(--mos-accent), 0 0 2px 0 #eafaff;
+  offset-anchor: 50% 50%;
+  offset-rotate: 0deg;
+}
+.mos__orbitring .mos__sat--a {
+  offset-path: ellipse(75px 33px at 50% 50%);
+  offset-distance: 14%;
+  animation: mos-orbit 15s linear infinite;
+}
+.mos__orbitring .mos__sat--b {
+  width: 3.5px; height: 3.5px;
+  offset-path: ellipse(75px 33px at 50% 50%);
+  offset-distance: 58%;
+  animation: mos-orbit 15s linear infinite;
+  animation-delay: -7s;
+}
+.mos__orbitring--2 .mos__sat--c {
+  offset-path: ellipse(48px 21px at 50% 50%);
+  offset-distance: 42%;
+  animation: mos-orbit 11s linear infinite reverse;
+}
+@keyframes mos-orbit { to { offset-distance: 100%; } }
 
 .mos__node {
   position: relative;

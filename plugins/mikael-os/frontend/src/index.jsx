@@ -253,15 +253,15 @@ function Orb() {
     let raf = 0;
     let running = true;
 
-    // stable particle field
+    // stable particle field — points of light distributed across the sphere
     const particles = [];
-    for (let i = 0; i < 46; i++) {
+    for (let i = 0; i < 68; i++) {
       particles.push({
         ang: Math.random() * Math.PI * 2,
-        rad: 0.55 + Math.random() * 0.5,
-        spd: (0.15 + Math.random() * 0.5) * (Math.random() < 0.5 ? 1 : -1),
-        size: 0.6 + Math.random() * 1.6,
-        tilt: 0.32 + Math.random() * 0.22,
+        rad: 0.18 + Math.random() * 0.78,
+        spd: (0.12 + Math.random() * 0.45) * (Math.random() < 0.5 ? 1 : -1),
+        size: 0.5 + Math.random() * 1.3,
+        tilt: 0.34 + Math.random() * 0.5,
       });
     }
 
@@ -279,68 +279,130 @@ function Orb() {
     function draw(t) {
       const w = size, hgt = size;
       const cx = w / 2, cy = hgt / 2;
-      const pulse = reduce ? 0 : Math.sin(t * 0.0011) * 0.5 + 0.5;
+      const pulse = reduce ? 0.5 : Math.sin(t * 0.0011) * 0.5 + 0.5;
       const R = (w / 2) * (0.9 + pulse * 0.02);
+      const R0 = R * 0.82; // sphere radius
       ctx.clearRect(0, 0, w, hgt);
 
-      // outer aura
-      const aura = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, R);
-      aura.addColorStop(0, "rgba(56,150,230,0.28)");
-      aura.addColorStop(0.6, "rgba(40,110,200,0.12)");
-      aura.addColorStop(1, "rgba(8,20,40,0)");
-      ctx.fillStyle = aura;
-      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+      // --- outer bloom halo: two stacked additive glows for a soft volumetric
+      //     falloff well beyond the sphere edge (luminous, not a hard disc) ---
+      ctx.globalCompositeOperation = "lighter";
+      const bloom = ctx.createRadialGradient(cx, cy, R0 * 0.35, cx, cy, R * 1.18);
+      bloom.addColorStop(0, "rgba(70,180,255," + (0.32 + pulse * 0.06) + ")");
+      bloom.addColorStop(0.42, "rgba(48,140,235,0.16)");
+      bloom.addColorStop(0.72, "rgba(34,96,190,0.07)");
+      bloom.addColorStop(1, "rgba(8,20,40,0)");
+      ctx.fillStyle = bloom;
+      ctx.beginPath(); ctx.arc(cx, cy, R * 1.18, 0, Math.PI * 2); ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
 
-      // core sphere
-      const core = ctx.createRadialGradient(cx, cy - R * 0.14, R * 0.06, cx, cy, R * 0.82);
-      core.addColorStop(0, "rgba(180,240,255,0.98)");
-      core.addColorStop(0.32, "rgba(70,175,240,0.62)");
-      core.addColorStop(0.7, "rgba(24,80,150,0.4)");
-      core.addColorStop(1, "rgba(6,16,34,0.05)");
-      ctx.fillStyle = core;
-      ctx.beginPath(); ctx.arc(cx, cy, R * 0.82, 0, Math.PI * 2); ctx.fill();
+      // --- core sphere: deep navy body with a bright plasma hotspot sitting a
+      //     touch below centre, matching the reference's luminous underglow ---
+      const body = ctx.createRadialGradient(cx, cy - R0 * 0.1, R0 * 0.1, cx, cy, R0);
+      body.addColorStop(0, "rgba(40,120,205,0.55)");
+      body.addColorStop(0.55, "rgba(20,64,130,0.5)");
+      body.addColorStop(0.85, "rgba(11,34,74,0.42)");
+      body.addColorStop(1, "rgba(6,16,34,0.06)");
+      ctx.fillStyle = body;
+      ctx.beginPath(); ctx.arc(cx, cy, R0, 0, Math.PI * 2); ctx.fill();
 
-      // clip to sphere for the energy waves + particles
+      // clip everything luminous to the sphere and composite additively so the
+      // core, surface points and wave ribbon read as layered light.
       ctx.save();
-      ctx.beginPath(); ctx.arc(cx, cy, R * 0.82, 0, Math.PI * 2); ctx.clip();
+      ctx.beginPath(); ctx.arc(cx, cy, R0, 0, Math.PI * 2); ctx.clip();
+      ctx.globalCompositeOperation = "lighter";
 
-      // orbiting particle field
+      // faint latitude arcs — give the sphere a globe structure without clutter
+      for (let i = 0; i < 3; i++) {
+        const yy = cy + (i - 1) * R0 * 0.42;
+        const rw = Math.sqrt(Math.max(0, R0 * R0 - (yy - cy) * (yy - cy)));
+        ctx.beginPath();
+        ctx.ellipse(cx, yy, rw, Math.max(rw * 0.14, 2), 0, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(96,165,225,0.09)";
+        ctx.lineWidth = 1; ctx.shadowBlur = 0; ctx.stroke();
+      }
+
+      // bright plasma hotspot — sits low in the sphere so the upper body stays
+      // deep navy (depth), the underglow reads as luminous energy welling up.
+      const plasma = ctx.createRadialGradient(cx, cy + R0 * 0.2, R0 * 0.02, cx, cy + R0 * 0.16, R0 * 0.66);
+      plasma.addColorStop(0, "rgba(206,246,255," + (0.8 + pulse * 0.06) + ")");
+      plasma.addColorStop(0.24, "rgba(112,208,255,0.5)");
+      plasma.addColorStop(0.58, "rgba(52,144,232,0.2)");
+      plasma.addColorStop(1, "rgba(20,60,130,0)");
+      ctx.fillStyle = plasma;
+      ctx.beginPath(); ctx.arc(cx, cy, R0, 0, Math.PI * 2); ctx.fill();
+
+      // surface point field (stars of light drifting over the sphere)
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
         const a = p.ang + (reduce ? 0 : t * 0.0004 * p.spd);
-        const rx = R * 0.78 * p.rad;
+        const rx = R0 * 0.96 * p.rad;
         const px = cx + Math.cos(a) * rx;
         const py = cy + Math.sin(a) * rx * p.tilt;
         ctx.beginPath();
         ctx.arc(px, py, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(150,225,255," + (0.25 + p.rad * 0.35) + ")";
+        ctx.fillStyle = "rgba(178,236,255," + (0.2 + (1 - p.rad) * 0.4) + ")";
         ctx.fill();
       }
 
-      // energy-wave bands
+      // energy-wave ribbon — three near-parallel cyan lines, same base frequency
+      // with small phase offsets, so they read as one coherent luminous waveform
+      // through the lower-centre of the sphere (not a criss-cross net).
+      const wavePhase = reduce ? 0.6 : t * 0.0015;
+      const waveFreq = 2.2, waveAmp = R * 0.13, waveY = cy + R0 * 0.15;
+      const waveAt = (x) => {
+        const nx = x / R;
+        return Math.sin(nx * Math.PI * waveFreq + wavePhase) * Math.cos(nx * 1.1);
+      };
       for (let b = 0; b < 3; b++) {
-        const amp = R * 0.13 * (1 - b * 0.22);
-        const yoff = cy + (b - 1) * R * 0.14;
-        const freq = 2.1 + b * 0.5;
-        const phase = reduce ? 0.6 : t * 0.0016 * (1 + b * 0.35);
+        const amp = waveAmp * (1 - b * 0.16);
+        const yoff = waveY + (b - 1) * R * 0.045;
+        const phase = wavePhase + b * 0.5;
         ctx.beginPath();
-        for (let x = -R; x <= R; x += 4) {
+        for (let x = -R; x <= R; x += 3) {
           const nx = x / R;
-          const y = yoff + Math.sin(nx * Math.PI * freq + phase) * amp * Math.cos(nx * 1.15);
+          const y = yoff + Math.sin(nx * Math.PI * waveFreq + phase) * amp * Math.cos(nx * 1.1);
           if (x === -R) ctx.moveTo(cx + x, y); else ctx.lineTo(cx + x, y);
         }
-        ctx.strokeStyle = "rgba(130,225,255," + (0.55 - b * 0.14) + ")";
-        ctx.lineWidth = 2.1 - b * 0.5;
-        ctx.shadowColor = "rgba(90,205,255,0.85)";
-        ctx.shadowBlur = 14;
+        ctx.strokeStyle = "rgba(158,232,255," + (0.6 - b * 0.16) + ")";
+        ctx.lineWidth = 2.4 - b * 0.6;
+        ctx.shadowColor = "rgba(96,210,255,0.9)";
+        ctx.shadowBlur = 16 - b * 3;
         ctx.stroke();
       }
       ctx.restore();
 
-      // rim highlight
-      ctx.beginPath(); ctx.arc(cx, cy, R * 0.82, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(120,205,255," + (0.32 + pulse * 0.18) + ")";
-      ctx.lineWidth = 1.6; ctx.shadowBlur = 0; ctx.stroke();
+      // escaping energy tails — the primary waveform bleeds past the sphere edge
+      // as fading cyan tendrils reaching toward the handoff pills (ref signature).
+      ctx.globalCompositeOperation = "lighter";
+      for (let dir = -1; dir <= 1; dir += 2) {
+        const g = ctx.createLinearGradient(cx + dir * R0 * 0.9, 0, cx + dir * R, 0);
+        g.addColorStop(0, "rgba(150,228,255,0.55)");
+        g.addColorStop(1, "rgba(120,205,255,0)");
+        ctx.strokeStyle = g;
+        ctx.lineWidth = 1.8;
+        ctx.shadowColor = "rgba(96,210,255,0.8)"; ctx.shadowBlur = 8;
+        ctx.beginPath();
+        let first = true;
+        for (let s = 0; s <= 1.0001; s += 0.04) {
+          const x = dir * (R0 * 0.9 + s * (R - R0 * 0.9));
+          const y = waveY + waveAt(x) * waveAmp;
+          if (first) { ctx.moveTo(cx + x, y); first = false; } else ctx.lineTo(cx + x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      ctx.shadowBlur = 0;
+
+      // rim highlight — a thin luminous meniscus around the sphere edge, brighter
+      // along the lower arc where the plasma wells up (crisper spherical read).
+      ctx.beginPath(); ctx.arc(cx, cy, R0, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(150,220,255," + (0.3 + pulse * 0.14) + ")";
+      ctx.lineWidth = 1.4; ctx.shadowColor = "rgba(96,205,255,0.6)"; ctx.shadowBlur = 8; ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, R0, Math.PI * 0.12, Math.PI * 0.88);
+      ctx.strokeStyle = "rgba(180,238,255," + (0.5 + pulse * 0.22) + ")";
+      ctx.lineWidth = 1.8; ctx.shadowColor = "rgba(120,220,255,0.9)"; ctx.shadowBlur = 12; ctx.stroke();
+      ctx.shadowBlur = 0;
     }
 
     function loop(t) {
@@ -418,8 +480,17 @@ function ModuleNode(props) {
       className: "mos__nodewrap mos--" + m.accent + (props.active ? " is-active" : "") + (props.dragging ? " is-dragging" : ""),
       style: { left: m.pos.x + "%", top: m.pos.y + "%" },
     },
-    h("span", { className: "mos__orbitring", "aria-hidden": "true" }),
-    h("span", { className: "mos__orbitring mos__orbitring--2", "aria-hidden": "true" }),
+    h(
+      "span",
+      { className: "mos__orbitring", "aria-hidden": "true" },
+      h("span", { className: "mos__sat mos__sat--a" }),
+      h("span", { className: "mos__sat mos__sat--b" }),
+    ),
+    h(
+      "span",
+      { className: "mos__orbitring mos__orbitring--2", "aria-hidden": "true" },
+      h("span", { className: "mos__sat mos__sat--c" }),
+    ),
     h(
       "button",
       {
