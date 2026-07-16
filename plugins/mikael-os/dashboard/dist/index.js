@@ -58,7 +58,16 @@ var MikaelOSPlugin = function() {
     "map": '<path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /> <path d="M15 5.764v15" /> <path d="M9 3.236v15" />',
     "utensils": '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" /> <path d="M7 2v20" /> <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />',
     "keyboard": '<path d="M10 8h.01" /> <path d="M12 12h.01" /> <path d="M14 8h.01" /> <path d="M16 12h.01" /> <path d="M18 8h.01" /> <path d="M6 8h.01" /> <path d="M7 16h10" /> <path d="M8 12h.01" /> <rect width="20" height="16" x="2" y="4" rx="2" />',
-    "audio-lines": '<path d="M2 10v3" /> <path d="M6 6v11" /> <path d="M10 3v18" /> <path d="M14 8v7" /> <path d="M18 5v13" /> <path d="M22 10v3" />'
+    "audio-lines": '<path d="M2 10v3" /> <path d="M6 6v11" /> <path d="M10 3v18" /> <path d="M14 8v7" /> <path d="M18 5v13" /> <path d="M22 10v3" />',
+    "house": '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />',
+    "layers": '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" /> <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" /> <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" />',
+    "list": '<path d="M3 12h.01" /> <path d="M3 18h.01" /> <path d="M3 6h.01" /> <path d="M8 12h13" /> <path d="M8 18h13" /> <path d="M8 6h13" />',
+    "waypoints": '<circle cx="12" cy="4.5" r="2.5" /> <path d="m10.2 6.3-3.9 3.9" /> <circle cx="4.5" cy="12" r="2.5" /> <path d="M7 12h10" /> <circle cx="19.5" cy="12" r="2.5" /> <path d="m13.8 17.7 3.9-3.9" /> <circle cx="12" cy="19.5" r="2.5" />',
+    "gauge": '<path d="m12 14 4-4" /> <path d="M3.34 19a10 10 0 1 1 17.32 0" />',
+    "moon-star": '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9" /> <path d="M20 3v4" /> <path d="M22 5h-4" />',
+    "circle-user": '<circle cx="12" cy="12" r="10" /> <circle cx="12" cy="10" r="3" /> <path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662" />',
+    "list-todo": '<rect x="3" y="5" width="6" height="6" rx="1" /> <path d="m3 17 2 2 4-4" /> <path d="M13 6h8" /> <path d="M13 12h8" /> <path d="M13 18h8" />',
+    "chevron-left": '<path d="m15 18-6-6 6-6" />'
   };
   const SDK = typeof window !== "undefined" ? window.__HERMES_PLUGIN_SDK__ : void 0;
   const React = SDK && SDK.React;
@@ -71,6 +80,30 @@ var MikaelOSPlugin = function() {
   const useCallback = H.useCallback || ((fn) => fn);
   const useMemo = H.useMemo || ((fn) => typeof fn === "function" ? fn() : fn);
   const h = React ? React.createElement : () => null;
+  function useMediaQuery(query) {
+    const [match, setMatch] = useState(function() {
+      try {
+        return typeof window !== "undefined" && window.matchMedia ? window.matchMedia(query).matches : false;
+      } catch (e) {
+        return false;
+      }
+    });
+    useEffect(function() {
+      if (typeof window === "undefined" || !window.matchMedia) return;
+      const mql = window.matchMedia(query);
+      const on = function() {
+        setMatch(mql.matches);
+      };
+      on();
+      if (mql.addEventListener) mql.addEventListener("change", on);
+      else if (mql.addListener) mql.addListener(on);
+      return function() {
+        if (mql.removeEventListener) mql.removeEventListener("change", on);
+        else if (mql.removeListener) mql.removeListener(on);
+      };
+    }, [query]);
+    return match;
+  }
   function Icon(props) {
     const { name, size = 20, className = "", label } = props;
     const inner = ICONS[name] || ICONS.circle;
@@ -87,21 +120,41 @@ var MikaelOSPlugin = function() {
     });
   }
   const MODULES = [
-    { id: "today", title: "Heute", icon: "sun", accent: "cyan", meta: "9 Ereignisse", pos: { x: 25, y: 13 } },
-    { id: "tasks", title: "Aufgaben & Ziele", icon: "target", accent: "emerald", meta: "7 aktiv · 3 heute", pos: { x: 46, y: 6 } },
-    { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "3 Lektionen fällig", pos: { x: 65, y: 13 } },
-    { id: "risel", title: "Rise-L Prozesse", icon: "server", accent: "amber", meta: "5 Workflows aktiv", pos: { x: 85, y: 20 } },
-    { id: "travel", title: "Reisen", icon: "plane", accent: "cyan", meta: "Rom · 18. Jun", pos: { x: 89, y: 39 } },
-    { id: "nutrition", title: "Ernährung", icon: "leaf", accent: "emerald", meta: "2.105 kcal", pos: { x: 89, y: 57 } },
-    { id: "company", title: "Firma-Signale", icon: "building-2", accent: "neutral", meta: "Nur lesen", readOnly: true, pos: { x: 85, y: 74 } },
-    { id: "kalender", title: "Kalender", icon: "calendar-days", accent: "cyan", meta: "Nächster · 10:30", pos: { x: 12, y: 31 } },
-    { id: "body", title: "Körper / WHOOP", icon: "heart-pulse", accent: "emerald", meta: "Recovery 82%", pos: { x: 9, y: 50 } },
-    { id: "journal", title: "Journal", icon: "notebook-pen", accent: "cyan", meta: "1 Eintrag heute", pos: { x: 13, y: 68 } }
+    { id: "today", title: "Heute", icon: "sun", accent: "cyan", meta: "9 Ereignisse", metric: "9", metricSub: "Ereignisse", pos: { x: 25, y: 13 } },
+    { id: "tasks", title: "Aufgaben & Ziele", icon: "list-todo", accent: "amber", meta: "7 aktiv · 3 heute", metric: "7", metricSub: "aktiv · 3 heute", pos: { x: 46, y: 6 } },
+    { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "3 Lektionen fällig", metric: "3", metricSub: "Lektionen fällig", pos: { x: 65, y: 13 } },
+    { id: "risel", title: "Rise-L Prozesse", icon: "server", accent: "blue", meta: "5 Workflows aktiv", metric: "5", metricSub: "Workflows aktiv", pos: { x: 85, y: 20 } },
+    { id: "travel", title: "Reisen", icon: "plane", accent: "cyan", meta: "Rom · 18. Jun", metric: "3 T", metricSub: "bis Rom", pos: { x: 89, y: 39 } },
+    { id: "nutrition", title: "Ernährung", icon: "leaf", accent: "emerald", meta: "2.105 kcal", metric: "2.105", metricSub: "kcal heute", pos: { x: 89, y: 57 } },
+    { id: "company", title: "Firma-Signale", icon: "building-2", accent: "neutral", meta: "Nur lesen", metric: "—", metricSub: "Nur lesen", readOnly: true, pos: { x: 85, y: 74 } },
+    { id: "kalender", title: "Kalender", icon: "calendar-days", accent: "cyan", meta: "Nächster · 10:30", metric: "10:30", metricSub: "nächstes Ereignis", pos: { x: 12, y: 31 } },
+    { id: "body", title: "Körper / WHOOP", icon: "heart-pulse", accent: "emerald", meta: "Recovery 82%", metric: "82 %", metricSub: "Recovery", pos: { x: 9, y: 50 } },
+    { id: "journal", title: "Journal", icon: "notebook-pen", accent: "neutral", meta: "1 Eintrag heute", metric: "1", metricSub: "Eintrag heute", pos: { x: 13, y: 68 } }
+  ];
+  const TIMELINE = [
+    { id: "briefing", period: "morgen", time: "06:45", end: "07:00", title: "Morgenbriefing", sub: "Tagesstart & Fokus setzen", icon: "sun", accent: "cyan", moduleId: "today" },
+    { id: "training", period: "morgen", time: "07:30", end: "08:30", title: "Training", sub: "Hyrox + Mobility", icon: "activity", accent: "emerald", moduleId: "body" },
+    { id: "deep1", period: "morgen", time: "09:00", end: "11:00", title: "Deep Work Block 1", sub: "Codex Build Sprint", icon: "code-xml", accent: "cyan", moduleId: "engineering" },
+    { id: "learn", period: "morgen", time: "11:00", end: "11:45", title: "Lernplan", sub: "KI-Systeme · Kapitel 4", icon: "graduation-cap", accent: "violet", moduleId: "learning" },
+    { id: "claude", period: "mittag", time: "11:45", end: "12:30", title: "Claude Mission", sub: "Research & Draft", icon: "sparkles", accent: "violet", moduleId: "engineering" },
+    { id: "biz", period: "mittag", time: "13:00", end: "13:45", title: "Business Review", sub: "KPIs & Team-Sync", icon: "building-2", accent: "amber", moduleId: "company" },
+    { id: "focus2", period: "mittag", time: "14:30", end: "16:00", title: "Focus Block 2", sub: "Engineering & Delivery", icon: "zap", accent: "cyan", moduleId: "engineering" },
+    { id: "riselp", period: "mittag", time: "16:00", end: "16:30", title: "Rise-L Process", sub: "Weekly Verification", icon: "server", accent: "emerald", moduleId: "risel" },
+    { id: "route", period: "abend", time: "17:00", end: "18:30", title: "Route & Reisen", sub: "Flughafen ZRH – MUC", icon: "plane", accent: "amber", moduleId: "travel" },
+    { id: "dinner", period: "abend", time: "19:00", end: "21:00", title: "Abendessen", sub: "High Protein + Greens", icon: "utensils", accent: "emerald", moduleId: "nutrition" },
+    { id: "journalx", period: "abend", time: "21:30", end: "22:00", title: "Journal & Reflexion", sub: "Tagesreview & Dankbarkeit", icon: "notebook-pen", accent: "violet", moduleId: "journal" }
+  ];
+  const TODAY = { long: "Donnerstag, 26. Juni", short: "Do, 26. Juni" };
+  const TIMELINE_NOW = { after: "riselp", time: "16:42", suggestion: "Kurze Pause vor der Fahrt einlegen.", tag: "Hydration" };
+  const PERIODS = [
+    { id: "morgen", label: "Morgen", icon: "sun" },
+    { id: "mittag", label: "Mittag", icon: "cloud-moon" },
+    { id: "abend", label: "Abend", icon: "moon-star" }
   ];
   const LENS = {
     engineering: {
       icon: "code-xml",
-      accent: "cyan",
+      accent: "violet",
       title: "Engineering / Codex",
       sub: "Fokus-Linse · 4 Missionen",
       source: "GitHub",
@@ -290,7 +343,7 @@ var MikaelOSPlugin = function() {
     loading: { tone: "muted", label: "Lädt …" },
     fresh: { tone: "verified", label: "Live" },
     stale: { tone: "amber", label: "Veraltet" },
-    partial: { tone: "amber", label: "Teilweise" },
+    partial: { tone: "blue", label: "Teilweise" },
     empty: { tone: "muted", label: "Leer" },
     unavailable: { tone: "red", label: "Nicht erreichbar" },
     error: { tone: "red", label: "Fehler" }
@@ -308,7 +361,7 @@ var MikaelOSPlugin = function() {
     return "vor " + Math.round(h2 / 24) + " T";
   }
   function enrichModule(base, L, loading) {
-    if (!L) return { ...base, _state: loading ? "loading" : "empty" };
+    if (!L) return { ...base, _state: loading ? "loading" : "empty", _metric: base.metric, _metricSub: base.metricSub };
     return {
       ...base,
       title: L.title || base.title,
@@ -323,8 +376,27 @@ var MikaelOSPlugin = function() {
       _observedAt: L.observedAt,
       _permission: L.permission,
       _note: L.note,
-      _rows: Array.isArray(L.rows) ? L.rows : []
+      _rows: Array.isArray(L.rows) ? L.rows : [],
+      _metric: deriveMetric(base, L),
+      _metricSub: L.demo ? base.metricSub : deriveMetricSub(base, L) || base.metricSub
     };
+  }
+  function deriveMetric(base, L) {
+    if (!L || L.demo) return base.metric;
+    if (base.id === "body") return L.tokenFresh ? base.metric : "Verbunden";
+    if (L.active != null) return String(L.active);
+    if (L.count != null) return String(L.count);
+    if (L.services && L.services.active != null) return String(L.services.active);
+    if (L.pending != null) return String(L.pending);
+    return base.metric;
+  }
+  function deriveMetricSub(base, L) {
+    if (base.id === "body") return L.tokenFresh ? base.metricSub : "WHOOP verbunden";
+    if (base.id === "tasks" && L.active != null) return "aktiv · " + (L.count || 0) + " gesamt";
+    if (base.id === "engineering" && L.count != null) return "Missionen aktiv";
+    if (base.id === "risel" && L.services) return "Dienste live";
+    if (base.id === "company" && L.pending != null) return "Approval-Cards";
+    return null;
   }
   function indexLive(live) {
     const byId = {};
@@ -761,6 +833,628 @@ var MikaelOSPlugin = function() {
       )
     );
   }
+  function TimelineCard(props) {
+    const e = props.event;
+    const m = props.module;
+    return h(
+      "button",
+      {
+        type: "button",
+        className: "mos__tl-card mos--" + e.accent + (props.active ? " is-active" : ""),
+        "aria-current": props.active ? "true" : void 0,
+        "aria-label": e.title + " öffnen",
+        onClick: () => props.onActivate(e.moduleId)
+      },
+      h("span", { className: "mos__tl-card-icon" }, h(Icon, { name: e.icon, size: 20 })),
+      h(
+        "span",
+        { className: "mos__tl-card-body" },
+        h(
+          "span",
+          { className: "mos__tl-card-top" },
+          h("span", { className: "mos__tl-card-title" }, e.title),
+          h("span", { className: "mos__tl-card-range" }, e.time + " – " + e.end)
+        ),
+        h("span", { className: "mos__tl-card-sub" }, e.sub),
+        // Keep the rail calm (reference has no pills on rows): only the focused card
+        // carries its freshness pip; per-source provenance stays in the focus panel.
+        props.active && m ? h(StatePip, { module: m }) : null,
+        props.active ? h("span", { className: "mos__tl-progress", "aria-hidden": "true" }, h("span", { style: { width: "58%" } })) : null
+      )
+    );
+  }
+  function TimelineNow() {
+    return h(
+      "div",
+      { className: "mos__tl-row mos__tl-row--now" },
+      h("span", { className: "mos__tl-time mos__tl-time--now" }, TIMELINE_NOW.time),
+      h("span", { className: "mos__tl-now-node", "aria-hidden": "true" }, "J"),
+      h(
+        "div",
+        { className: "mos__tl-now-card" },
+        h("span", { className: "mos__tl-now-k" }, h(Icon, { name: "orbit", size: 13 }), "Jarvis · Vorschlag"),
+        h(
+          "span",
+          { className: "mos__tl-now-text" },
+          TIMELINE_NOW.suggestion,
+          h("span", { className: "mos__tl-now-tag" }, "+" + TIMELINE_NOW.tag)
+        ),
+        h("span", { className: "mos__pip mos__pip--konzept" }, h(Icon, { name: "flask-conical", size: 11 }), "schreibt nichts")
+      )
+    );
+  }
+  function TimelineAxis(props) {
+    const rows = [];
+    PERIODS.forEach((per) => {
+      rows.push(h("div", { key: "p-" + per.id, className: "mos__tl-period" }, h(Icon, { name: per.icon, size: 14 }), per.label));
+      TIMELINE.filter((e) => e.period === per.id).forEach((e) => {
+        rows.push(
+          h(
+            "div",
+            { key: e.id, className: "mos__tl-row" },
+            h("span", { className: "mos__tl-time" }, e.time),
+            h("span", { className: "mos__tl-mark", "aria-hidden": "true" }),
+            h(TimelineCard, { event: e, module: props.byId[e.moduleId], active: props.activeEventId === e.id, onActivate: props.onActivate })
+          )
+        );
+        if (props.showNow && e.id === TIMELINE_NOW.after) rows.push(h(TimelineNow, { key: "now" }));
+      });
+    });
+    rows.push(h("div", { key: "p-night", className: "mos__tl-period mos__tl-period--last" }, h(Icon, { name: "moon", size: 14 }), "Nacht"));
+    return h("div", { className: "mos__tl-axis" }, rows);
+  }
+  function WhoopRing(props) {
+    const m = props.module;
+    const live = m && !m._demo && m._state === "fresh" && typeof m._recovery === "number";
+    const pct = live ? m._recovery : null;
+    const C = 2 * Math.PI * 52;
+    const dash = pct != null ? pct / 100 * C : C;
+    return h(
+      "div",
+      { className: "mos__whoop-ring" + (pct == null ? " is-connected" : "") },
+      h(
+        "svg",
+        { viewBox: "0 0 120 120", "aria-hidden": "true" },
+        h("circle", { cx: 60, cy: 60, r: 52, className: "mos__whoop-track" }),
+        h("circle", { cx: 60, cy: 60, r: 52, className: "mos__whoop-arc", style: { strokeDasharray: dash + " " + C, strokeDashoffset: C * 0.25, transform: "rotate(-90deg)", transformOrigin: "60px 60px" } })
+      ),
+      h(
+        "span",
+        { className: "mos__whoop-center" },
+        pct != null ? [h("b", { key: "v" }, pct + "%"), h("span", { key: "l" }, "Recovery")] : [h(Icon, { key: "i", name: "heart-pulse", size: 22 }), h("b", { key: "v", className: "mos__whoop-conn" }, "Verbunden"), h("span", { key: "l" }, "Keine Werte")]
+      )
+    );
+  }
+  function TimelineFocusPanel(props) {
+    const e = props.event;
+    const byId = props.byId;
+    const linked = byId[e.moduleId];
+    const cal = byId["kalender"];
+    const tasks = byId["tasks"];
+    const body = byId["body"];
+    const calRows = (cal && cal._rows && cal._rows.length ? cal._rows : LENS.kalender.rows).slice(0, 3);
+    const topRows = (tasks && tasks._rows && tasks._rows.length ? tasks._rows : LENS.tasks.rows).slice(0, 3);
+    return h(
+      "aside",
+      { className: "mos__tlfocus", "aria-label": "Fokus: " + e.title },
+      h(
+        "header",
+        { className: "mos__tlfocus-head" },
+        h("span", { className: "mos__tlfocus-badge mos--" + e.accent }, h(Icon, { name: e.icon, size: 20 })),
+        h(
+          "span",
+          { className: "mos__tlfocus-titles" },
+          h("span", { className: "mos__tlfocus-k" }, "Fokus"),
+          h("span", { className: "mos__tlfocus-title" }, e.title)
+        ),
+        linked ? h(StatePip, { module: linked }) : null,
+        h("button", { type: "button", className: "mos__iconbtn", "aria-label": "Fokus zurücksetzen", onClick: props.onClose }, h(Icon, { name: "x", size: 18 }))
+      ),
+      h(
+        "div",
+        { className: "mos__tlfocus-body" },
+        h(
+          "div",
+          { className: "mos__tlfocus-duo" },
+          // Kalender – Heute
+          h(
+            "section",
+            { className: "mos__tlfocus-sec" },
+            h(
+              "h3",
+              { className: "mos__tlfocus-h3" },
+              h(Icon, { name: "calendar-days", size: 14 }),
+              "Kalender – Heute"
+            ),
+            calRows.map((r, i) => h(
+              "div",
+              { key: i, className: "mos__tlfocus-cal" },
+              h("span", { className: "mos__tlfocus-cal-time" }, r.value || "—"),
+              h(
+                "span",
+                { className: "mos__tlfocus-cal-body" },
+                h("span", { className: "mos__tlfocus-cal-title" }, r.title),
+                h("span", { className: "mos__tlfocus-cal-sub" }, r.sub)
+              )
+            ))
+          ),
+          // Top 3 Prioritäten
+          h(
+            "section",
+            { className: "mos__tlfocus-sec" },
+            h(
+              "h3",
+              { className: "mos__tlfocus-h3" },
+              h(Icon, { name: "list-todo", size: 14 }),
+              "Top 3 Prioritäten"
+            ),
+            topRows.map((r, i) => h(
+              "div",
+              { key: i, className: "mos__tlfocus-top mos--" + (r.accent || "cyan") },
+              h("span", { className: "mos__tlfocus-top-idx" }, String(i + 1)),
+              h(
+                "span",
+                { className: "mos__tlfocus-top-body" },
+                h("span", { className: "mos__tlfocus-top-title" }, r.title),
+                h("span", { className: "mos__tlfocus-top-sub" }, r.sub)
+              )
+            ))
+          )
+        ),
+        // WHOOP – Körperstatus
+        h(
+          "section",
+          { className: "mos__tlfocus-sec mos__tlfocus-whoop" },
+          h(
+            "h3",
+            { className: "mos__tlfocus-h3" },
+            h(Icon, { name: "heart-pulse", size: 14 }),
+            "WHOOP – Körperstatus",
+            body ? h(StatePip, { module: body }) : null
+          ),
+          h(
+            "div",
+            { className: "mos__tlfocus-whoop-row" },
+            h(WhoopRing, { module: body }),
+            h(
+              "div",
+              { className: "mos__tlfocus-stats" },
+              [["Schlaf", "moon"], ["HRV", "activity"], ["Ruhepuls", "heart-pulse"], ["Belastung", "zap"]].map((s) => h(
+                "div",
+                { key: s[0], className: "mos__tlfocus-stat" },
+                h("span", { className: "mos__tlfocus-stat-k" }, h(Icon, { name: s[1], size: 12 }), s[0]),
+                h("span", { className: "mos__tlfocus-stat-v" }, "—")
+              ))
+            )
+          ),
+          h("span", { className: "mos__tlfocus-note" }, body && body._note ? "Detailwerte nur über autorisierten Connector-Endpunkt." : "WHOOP verbunden.")
+        ),
+        // Jarvis Empfehlung
+        h(
+          "section",
+          { className: "mos__tlfocus-sec mos__tlfocus-rec" },
+          h("h3", { className: "mos__tlfocus-h3" }, h(Icon, { name: "orbit", size: 14 }), "Jarvis Empfehlung"),
+          h(
+            "p",
+            { className: "mos__tlfocus-rec-text" },
+            "Sehr gute Ausgangslage für Deep Work am Vormittag. Plane Fokusblöcke vor 11:30 und schütze deine Energie. Nachmittags Meetings & Kommunikation."
+          ),
+          h("span", { className: "mos__pip mos__pip--konzept" }, h(Icon, { name: "flask-conical", size: 11 }), "schreibt nichts")
+        )
+      )
+    );
+  }
+  function TimelineScene(props) {
+    const focusEvent = TIMELINE.find((e) => e.moduleId === props.focusId) || TIMELINE.find((e) => e.id === TIMELINE_NOW.after) || TIMELINE[0];
+    return h(
+      "div",
+      { className: "mos__timeline" },
+      h(
+        "div",
+        { className: "mos__tl-col" },
+        h(
+          "div",
+          { className: "mos__tl-head" },
+          h("span", { className: "mos__tl-head-icon" }, h(Icon, { name: "waypoints", size: 18 })),
+          h(
+            "span",
+            { className: "mos__tl-head-titles" },
+            h("span", { className: "mos__tl-head-title" }, "Living Timeline"),
+            h("span", { className: "mos__tl-head-sub" }, TODAY.long + " · Morgen → Nacht")
+          )
+        ),
+        h("div", { className: "mos__tl-scroll" }, h(TimelineAxis, { byId: props.byId, activeEventId: focusEvent.id, onActivate: props.onActivate, showNow: true }))
+      ),
+      h(TimelineFocusPanel, { event: focusEvent, byId: props.byId, onClose: props.onClose })
+    );
+  }
+  const M_TABS = [
+    { id: "home", icon: "house", label: "Home" },
+    { id: "timeline", icon: "list", label: "Timeline" },
+    { id: "jarvis", icon: "brain", label: "Jarvis" },
+    { id: "module", icon: "layers", label: "Module" },
+    { id: "profil", icon: "circle-user", label: "Profil" }
+  ];
+  function MobileTopBar(props) {
+    return h(
+      "header",
+      { className: "mos__mtop" },
+      h(
+        "div",
+        { className: "mos__mtop-id" },
+        h("span", { className: "mos__mtop-avatar", "aria-hidden": "true" }, "M"),
+        h("span", { className: "mos__mtop-word" }, "MIKAEL OS")
+      ),
+      h(
+        "div",
+        { className: "mos__mtop-right" },
+        h(
+          "span",
+          { className: "mos__mtop-time" },
+          h("span", { className: "mos__mtop-city" }, "BERLIN"),
+          h("b", null, "09:41")
+        ),
+        props.loadState === "loading" ? h("span", { className: "mos__concept mos__concept--loading" }, h(Icon, { name: "loader", size: 12 }), "Lädt") : props.liveCount > 0 ? h("span", { className: "mos__concept mos__concept--live" }, h(Icon, { name: "activity", size: 12 }), props.liveCount + " Live") : h("span", { className: "mos__concept" }, h(Icon, { name: "flask-conical", size: 12 }), "Konzept")
+      )
+    );
+  }
+  function MobileHeute() {
+    return h(
+      "section",
+      { className: "mos__mheute" },
+      h(
+        "div",
+        { className: "mos__mheute-head" },
+        h("h2", null, "Heute")
+      ),
+      h(
+        "div",
+        { className: "mos__mheute-cols" },
+        h(
+          "div",
+          { className: "mos__mheute-col" },
+          h("span", { className: "mos__mheute-k" }, h(Icon, { name: "clock", size: 13 }), "Nächster Termin"),
+          h("span", { className: "mos__mheute-v" }, "10:30 · Team Sync"),
+          h("span", { className: "mos__mheute-sub" }, h(Icon, { name: "map", size: 12 }), "Q4 Roadmap · Virtuell")
+        ),
+        h(
+          "div",
+          { className: "mos__mheute-col" },
+          h("span", { className: "mos__mheute-k" }, h(Icon, { name: "target", size: 13 }), "Fokus"),
+          h("span", { className: "mos__mheute-v" }, "Engineering Deep Work"),
+          h("span", { className: "mos__mheute-sub" }, h(Icon, { name: "clock", size: 12 }), "bis 12:00")
+        )
+      )
+    );
+  }
+  function DomainCardM(props) {
+    const m = props.module;
+    if (!m) return null;
+    return h(
+      "button",
+      { type: "button", className: "mos__mcard mos--" + m.accent, onClick: () => props.onOpen(m.id), "aria-label": m.title + " öffnen" },
+      h(
+        "span",
+        { className: "mos__mcard-top" },
+        h("span", { className: "mos__mcard-icon" }, h(Icon, { name: m.icon, size: 18 })),
+        h("span", { className: "mos__mcard-title" }, m.title)
+      ),
+      h("span", { className: "mos__mcard-metric" }, m._metric || m.metric),
+      h("span", { className: "mos__mcard-sub" }, m._metricSub || m.metricSub),
+      h(StatePip, { module: m })
+    );
+  }
+  function MobileHome(props) {
+    const cards = ["body", "tasks", "kalender", "engineering", "risel", "journal"].map((id) => props.byId[id]).filter(Boolean);
+    return h(
+      "div",
+      { className: "mos__m-scroll" },
+      h(MobileHeute, null),
+      h("div", { className: "mos__mgrid" }, cards.map((m) => h(DomainCardM, { key: m.id, module: m, onOpen: props.onOpen })))
+    );
+  }
+  function ModuleRowM(props) {
+    const m = props.module;
+    return h(
+      "button",
+      { type: "button", className: "mos__mrow mos--" + m.accent, onClick: () => props.onOpen(m.id), "aria-label": m.title + " öffnen" },
+      h("span", { className: "mos__mrow-icon" }, h(Icon, { name: m.icon, size: 18 })),
+      h(
+        "span",
+        { className: "mos__mrow-body" },
+        h("span", { className: "mos__mrow-title" }, m.title),
+        h("span", { className: "mos__mrow-meta" }, m.meta)
+      ),
+      h(StatePip, { module: m }),
+      h("span", { className: "mos__mrow-chev", "aria-hidden": "true" }, h(Icon, { name: "chevron-right", size: 18 }))
+    );
+  }
+  function MobileModules(props) {
+    return h(
+      "div",
+      { className: "mos__m-scroll" },
+      h("h2", { className: "mos__m-h2" }, "Alle Module"),
+      h("div", { className: "mos__mlist" }, props.modules.map((m) => h(ModuleRowM, { key: m.id, module: m, onOpen: props.onOpen })))
+    );
+  }
+  function MobileProfile(props) {
+    return h(
+      "div",
+      { className: "mos__m-scroll" },
+      h(
+        "section",
+        { className: "mos__mprofile" },
+        h("span", { className: "mos__mprofile-avatar", "aria-hidden": "true" }, "M"),
+        h(
+          "span",
+          { className: "mos__mprofile-id" },
+          h("span", { className: "mos__mprofile-name" }, "Mikael"),
+          h("span", { className: "mos__mprofile-sub" }, "Privates System")
+        )
+      ),
+      h(WorkspaceSwitcher, { active: props.workspace, onChange: props.onWorkspace }),
+      h(
+        "section",
+        { className: "mos__mpanel" },
+        h("h3", { className: "mos__m-h3" }, h(Icon, { name: "shield-check", size: 14 }), "Privatsphäre & Berechtigungen"),
+        h("p", { className: "mos__mpanel-note" }, "Alle Module sind ", h("b", null, "nur lesend"), ". Schreibende Aktionen laufen ausschließlich über Gates (Phase 3)."),
+        h("span", { className: "mos__pip mos__pip--konzept" }, h(Icon, { name: "flask-conical", size: 11 }), "Konzeptdaten wo keine Live-Quelle")
+      )
+    );
+  }
+  function WaveForm() {
+    return h(
+      "svg",
+      { className: "mos__wave", viewBox: "0 0 320 80", preserveAspectRatio: "none", "aria-hidden": "true" },
+      h("path", { d: "M0 40 Q 20 10 40 40 T 80 40 T 120 40 T 160 40 T 200 40 T 240 40 T 280 40 T 320 40", className: "mos__wave-a" }),
+      h("path", { d: "M0 40 Q 20 62 40 40 T 80 40 T 120 40 T 160 40 T 200 40 T 240 40 T 280 40 T 320 40", className: "mos__wave-b" })
+    );
+  }
+  function MobileJarvis(props) {
+    const st = STATES[props.stateIndex] || STATES[0];
+    const label = st.id === "listening" ? "Ich höre zu" : st.id === "ready" ? "Bereit" : st.label;
+    const quick = [
+      { icon: "sun", label: "Wetter", accent: "cyan" },
+      { icon: "heart-pulse", label: "Recovery", accent: "emerald" },
+      { icon: "clock", label: "Deep Work", accent: "amber" }
+    ];
+    return h(
+      "div",
+      { className: "mos__mjarvis" },
+      h("div", { className: "mos__mjarvis-orb" }, h(Orb, null)),
+      h("span", { className: "mos__mjarvis-state" }, label),
+      h(WaveForm, null),
+      h(
+        "button",
+        { type: "button", className: "mos__mjarvis-ptt", onClick: props.onSpeak },
+        h(Icon, { name: "mic", size: 20 }),
+        "Halten zum Sprechen"
+      ),
+      h(
+        "div",
+        { className: "mos__mjarvis-quick" },
+        quick.map((q) => h(
+          "button",
+          { key: q.label, type: "button", className: "mos__mquick mos--" + q.accent, onClick: () => props.onQuick(q.label) },
+          h(Icon, { name: q.icon, size: 20 }),
+          q.label
+        ))
+      )
+    );
+  }
+  function MobileCommandDock(props) {
+    return h(
+      "form",
+      { className: "mos__mdock", onSubmit: props.onSubmit },
+      h("button", { type: "button", className: "mos__mdock-orb", "aria-label": "Sprachbefehl", onClick: props.onSpeak }, h(Icon, { name: "mic", size: 20 })),
+      h("input", {
+        className: "mos__mdock-input",
+        type: "text",
+        "aria-label": "Befehl eingeben",
+        placeholder: "Sage Jarvis …",
+        value: props.command,
+        onChange: (e) => props.onCommand(e.target.value)
+      }),
+      h("button", { type: "submit", className: "mos__mdock-send", "aria-label": "Senden" }, h(Icon, { name: "send-horizontal", size: 16 }))
+    );
+  }
+  function MobileTabBar(props) {
+    return h(
+      "nav",
+      { className: "mos__mtabs", "aria-label": "Navigation" },
+      M_TABS.map((t) => h(
+        "button",
+        {
+          key: t.id,
+          type: "button",
+          className: "mos__mtab" + (props.active === t.id ? " is-active" : "") + (t.id === "jarvis" ? " mos__mtab--jarvis" : ""),
+          "aria-current": props.active === t.id ? "page" : void 0,
+          onClick: () => props.onChange(t.id)
+        },
+        h("span", { className: "mos__mtab-icon" }, h(Icon, { name: t.icon, size: 22 })),
+        h("span", { className: "mos__mtab-label" }, t.label)
+      ))
+    );
+  }
+  const SHEET_DETENTS = [46, 76, 100];
+  function MobileSheet(props) {
+    const [dragVh, setDragVh] = useState(null);
+    const dragRef = useRef(null);
+    useEffect(() => {
+      function move(ev) {
+        const d = dragRef.current;
+        if (!d) return;
+        const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
+        const vh = Math.max(16, Math.min(100, d.startVh + (d.startY - cy) / window.innerHeight * 100));
+        setDragVh(vh);
+      }
+      function up() {
+        const d = dragRef.current;
+        if (!d) return;
+        dragRef.current = null;
+        const cur = dragVh != null ? dragVh : SHEET_DETENTS[props.detent];
+        if (Math.abs(cur - d.startVh) < 3) {
+          setDragVh(null);
+          props.onDetent((props.detent + 1) % SHEET_DETENTS.length);
+          return;
+        }
+        if (cur < 30) {
+          setDragVh(null);
+          props.onClose();
+          return;
+        }
+        let best = 0, bd = 1e9;
+        SHEET_DETENTS.forEach((hh, i) => {
+          const dd = Math.abs(hh - cur);
+          if (dd < bd) {
+            bd = dd;
+            best = i;
+          }
+        });
+        setDragVh(null);
+        props.onDetent(best);
+      }
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("touchmove", move, { passive: true });
+      window.addEventListener("touchend", up);
+      return () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("touchmove", move);
+        window.removeEventListener("touchend", up);
+      };
+    }, [dragVh, props.detent, props.open]);
+    if (!props.open) return null;
+    const data = resolveLens(props.focusId, props.liveModule);
+    const stMeta = STATE_META[data.state] || STATE_META.loading;
+    const height = dragVh != null ? dragVh : SHEET_DETENTS[props.detent];
+    const startDrag = (ev) => {
+      const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
+      dragRef.current = { startY: cy, startVh: height };
+    };
+    return h(
+      "div",
+      { className: "mos__sheet-scrim", onClick: props.onClose },
+      h(
+        "section",
+        {
+          className: "mos__sheet" + (dragVh != null ? " is-dragging" : ""),
+          style: { height: height + "vh" },
+          "aria-label": "Fokus: " + data.title,
+          onClick: (e) => e.stopPropagation()
+        },
+        h(
+          "button",
+          { type: "button", className: "mos__sheet-grab", "aria-label": "Größe ändern", onPointerDown: startDrag, onTouchStart: startDrag },
+          h("span", { className: "mos__sheet-grab-bar", "aria-hidden": "true" })
+        ),
+        h(
+          "header",
+          { className: "mos__sheet-head" },
+          h("span", { className: "mos__sheet-badge mos--" + data.accent }, h(Icon, { name: data.icon, size: 20 })),
+          h(
+            "span",
+            { className: "mos__sheet-titles" },
+            h("span", { className: "mos__sheet-title" }, data.title),
+            h("span", { className: "mos__sheet-sub" }, data.sub),
+            h(
+              "span",
+              { className: "mos__pip mos__pip--" + (data.demo ? "konzept" : stMeta.tone) },
+              data.demo ? h(Icon, { name: "flask-conical", size: 11 }) : h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+              data.demo ? "Konzept" : stMeta.label
+            )
+          ),
+          h("button", { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Schließen", onClick: props.onClose }, h(Icon, { name: "x", size: 18 }))
+        ),
+        h(
+          "div",
+          { className: "mos__sheet-body" },
+          data.rows && data.rows.length ? data.rows.map((r, i) => h(LensRow, { key: r.title + i, row: r, index: i + 1 })) : h(
+            "div",
+            { className: "mos__lens-empty mos--" + stMeta.tone },
+            h(Icon, { name: data.state === "unavailable" || data.state === "error" ? "unplug" : "inbox", size: 22 }),
+            h("span", { className: "mos__lens-empty-title" }, stMeta.label),
+            h("span", { className: "mos__lens-empty-note" }, data.note || "Keine Daten von dieser Quelle.")
+          )
+        ),
+        h(
+          "footer",
+          { className: "mos__sheet-foot" },
+          h(
+            "span",
+            { className: "mos__sheet-prov" },
+            "Quelle ",
+            h("b", null, data.source),
+            " · Stand ",
+            h("b", null, data.freshness),
+            " · ",
+            data.permission
+          ),
+          h("button", { type: "button", className: "mos__sheet-cta mos--" + data.accent }, "Details anzeigen")
+        )
+      )
+    );
+  }
+  function MobileShell(props) {
+    const tab = props.mobileTab;
+    const showDock = tab !== "jarvis" && tab !== "timeline";
+    let content;
+    if (tab === "timeline") {
+      content = h(
+        "div",
+        { className: "mos__m-scroll" },
+        h(
+          "div",
+          { className: "mos__mtl-head" },
+          h("span", { className: "mos__tl-head-icon" }, h(Icon, { name: "waypoints", size: 18 })),
+          h(
+            "span",
+            { className: "mos__tl-head-titles" },
+            h("span", { className: "mos__tl-head-title" }, "Living Timeline"),
+            h("span", { className: "mos__tl-head-sub" }, TODAY.long)
+          )
+        ),
+        h(TimelineAxis, { byId: props.byId, activeEventId: (TIMELINE.find((e) => e.moduleId === props.focusId) || {}).id, onActivate: props.onOpen, showNow: true })
+      );
+    } else if (tab === "jarvis") {
+      content = h(MobileJarvis, { stateIndex: props.stateIndex, onSpeak: props.onSpeak, onQuick: props.onQuick });
+    } else if (tab === "module") {
+      content = h(MobileModules, { modules: props.modules, onOpen: props.onOpen });
+    } else if (tab === "profil") {
+      content = h(MobileProfile, { workspace: props.workspace, onWorkspace: props.onWorkspace });
+    } else {
+      content = h(MobileHome, { byId: props.byId, onOpen: props.onOpen });
+    }
+    return h(
+      "div",
+      { className: "mos__m" },
+      tab === "jarvis" ? null : h(MobileTopBar, { loadState: props.loadState, liveCount: props.liveCount }),
+      h("main", { className: "mos__m-main" }, content),
+      showDock ? h(MobileCommandDock, { command: props.command, onCommand: props.onCommand, onSubmit: props.onSubmit, onSpeak: props.onSpeak }) : null,
+      h(MobileTabBar, { active: tab, onChange: props.onMobileTab }),
+      h(MobileSheet, {
+        open: props.sheetOpen,
+        detent: props.sheetDetent,
+        onDetent: props.onSheetDetent,
+        onClose: props.onSheetClose,
+        focusId: props.focusId,
+        liveModule: props.byId[props.focusId]
+      })
+    );
+  }
+  function SceneSwitcher(props) {
+    return h(
+      "div",
+      { className: "mos__scenes", role: "group", "aria-label": "Ansicht wechseln" },
+      [{ id: "constellation", icon: "orbit", label: "Konstellation" }, { id: "timeline", icon: "waypoints", label: "Timeline" }].map((s) => h(
+        "button",
+        { key: s.id, type: "button", className: "mos__scene-tab", "aria-pressed": props.scene === s.id ? "true" : "false", onClick: () => props.onScene(s.id) },
+        h(Icon, { name: s.icon, size: 15 }),
+        h("span", null, s.label)
+      ))
+    );
+  }
   function TopBar(props) {
     return h(
       "header",
@@ -780,6 +1474,7 @@ var MikaelOSPlugin = function() {
       h(
         "div",
         { className: "mos__topright" },
+        h(SceneSwitcher, { scene: props.scene, onScene: props.onScene }),
         function() {
           const ls = props.loadState;
           const liveN = props.liveCount || 0;
@@ -820,7 +1515,7 @@ var MikaelOSPlugin = function() {
           "span",
           { className: "mos__topchip mos__topchip-time" },
           h("b", null, "22:30"),
-          h("span", null, "Do, 22. Mai · Berliner Zeit")
+          h("span", null, TODAY.short + " · Berliner Zeit")
         ),
         h("button", { type: "button", className: "mos__shieldbtn", "aria-label": "Privatsphäre & Berechtigungen" }, h(Icon, { name: "shield-check", size: 20 }))
       )
@@ -869,6 +1564,11 @@ var MikaelOSPlugin = function() {
     const [focusId, setFocusId] = useState("engineering");
     const [stateIndex, setStateIndex] = useState(0);
     const [command, setCommand] = useState("");
+    const [scene, setScene] = useState("constellation");
+    const isMobile = useMediaQuery("(max-width: 430px)");
+    const [mobileTab, setMobileTab] = useState("home");
+    const [sheetOpen, setSheetOpen] = useState(false);
+    const [sheetDetent, setSheetDetent] = useState(1);
     const [live, setLive] = useState(null);
     const [loadState, setLoadState] = useState("loading");
     useEffect(() => {
@@ -946,6 +1646,22 @@ var MikaelOSPlugin = function() {
       setFocusId("engineering");
       setStateIndex(0);
     }, []);
+    const openModule = useCallback((id) => {
+      setFocusId(id);
+      setStateIndex(1);
+      setSheetDetent(1);
+      setSheetOpen(true);
+    }, []);
+    const closeSheet = useCallback(() => {
+      setSheetOpen(false);
+    }, []);
+    const onSpeak = useCallback(() => {
+      runStateSequence();
+    }, [runStateSequence]);
+    const onQuick = useCallback((label) => {
+      setCommand(label);
+      runStateSequence();
+    }, [runStateSequence]);
     const onNodePointerDown = useCallback((e, id) => {
       if (e.button != null && e.button !== 0) return;
       const stage = stageRef.current;
@@ -999,12 +1715,19 @@ var MikaelOSPlugin = function() {
           return;
         }
         if (k === "Escape") {
-          closeFocus();
+          if (sheetOpen) {
+            setSheetOpen(false);
+          } else {
+            closeFocus();
+          }
           return;
         }
         if (k >= "1" && k <= "9") {
           const idx = parseInt(k, 10) - 1;
-          if (modules[idx]) activate(modules[idx].id);
+          if (modules[idx]) {
+            if (isMobile) openModule(modules[idx].id);
+            else activate(modules[idx].id);
+          }
           return;
         }
         if (k === "ArrowRight" || k === "ArrowLeft") {
@@ -1016,7 +1739,7 @@ var MikaelOSPlugin = function() {
       }
       window.addEventListener("keydown", onKey);
       return () => window.removeEventListener("keydown", onKey);
-    }, [modules, focusId, activate, closeFocus]);
+    }, [modules, focusId, activate, closeFocus, sheetOpen, isMobile, openModule]);
     useEffect(() => {
       if (prefersReducedMotion()) return;
       const root = stageRef.current && stageRef.current.closest(".mos");
@@ -1036,16 +1759,50 @@ var MikaelOSPlugin = function() {
       runStateSequence();
       setCommand("");
     }, [runStateSequence]);
+    if (isMobile) {
+      return h(
+        "div",
+        { className: "mos mos--mobile" },
+        h("div", { className: "mos__atmosphere", "aria-hidden": "true" }),
+        h("div", { className: "mos__atmosphere-veil", "aria-hidden": "true" }),
+        h(MobileShell, {
+          mobileTab,
+          onMobileTab: setMobileTab,
+          byId: enrichedById,
+          modules: viewModules,
+          focusId,
+          onOpen: openModule,
+          command,
+          onCommand: setCommand,
+          onSubmit: submit,
+          onSpeak,
+          onQuick,
+          stateIndex,
+          workspace,
+          onWorkspace: setWorkspace,
+          loadState,
+          liveCount,
+          sheetOpen,
+          sheetDetent,
+          onSheetDetent: setSheetDetent,
+          onSheetClose: closeSheet
+        })
+      );
+    }
     return h(
       "div",
-      { className: "mos" },
+      { className: "mos" + (scene === "timeline" ? " mos--timeline" : "") },
       h("div", { className: "mos__atmosphere", "aria-hidden": "true" }),
       h("div", { className: "mos__atmosphere-veil", "aria-hidden": "true" }),
       h(
         "div",
         { className: "mos__shell" },
-        h(TopBar, { loadState, liveCount, total: viewModules.length }),
-        h(
+        h(TopBar, { loadState, liveCount, total: viewModules.length, scene, onScene: setScene }),
+        scene === "timeline" ? h(
+          "div",
+          { className: "mos__stagewrap mos__stagewrap--tl" },
+          h(TimelineScene, { byId: enrichedById, focusId, onActivate: activate, onClose: closeFocus })
+        ) : h(
           "div",
           { className: "mos__stagewrap" },
           h(WorkspaceSwitcher, { active: workspace, onChange: setWorkspace }),

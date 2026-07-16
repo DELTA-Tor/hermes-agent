@@ -681,16 +681,16 @@ def module_journal() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 _MODULE_META = [
     {"id": "today", "title": "Heute", "icon": "sun", "accent": "cyan", "workspace": "private"},
-    {"id": "tasks", "title": "Aufgaben & Ziele", "icon": "target", "accent": "emerald", "workspace": "private"},
+    {"id": "tasks", "title": "Aufgaben & Ziele", "icon": "target", "accent": "amber", "workspace": "private"},
     {"id": "learning", "title": "Lernplan", "icon": "graduation-cap", "accent": "violet", "workspace": "private"},
-    {"id": "risel", "title": "Rise-L Prozesse", "icon": "server", "accent": "amber", "workspace": "engineering"},
+    {"id": "risel", "title": "Rise-L Prozesse", "icon": "server", "accent": "blue", "workspace": "engineering"},
     {"id": "travel", "title": "Reisen", "icon": "plane", "accent": "cyan", "workspace": "private"},
     {"id": "nutrition", "title": "Ernährung", "icon": "leaf", "accent": "emerald", "workspace": "private"},
     {"id": "company", "title": "Firma-Signale", "icon": "building-2", "accent": "neutral", "workspace": "company_signal", "readOnly": True},
     {"id": "kalender", "title": "Kalender", "icon": "calendar-days", "accent": "cyan", "workspace": "private"},
     {"id": "body", "title": "Körper / WHOOP", "icon": "heart-pulse", "accent": "emerald", "workspace": "private"},
-    {"id": "journal", "title": "Journal", "icon": "notebook-pen", "accent": "cyan", "workspace": "private"},
-    {"id": "engineering", "title": "Engineering / Codex", "icon": "code-xml", "accent": "cyan", "workspace": "engineering"},
+    {"id": "journal", "title": "Journal", "icon": "notebook-pen", "accent": "neutral", "workspace": "private"},
+    {"id": "engineering", "title": "Engineering / Codex", "icon": "code-xml", "accent": "violet", "workspace": "engineering"},
 ]
 
 
