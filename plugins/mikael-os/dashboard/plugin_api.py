@@ -37,9 +37,21 @@ and always degrades gracefully to concept fixtures so the shell can never break:
           (read-only **Firma-Signale** projection; company-signal workspace).
   (c) read-only subprocess of an existing bin — ``systemctl --user`` for the
       live systemd-unit health behind **Rise-L Prozesse**.
+  (d) read-only SQLite (URI ``mode=ro``) —
+      ``/srv/delta/data/calendar-evidence/calendar.db``: the calendar-evidence
+      projection (Google-Calendar-API read-only mirror, 30-min timer, atomic
+      replace, ``authority: DERIVED_EVIDENCE_ONLY``). Powers **Kalender** and
+      **Heute**. Two calendars live in that DB and are kept STRICTLY label-
+      separated, never blended:
+        * ``mikael@deltator.de`` — the only honest PRIVATE calendar source
+          (workspace ``private``).
+        * ``deltatortechnik@gmail.com`` — the company dispo calendar. It is
+          surfaced ONLY as an explicitly labelled, read-only **Firma-Signal**
+          block; a dispo entry is never presented as a private appointment,
+          and private entries never feed any company projection.
 
-Modules with no authoritative source yet (Kalender, Reisen, Ernährung, Journal,
-Lernplan, Heute/Kalender-Tagesplan) stay on concept fixtures, flagged
+Modules with no authoritative source yet (Reisen, Ernährung, Journal,
+Lernplan) stay on concept fixtures, flagged
 ``demo: true`` + ``source: "konzept"`` with an honest ``note`` naming the gap.
 
 Freshness + provenance contract
@@ -61,8 +73,9 @@ import glob
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.error import URLError, HTTPError
@@ -101,8 +114,36 @@ POLICY_PATH = Path(os.environ.get("MIKAELOS_TASK_POLICY", str(HERMES_ROOT / "reg
 SCHEDULE_STATE = Path(os.environ.get("MIKAELOS_SCHEDULE_STATE", str(HERMES_ROOT / "schedule_state.json")))
 APPROVALS_DIR = Path(os.environ.get("MIKAELOS_APPROVALS_DIR", str(HERMES_ROOT / "approvals")))
 WHOOP_BASE = os.environ.get("MIKAELOS_WHOOP_BASE", "http://127.0.0.1:18090")
-WHOOP_TOKEN = os.environ.get("WHOOP_INTERNAL_TOKEN", "").strip()
 HTTP_TIMEOUT = float(os.environ.get("MIKAELOS_HTTP_TIMEOUT", "2.5"))
+
+# Kalender/Heute — calendar-evidence projection (read-only SQLite; built every
+# 30 min by calendar-evidence-index.timer via a real Google-Calendar-API
+# read-only OAuth read, atomic replace, authority DERIVED_EVIDENCE_ONLY).
+CALENDAR_DB = Path(os.environ.get(
+    "MIKAELOS_CALENDAR_DB", "/srv/delta/data/calendar-evidence/calendar.db"))
+# The two calendars in that DB — separated by calendar_id, NEVER blended:
+CAL_PRIVATE = os.environ.get("MIKAELOS_CAL_PRIVATE", "mikael@deltator.de")          # workspace: private
+CAL_FIRMA = os.environ.get("MIKAELOS_CAL_FIRMA", "deltatortechnik@gmail.com")       # firma_signal, read-only
+CAL_SOURCE_LABEL = "calendar-evidence · calendar.db (Google read-only, 30-min-Mirror)"
+CAL_HORIZON_DAYS = int(os.environ.get("MIKAELOS_CAL_HORIZON_DAYS", "14"))
+
+try:  # Berlin local time for day windows (CLAUDE.md: immer Berliner Zeit)
+    from zoneinfo import ZoneInfo
+    _BERLIN: Optional[Any] = ZoneInfo("Europe/Berlin")
+except Exception:  # pragma: no cover - zoneinfo is stdlib on 3.9+
+    _BERLIN = None
+
+
+def _whoop_token() -> str:
+    """WHOOP internal token, read from THIS process' environment at call time.
+
+    The dashboard service does not carry it yet — wiring it in is an operator
+    step (EnvironmentFile drop-in + service restart = Prod-Restart-Gate), see
+    ``docs/RUNBOOK-whoop-token.md``. As soon as the env var is present the
+    detail path below activates automatically; until then the module stays an
+    honest ``partial``. The value is never logged or written anywhere.
+    """
+    return os.environ.get("WHOOP_INTERNAL_TOKEN", "").strip()
 
 # ---------------------------------------------------------------------------
 # Phase 3 — the ONE propose capability. The plugin never writes and never
@@ -141,6 +182,7 @@ STALE = {
     "tasks": 3600,
     "risel": 3600,
     "company": 24 * 3600,   # approval cards linger until decided
+    "calendar": 2 * 3600,   # 30-min mirror timer + generous slack
 }
 
 # ---------------------------------------------------------------------------
@@ -437,9 +479,13 @@ def module_body() -> Dict[str, Any]:
         )
 
     # Try the authorized detail endpoint only when a token is available to us.
+    # _whoop_token() reads the env at call time: the moment the operator wires
+    # WHOOP_INTERNAL_TOKEN into the dashboard service (gated step, see
+    # docs/RUNBOOK-whoop-token.md) this path activates without a code change.
     summary_obj: Optional[Dict[str, Any]] = None
-    if WHOOP_TOKEN:
-        code, data = _http_get_json(f"{WHOOP_BASE}/internal/summary?days=1", token=WHOOP_TOKEN)
+    token = _whoop_token()
+    if token:
+        code, data = _http_get_json(f"{WHOOP_BASE}/internal/summary?days=1", token=token)
         if code == 200 and isinstance(data, dict):
             summary_obj = data.get("summary") if isinstance(data.get("summary"), dict) else None
 
@@ -460,7 +506,8 @@ def module_body() -> Dict[str, Any]:
             ],
             note=("Recovery/HRV/Schlaf nur über autorisierten Endpunkt "
                   "/internal/summary; der Plugin-Kontext hält kein WHOOP_INTERNAL_TOKEN. "
-                  "Setze WHOOP_INTERNAL_TOKEN im Dashboard-Dienst, um Werte zu projizieren."),
+                  "Anbindung = gated Operator-Schritt (EnvironmentFile-Drop-in + "
+                  "Dienst-Restart): docs/RUNBOOK-whoop-token.md."),
             extra={"scopes": health.get("scopes"), "tokenFresh": token_fresh},
         )
 
@@ -652,6 +699,208 @@ def module_company() -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# (d) Kalender / Heute — calendar-evidence projection, read-only SQLite.
+#
+# The DB holds two calendars, split by ``calendar_id`` and rendered as two
+# strictly label-separated blocks:
+#   * CAL_PRIVATE (mikael@deltator.de)      → the private calendar (workspace
+#     ``private``). The ONLY honest private source on Rise-L.
+#   * CAL_FIRMA  (deltatortechnik@gmail.com) → the company dispo calendar,
+#     shown ONLY as an explicitly labelled, read-only Firma-Signal block.
+#     A dispo entry is never presented as a private appointment; private
+#     entries never appear in any company projection. Hermes routine state
+#     (schedule_state.json) is deliberately NOT mixed in here — automation
+#     runs are engineering heartbeat, not appointments (see module_risel).
+#
+# Evidence doctrine: this is a DERIVED_EVIDENCE_ONLY mirror — a projection to
+# read, never a truth store; this module reads (mode=ro), it never writes.
+# ---------------------------------------------------------------------------
+def _berlin_now() -> datetime:
+    return datetime.now(_BERLIN) if _BERLIN is not None else _now()
+
+
+def _cal_query_window(lo: str, hi: str, limit: int) -> Dict[str, Any]:
+    """Read both calendars in the string window [lo, hi) — read-only.
+
+    ``starts_at`` is either a date-only string (all-day) or an ISO datetime with
+    the Berlin local offset, so lexicographic bounds on local-date/-datetime
+    strings match chronological order. Returns
+    ``{"ok", "error", "fetched": {cal_id: iso}, "private": [...], "firma": [...]}``.
+    """
+    result: Dict[str, Any] = {"ok": False, "error": None, "fetched": {}, "private": [], "firma": []}
+    if not CALENDAR_DB.exists():
+        result["error"] = f"{CALENDAR_DB} nicht vorhanden"
+        return result
+    try:
+        con = sqlite3.connect(f"file:{CALENDAR_DB}?mode=ro", uri=True, timeout=1.5)
+        try:
+            for cal_id, fetched_at in con.execute("SELECT calendar_id, fetched_at FROM sources"):
+                result["fetched"][str(cal_id)] = fetched_at
+            for cal_id, key in ((CAL_PRIVATE, "private"), (CAL_FIRMA, "firma")):
+                cur = con.execute(
+                    "SELECT summary, starts_at, ends_at, location FROM events "
+                    "WHERE calendar_id = ? AND (status IS NULL OR status <> 'cancelled') "
+                    "AND starts_at >= ? AND starts_at < ? ORDER BY starts_at LIMIT ?",
+                    (cal_id, lo, hi, limit),
+                )
+                result[key] = [
+                    {"summary": (r[0] or "(ohne Titel)").strip() or "(ohne Titel)",
+                     "starts_at": str(r[1] or ""), "ends_at": r[2], "location": r[3]}
+                    for r in cur
+                ]
+        finally:
+            con.close()
+    except (sqlite3.Error, OSError) as exc:
+        result["error"] = f"calendar.db nicht lesbar ({type(exc).__name__})"
+        return result
+    result["ok"] = True
+    return result
+
+
+def _cal_event_value(starts_at: str, today_str: str) -> str:
+    """Compact time label: 'HH:MM' today, 'dd.mm. HH:MM' later, 'ganztägig'/date for all-day."""
+    if len(starts_at) == 10:  # date-only = all-day
+        return "ganztägig" if starts_at == today_str else f"{starts_at[8:10]}.{starts_at[5:7]}."
+    dt = _parse_iso(starts_at)
+    if dt is None:
+        return "—"
+    local = dt.astimezone(_BERLIN) if _BERLIN is not None else dt
+    hhmm = local.strftime("%H:%M")
+    return hhmm if local.date().isoformat() == today_str else f"{local.strftime('%d.%m.')} {hhmm}"
+
+
+def _cal_row(ev: Dict[str, Any], today_str: str, *, firma: bool) -> Dict[str, Any]:
+    """One lens row. The workspace is carried ON the row both as a human label
+    (``sub``) and as a STRUCTURAL field (``workspace`` + ``readOnly`` for the
+    Firma-Block, module_company-Präzedenz), so the two calendars can never be
+    blended — neither visually nor maschinenlesbar, whatever the ordering."""
+    if firma:
+        sub = "Firma-Signal · Dispo (nur lesen)"
+        icon, accent = "building-2", "neutral"
+    else:
+        loc = str(ev.get("location") or "").strip()
+        sub = "Privat" + (f" · {loc[:40]}" if loc else "")
+        icon, accent = "calendar-days", "cyan"
+    row = {
+        "icon": icon, "accent": accent,
+        "title": str(ev.get("summary") or "")[:70],
+        "sub": sub,
+        "value": _cal_event_value(str(ev.get("starts_at") or ""), today_str),
+        # Structural workspace marking per row (nicht nur sub-Text):
+        "workspace": "company_signal" if firma else "private",
+    }
+    if firma:
+        row["readOnly"] = True  # Analogon zu module_company extra={"readOnly": True}
+    return row
+
+
+def _cal_unavailable(summary: str, note: str) -> Dict[str, Any]:
+    return _prov(
+        state="unavailable", source=CAL_SOURCE_LABEL, source_kind="file",
+        workspace="private", permission="Nur lesen (Evidence, mode=ro)",
+        summary=summary, stale_after=STALE["calendar"], note=note,
+        extra={
+            "calendars": {"private": CAL_PRIVATE, "firmaSignal": CAL_FIRMA},
+            # Contract stability: even without data the module declares its
+            # mixed nature honestly — no company rows shown, block stays ro.
+            "hasCompanyData": False,
+            "companyDataReadOnly": True,
+        },
+    )
+
+
+def _cal_module(*, window: str) -> Dict[str, Any]:
+    """Shared builder for Kalender (upcoming) and Heute (today's window)."""
+    now_local = _berlin_now()
+    today_str = now_local.date().isoformat()
+    if window == "today":
+        lo = today_str
+        hi = (now_local.date() + timedelta(days=1)).isoformat()
+        limit = 6
+    else:  # upcoming: from now to +CAL_HORIZON_DAYS
+        lo = now_local.isoformat(timespec="seconds")
+        hi = (now_local.date() + timedelta(days=CAL_HORIZON_DAYS + 1)).isoformat()
+        limit = 4
+    data = _cal_query_window(lo, hi, limit)
+    if not data["ok"]:
+        return _cal_unavailable(
+            "Kalender-Projektion nicht lesbar",
+            f"{data['error']} — calendar-evidence-index.timer prüfen. "
+            "Keine Ersatzdaten: Modul zeigt lieber nichts als Erfundenes.",
+        )
+    observed = _parse_iso(data["fetched"].get(CAL_PRIVATE)) or _parse_iso(data["fetched"].get(CAL_FIRMA))
+    priv, firma = data["private"], data["firma"]
+    if CAL_PRIVATE not in data["fetched"]:
+        # DB exists but carries no private mirror — stay honest, never promote
+        # the company calendar into the private slot.
+        return _cal_unavailable(
+            "Keine private Kalender-Projektion",
+            "calendar.db enthält keine Quelle für den privaten Kalender "
+            f"({CAL_PRIVATE}) — Anbindung = eigener gated Schritt "
+            "(calendar-evidence-Lane). Firma-Dispo wird hier bewusst nicht "
+            "als Ersatz angezeigt.",
+        )
+    # Private block first, Firma-Signal block after — each row self-labelled.
+    n_priv, n_firma = (4, 3) if window == "today" else (3, 2)
+    rows = [_cal_row(e, today_str, firma=False) for e in priv[:n_priv]]
+    rows += [_cal_row(e, today_str, firma=True) for e in firma[:n_firma]]
+    empty = not rows
+    state = _freshness_state(observed, STALE["calendar"], empty=empty)
+    if window == "today":
+        summary = (f"{len(priv)} privat · {len(firma)} Dispo (Firma-Signal)"
+                   if not empty else "Heute keine Termine")
+        note = ("Heute aus calendar-evidence (read-only): Block „Privat“ = "
+                f"{CAL_PRIVATE}, Block „Firma-Signal“ = Dispo-Kalender "
+                f"{CAL_FIRMA} — strikt getrennt, nie vermischt. "
+                "Hermes-Routinen sind bewusst NICHT enthalten (kein Termin).")
+        # Deliberately NO blended count: privat und Dispo werden getrennt
+        # gezählt, damit keine Kachel-Zahl je als „rein privat" lesbar ist.
+        extra: Dict[str, Any] = {}
+    else:
+        nxt = _cal_event_value(str(priv[0]["starts_at"]), today_str) if priv else None
+        summary = (f"Nächster privat · {nxt}" if nxt else
+                   f"Keine privaten Termine ({CAL_HORIZON_DAYS} T)")
+        if firma:
+            summary += f" · {len(firma)}+ Dispo"
+        note = ("Privater Kalender = calendar-evidence-Projektion von "
+                f"{CAL_PRIVATE} (Google read-only, 30-min-Mirror, atomarer "
+                "Replace). Firma-Dispo erscheint nur als gekennzeichnetes "
+                "read-only Firma-Signal, nie als privater Termin.")
+        extra = {"nextTime": nxt}
+    extra.update({
+        # module_company-Präzedenz, maschinenlesbar: dieses private Modul
+        # trägt einen read-only company_signal-Block (Dispo). hasCompanyData
+        # ist per-Payload ehrlich (False, wenn gerade keine Dispo-Zeile da).
+        "hasCompanyData": bool(firma),
+        "companyDataReadOnly": True,
+        # Entkoppelte Zählung statt geblendeter Summe (Kachel-Metrik):
+        "privateCount": len(priv),
+        "firmaCount": len(firma),
+        "calendars": {"private": CAL_PRIVATE, "firmaSignal": CAL_FIRMA},
+        "workspaceSplit": {"private": len(priv), "firma_signal": len(firma)},
+        "fetchedAt": {
+            "private": data["fetched"].get(CAL_PRIVATE),
+            "firmaSignal": data["fetched"].get(CAL_FIRMA),
+        },
+        "authority": "DERIVED_EVIDENCE_ONLY",
+    })
+    return _prov(
+        state=state, source=CAL_SOURCE_LABEL, source_kind="file",
+        workspace="private", permission="Nur lesen (Evidence, mode=ro)",
+        summary=summary, observed_at=observed, stale_after=STALE["calendar"],
+        rows=rows, note=note, extra=extra,
+    )
+
+
+def module_today() -> Dict[str, Any]:
+    return _cal_module(window="today")
+
+
+def module_kalender() -> Dict[str, Any]:
+    return _cal_module(window="upcoming")
+
+
+# ---------------------------------------------------------------------------
 # Concept fixtures — modules with no authoritative source yet. demo:true so the
 # UI keeps the "Konzept" pill; each names its gap honestly.
 # ---------------------------------------------------------------------------
@@ -659,29 +908,6 @@ def _fixture(module_id: str, *, workspace: str, summary: str, rows: List[Dict[st
     return _prov(
         state="fresh", demo=True, source="konzept", source_kind="konzept",
         workspace=workspace, permission="—", summary=summary, rows=rows, note=note,
-    )
-
-
-def module_today() -> Dict[str, Any]:
-    return _fixture(
-        "today", workspace="private", summary="9 Ereignisse (Konzept)",
-        rows=[
-            {"icon": "sun", "accent": "cyan", "title": "Morning Light & Bewegung", "sub": "20 Min · Tagesstart", "value": "07:30"},
-            {"icon": "brain", "accent": "emerald", "title": "Strategy Deep Work", "sub": "90 Min · Fokus", "value": "09:00"},
-            {"icon": "target", "accent": "violet", "title": "Leadership Sync", "sub": "45 Min · Team", "value": "12:30"},
-        ],
-        note="Kein Kalender-Projektions-Endpunkt in der Control-Plane gefunden — Tagesplan bleibt Konzept.",
-    )
-
-
-def module_kalender() -> Dict[str, Any]:
-    return _fixture(
-        "kalender", workspace="private", summary="Nächster · 10:30 (Konzept)",
-        rows=[
-            {"icon": "target", "accent": "cyan", "title": "Leadership Sync", "sub": "Team-Update", "value": "10:30"},
-            {"icon": "brain", "accent": "emerald", "title": "Strategie Review", "sub": "Q2 Planung", "value": "14:00"},
-        ],
-        note="Keine Kalender-Read-API erreichbar — Fixture bis Quelle steht.",
     )
 
 
@@ -733,14 +959,19 @@ def module_journal() -> Dict[str, Any]:
 # Module registry — static metadata + which reader (if any) hydrates it.
 # ---------------------------------------------------------------------------
 _MODULE_META = [
-    {"id": "today", "title": "Heute", "icon": "sun", "accent": "cyan", "workspace": "private"},
+    # today/kalender: privates Modul MIT gekennzeichnetem read-only
+    # company_signal-Block (Dispo) — Meta-Flag = Design-Wahrheit; der Reader
+    # überschreibt hasCompanyData pro Payload ehrlich (module_company-Präzedenz).
+    {"id": "today", "title": "Heute", "icon": "sun", "accent": "cyan", "workspace": "private",
+     "hasCompanyData": True, "companyDataReadOnly": True},
     {"id": "tasks", "title": "Aufgaben & Ziele", "icon": "target", "accent": "amber", "workspace": "private"},
     {"id": "learning", "title": "Lernplan", "icon": "graduation-cap", "accent": "violet", "workspace": "private"},
     {"id": "risel", "title": "Rise-L Prozesse", "icon": "server", "accent": "blue", "workspace": "engineering"},
     {"id": "travel", "title": "Reisen", "icon": "plane", "accent": "cyan", "workspace": "private"},
     {"id": "nutrition", "title": "Ernährung", "icon": "leaf", "accent": "emerald", "workspace": "private"},
     {"id": "company", "title": "Firma-Signale", "icon": "building-2", "accent": "neutral", "workspace": "company_signal", "readOnly": True},
-    {"id": "kalender", "title": "Kalender", "icon": "calendar-days", "accent": "cyan", "workspace": "private"},
+    {"id": "kalender", "title": "Kalender", "icon": "calendar-days", "accent": "cyan", "workspace": "private",
+     "hasCompanyData": True, "companyDataReadOnly": True},
     {"id": "body", "title": "Körper / WHOOP", "icon": "heart-pulse", "accent": "emerald", "workspace": "private"},
     {"id": "journal", "title": "Journal", "icon": "notebook-pen", "accent": "neutral", "workspace": "private"},
     {"id": "engineering", "title": "Engineering / Codex", "icon": "code-xml", "accent": "violet", "workspace": "engineering"},
@@ -1054,7 +1285,9 @@ def health() -> Dict[str, Any]:
             "schedule_state": str(SCHEDULE_STATE),
             "approvals_dir": str(APPROVALS_DIR),
             "whoop_base": WHOOP_BASE,
-            "whoop_token_present": bool(WHOOP_TOKEN),
+            "whoop_token_present": bool(_whoop_token()),
+            "calendar_db": str(CALENDAR_DB),
+            "calendar_db_readable": CALENDAR_DB.exists(),
         },
         "propose": {
             "capability": "engineering_task (propose-only)",

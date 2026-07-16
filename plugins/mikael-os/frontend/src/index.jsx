@@ -439,6 +439,17 @@ function enrichModule(base, L, loading) {
 function deriveMetric(base, L) {
   if (!L || L.demo) return base.metric;
   if (base.id === "body") return L.tokenFresh ? base.metric : "Verbunden";
+  // Kalender/Heute project the calendar-evidence read model: the next PRIVATE
+  // start (kalender) / today's counts (today). Never the fixture. The Heute
+  // tile keeps privat and Dispo STRUCTURALLY separate ("2+1", never a blended
+  // sum), so the number can never be read as purely private.
+  if (base.id === "kalender") return L.nextTime || "—";
+  if (base.id === "today") {
+    if (L.privateCount == null && L.firmaCount == null) return "—";
+    const priv = L.privateCount || 0;
+    const firma = L.firmaCount || 0;
+    return firma > 0 ? priv + "+" + firma : String(priv);
+  }
   if (L.active != null) return String(L.active);
   if (L.count != null) return String(L.count);
   if (L.services && L.services.active != null) return String(L.services.active);
@@ -447,6 +458,10 @@ function deriveMetric(base, L) {
 }
 function deriveMetricSub(base, L) {
   if (base.id === "body") return L.tokenFresh ? base.metricSub : "WHOOP verbunden";
+  if (base.id === "kalender") return "nächster Termin · privat";
+  if (base.id === "today") {
+    return (L.firmaCount || 0) > 0 ? "privat + Dispo (Firma-Signal)" : "Termine · privat";
+  }
   if (base.id === "tasks" && L.active != null) return "aktiv · " + (L.count || 0) + " gesamt";
   if (base.id === "engineering" && L.count != null) return "Missionen aktiv";
   if (base.id === "risel" && L.services) return "Dienste live";
