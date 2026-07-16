@@ -100,17 +100,22 @@ function Icon(props) {
 // `pos` = centre of the node as a percentage of the constellation stage; this
 // is what reproduces the reference ring composition and what drag mutates.
 // ---------------------------------------------------------------------------
+// Ring order follows the VISUAL constellation clockwise from the top, so keyboard
+// Tab / digit-focus order matches the on-screen ring position (WCAG 2.4.3) instead
+// of an arbitrary insertion order. `pos` (centre %, of the stage) is what drag
+// mutates and what reproduces the reference ring composition. The top row sits
+// clear of the (lowered, smaller) core so no card ever overlaps the orb.
 const MODULES = [
-  { id: "today", title: "Heute", icon: "sun", accent: "cyan", meta: "9 Ereignisse", metric: "9", metricSub: "Ereignisse", pos: { x: 25, y: 13 } },
-  { id: "tasks", title: "Aufgaben & Ziele", icon: "list-todo", accent: "amber", meta: "7 aktiv · 3 heute", metric: "7", metricSub: "aktiv · 3 heute", pos: { x: 46, y: 6 } },
-  { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "3 Lektionen fällig", metric: "3", metricSub: "Lektionen fällig", pos: { x: 65, y: 13 } },
-  { id: "risel", title: "Rise-L Prozesse", icon: "server", accent: "blue", meta: "5 Workflows aktiv", metric: "5", metricSub: "Workflows aktiv", pos: { x: 85, y: 20 } },
-  { id: "travel", title: "Reisen", icon: "plane", accent: "cyan", meta: "Rom · 18. Jun", metric: "3 T", metricSub: "bis Rom", pos: { x: 89, y: 39 } },
-  { id: "nutrition", title: "Ernährung", icon: "leaf", accent: "emerald", meta: "2.105 kcal", metric: "2.105", metricSub: "kcal heute", pos: { x: 89, y: 57 } },
-  { id: "company", title: "Firma-Signale", icon: "building-2", accent: "neutral", meta: "Nur lesen", metric: "—", metricSub: "Nur lesen", readOnly: true, pos: { x: 85, y: 74 } },
-  { id: "kalender", title: "Kalender", icon: "calendar-days", accent: "cyan", meta: "Nächster · 10:30", metric: "10:30", metricSub: "nächstes Ereignis", pos: { x: 12, y: 31 } },
-  { id: "body", title: "Körper / WHOOP", icon: "heart-pulse", accent: "emerald", meta: "Recovery 82%", metric: "82 %", metricSub: "Recovery", pos: { x: 9, y: 50 } },
-  { id: "journal", title: "Journal", icon: "notebook-pen", accent: "neutral", meta: "1 Eintrag heute", metric: "1", metricSub: "Eintrag heute", pos: { x: 13, y: 68 } },
+  { id: "tasks", title: "Aufgaben & Ziele", icon: "list-todo", accent: "amber", meta: "7 aktiv · 3 heute", metric: "7", metricSub: "aktiv · 3 heute", pos: { x: 47, y: 9 } },
+  { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "3 Lektionen fällig", metric: "3", metricSub: "Lektionen fällig", pos: { x: 67, y: 14 } },
+  { id: "risel", title: "Rise-L Prozesse", icon: "server", accent: "blue", meta: "5 Workflows aktiv", metric: "5", metricSub: "Workflows aktiv", pos: { x: 86, y: 22 } },
+  { id: "travel", title: "Reisen", icon: "plane", accent: "cyan", meta: "Rom · 18. Jun", metric: "3 T", metricSub: "bis Rom", pos: { x: 89, y: 41 } },
+  { id: "nutrition", title: "Ernährung", icon: "leaf", accent: "emerald", meta: "2.105 kcal", metric: "2.105", metricSub: "kcal heute", pos: { x: 89, y: 58 } },
+  { id: "company", title: "Firma-Signale", icon: "building-2", accent: "neutral", meta: "Nur lesen", metric: "—", metricSub: "Nur lesen", readOnly: true, pos: { x: 85, y: 75 } },
+  { id: "journal", title: "Journal", icon: "notebook-pen", accent: "neutral", meta: "1 Eintrag heute", metric: "1", metricSub: "Eintrag heute", pos: { x: 13, y: 70 } },
+  { id: "body", title: "Körper / WHOOP", icon: "heart-pulse", accent: "emerald", meta: "Recovery 82%", metric: "82 %", metricSub: "Recovery", pos: { x: 9, y: 51 } },
+  { id: "kalender", title: "Kalender", icon: "calendar-days", accent: "cyan", meta: "Nächster · 10:30", metric: "10:30", metricSub: "nächstes Ereignis", pos: { x: 11, y: 32 } },
+  { id: "today", title: "Heute", icon: "sun", accent: "cyan", meta: "9 Ereignisse", metric: "9", metricSub: "Ereignisse", pos: { x: 26, y: 15 } },
 ];
 
 // Living-Timeline event fixtures (Phase 4). Each event links to a ring module id
@@ -138,6 +143,14 @@ const TODAY = { long: "Donnerstag, 26. Juni", short: "Do, 26. Juni" };
 // only). 16:42 sits chronologically AFTER the 16:00 Rise-L block and before the
 // 17:00 departure, so the rail never contradicts its own timestamp.
 const TIMELINE_NOW = { after: "riselp", time: "16:42", suggestion: "Kurze Pause vor der Fahrt einlegen.", tag: "Hydration" };
+// Shared orb centre (% of the constellation stage). The core CSS anchor, the
+// connector origin and the lens clearance are all derived from this single pair,
+// so the geometry can't drift into an orb⇄card collision. Kept in sync with
+// `.mos__core { left/top }` and the connector origin below.
+const CORE_POS = { x: 50, y: 33 };
+// One clock source. The desktop top-bar reads it per scene (Konstellation keeps
+// the night reference time; Timeline shows the "now" the Jarvis marker sits at,
+// so the bar and the marker can never disagree on the same screen).
 const PERIODS = [
   { id: "morgen", label: "Morgen", icon: "sun" },
   { id: "mittag", label: "Mittag", icon: "cloud-moon" },
@@ -249,6 +262,11 @@ const LENS = {
   },
 };
 
+// Honest tooltip for the not-yet-wired chrome buttons (open/details/tools/add
+// etc.). Real actions arrive in Phase 3 through gates (propose-only); until then
+// these carry this hint rather than silently doing nothing.
+const NOT_WIRED = "Noch nicht verbunden — folgt in Phase 3 (über Gates, propose-only).";
+
 const LENS_TOOLS = [
   { icon: "folder-open", label: "Öffnen" },
   { icon: "panels-top-left", label: "Details" },
@@ -280,6 +298,26 @@ const WORKSPACES = [
   { id: "company_signal", label: "Firma-Signale" },
 ];
 
+// Human status line for the Jarvis lifecycle — one source of truth for the
+// desktop rail, the mobile Jarvis surface and the aria-live announcement, so a
+// screen reader hears the exact words the sighted user sees.
+function jarvisStateText(index) {
+  const s = STATES[index] || STATES[0];
+  if (s.id === "listening") return "Ich höre zu";
+  return s.label;
+}
+
+// A screen-reader-only polite live region. Its text is re-announced on change,
+// so Jarvis state transitions and load/offline changes reach assistive tech
+// even though the visual cue is colour + motion. Never shown; never focusable.
+function LiveAnnouncer(props) {
+  return h(
+    "div",
+    { className: "mos__sr-only", role: "status", "aria-live": "polite", "aria-atomic": "true" },
+    props.message || "",
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Phase 2 — live read-model wiring.
 // The module ring positions are frontend-only composition; the *data* (summary,
@@ -303,6 +341,9 @@ const STATE_META = {
   empty:       { tone: "muted",    label: "Leer" },
   unavailable: { tone: "red",      label: "Nicht erreichbar" },
   error:       { tone: "red",      label: "Fehler" },
+  // Source reachable but the plugin holds read-only scope for it — writes are
+  // gated (Phase 3). Distinct blue-grey so it never reads as an error/alarm.
+  gated:       { tone: "gated",    label: "Gated · nur lesen" },
 };
 
 // Compact German "vor X" freshness from an ISO timestamp (no external dep).
@@ -386,8 +427,9 @@ function prefersReducedMotion() {
 // low-amplitude pulse. Decorative + aria-hidden. The rAF loop pauses when the
 // tab is hidden and collapses to a single static frame under reduced motion.
 // ---------------------------------------------------------------------------
-function Orb() {
+function Orb(props) {
   const canvasRef = useRef(null);
+  const showLabel = !!(props && props.label);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -398,6 +440,11 @@ function Orb() {
     const reduce = prefersReducedMotion();
     let raf = 0;
     let running = true;
+    // Throttle the animated orb to ~30fps. shadowBlur (used per wave band / rim)
+    // is one of the most expensive Canvas2D ops; halving the frame rate roughly
+    // halves that cost with no perceptible change to this slow, ambient motion.
+    let lastDraw = 0;
+    const FRAME_MS = 33;
 
     // stable particle field — points of light distributed across the sphere
     const particles = [];
@@ -553,7 +600,7 @@ function Orb() {
 
     function loop(t) {
       if (!running) return;
-      draw(t);
+      if (t - lastDraw >= FRAME_MS) { lastDraw = t; draw(t); }
       raf = window.requestAnimationFrame(loop);
     }
 
@@ -583,20 +630,24 @@ function Orb() {
     };
   }, []);
 
+  // Pure ambient sphere. No interactive control lives *inside* the orb (the old
+  // decorative mic button had no handler and sat over the animated hotspot — a
+  // dead tap-target). Voice is always reached via the command bar / dock mic and
+  // the persistent Jarvis tab. The "JARVIS" wordmark shows ONLY where the
+  // reference keeps it (the desktop constellation core); on the mobile Jarvis
+  // surface the sphere stays label-free so the moving wave never crosses text.
   return h(
     "div",
     { className: "mos__orb", "aria-hidden": "true" },
     h("canvas", { ref: canvasRef, className: "mos__orb-canvas" }),
-    h("span", { className: "mos__orb-label" }, "JARVIS"),
-    h("button", { type: "button", className: "mos__orb-mic", "aria-label": "Sprachbefehl starten (Demo)", tabIndex: -1 },
-      h(Icon, { name: "mic", size: 18 })),
+    showLabel ? h("span", { className: "mos__orb-label" }, "JARVIS") : null,
   );
 }
 
 // Constellation connectors — faint curved lines from the orb to every module.
 // Pure decoration; recomputed from live positions so drag keeps the web intact.
 function Connectors(props) {
-  const ox = 50, oy = 27;
+  const ox = CORE_POS.x, oy = CORE_POS.y;
   return h(
     "svg",
     { className: "mos__connectors", "aria-hidden": "true", viewBox: "0 0 100 100", preserveAspectRatio: "none" },
@@ -642,10 +693,17 @@ function StatePip(props) {
 // wrapped in a decorative orbit halo. Position comes from state so it can move.
 function ModuleNode(props) {
   const m = props.module;
+  // Node liveness drives the planet's animation state (meaning, not decoration):
+  //   live   = a fresh read-model → a slow breathing halo pulse
+  //   stale  = a real-but-old source → a static amber ring (no motion)
+  //   demo   = concept fixture → a calm static ring, never a live pulse
+  const live = !m._demo && m._state === "fresh";
+  const stale = !m._demo && (m._state === "stale" || m._state === "partial");
+  const nodeState = live ? " is-live" : stale ? " is-stale" : "";
   return h(
     "div",
     {
-      className: "mos__nodewrap mos--" + m.accent + (props.active ? " is-active" : "") + (props.dragging ? " is-dragging" : ""),
+      className: "mos__nodewrap mos--" + m.accent + (props.active ? " is-active" : "") + (props.dragging ? " is-dragging" : "") + nodeState,
       style: { left: m.pos.x + "%", top: m.pos.y + "%" },
     },
     h(
@@ -669,7 +727,12 @@ function ModuleNode(props) {
         onPointerDown: (e) => props.onPointerDown(e, m.id),
         onClick: () => props.onActivate(m.id),
       },
-      h("span", { className: "mos__node-orbit" }, h(Icon, { name: m.icon, size: 22 })),
+      h(
+        "span",
+        { className: "mos__node-orbit" },
+        h("span", { className: "mos__node-pulse", "aria-hidden": "true" }),
+        h(Icon, { name: m.icon, size: 22 }),
+      ),
       h(
         "span",
         { className: "mos__node-body" },
@@ -752,10 +815,19 @@ function resolveLens(focusId, liveModule) {
   };
 }
 
+// The lens is a *focus* surface, not a full list: it shows the top rows (the
+// Nordstern shows 4) and honestly counts the rest as "+N weitere". This keeps
+// the glass card compact so the JARVIS orb above it stays the visual centre
+// instead of being swallowed by a 16-row live mission dump.
+const LENS_MAX_ROWS = 4;
+
 function FocusLens(props) {
   const data = resolveLens(props.focusId, props.liveModule);
   const closable = props.focusId !== "engineering";
   const stMeta = STATE_META[data.state] || STATE_META.loading;
+  const allRows = data.rows || [];
+  const rows = allRows.slice(0, LENS_MAX_ROWS);
+  const extraRows = allRows.length - rows.length;
   return h(
     "section",
     { className: "mos__lens", "aria-label": "Fokus-Linse: " + data.title, key: props.focusId },
@@ -781,9 +853,9 @@ function FocusLens(props) {
       h(
         "span",
         { className: "mos__lens-actions" },
-        h("button", { type: "button", className: "mos__iconbtn", "aria-label": "Anheften" }, h(Icon, { name: "pin", size: 18 })),
-        h("button", { type: "button", className: "mos__iconbtn", "aria-label": "Einklappen" }, h(Icon, { name: "chevron-up", size: 18 })),
-        h("button", { type: "button", className: "mos__iconbtn", "aria-label": "Weitere Optionen" }, h(Icon, { name: "ellipsis", size: 18 })),
+        h("button", { type: "button", className: "mos__iconbtn", "aria-label": "Anheften", title: NOT_WIRED }, h(Icon, { name: "pin", size: 18 })),
+        h("button", { type: "button", className: "mos__iconbtn", "aria-label": "Einklappen", title: NOT_WIRED }, h(Icon, { name: "chevron-up", size: 18 })),
+        h("button", { type: "button", className: "mos__iconbtn", "aria-label": "Weitere Optionen", title: NOT_WIRED }, h(Icon, { name: "ellipsis", size: 18 })),
         closable &&
           h("button", { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Fokus schließen", onClick: props.onClose },
             h(Icon, { name: "x", size: 18 })),
@@ -792,8 +864,16 @@ function FocusLens(props) {
     h(
       "div",
       { className: "mos__lens-body" },
-      data.rows && data.rows.length
-        ? data.rows.map((r, i) => h(LensRow, { key: r.title, row: r, index: i + 1 }))
+      rows.length
+        ? [
+            ...rows.map((r, i) => h(LensRow, { key: r.title + i, row: r, index: i + 1 })),
+            extraRows > 0
+              ? h("div", { key: "more", className: "mos__lens-more" },
+                  h(Icon, { name: "ellipsis", size: 14 }),
+                  "+" + extraRows + " weitere",
+                  h("span", { className: "mos__lens-more-src" }, " · " + data.source))
+              : null,
+          ]
         : h(
             "div",
             { className: "mos__lens-empty mos--" + (STATE_META[data.state] || STATE_META.loading).tone },
@@ -805,16 +885,15 @@ function FocusLens(props) {
     h(
       "footer",
       { className: "mos__lens-foot" },
-      h("span", { className: "mos__meta" }, h(Icon, { name: "git-branch", size: 14 }), "Quelle: ", h("b", null, data.source)),
-      h("span", { className: "mos__meta" }, h(Icon, { name: "clock", size: 14 }), "Aktualität: ", h("b", null, data.freshness)),
-      h("span", { className: "mos__meta" }, h(Icon, { name: "shield-check", size: 14 }), "Berechtigung: ", h("b", null, data.permission)),
-      h("span", { className: "mos__lens-foot-shield" }, h(Icon, { name: "shield-check", size: 18, label: "Berechtigungen geprüft" })),
+      h("span", { className: "mos__meta mos__meta--src" }, h(Icon, { name: "git-branch", size: 14 }), "Quelle: ", h("b", null, data.source)),
+      h("span", { className: "mos__meta mos__meta--fresh" }, h(Icon, { name: "clock", size: 14 }), "Aktualität: ", h("b", null, data.freshness)),
+      h("span", { className: "mos__meta mos__meta--perm" }, h(Icon, { name: "shield-check", size: 14, label: "Berechtigungen geprüft" }), "Berechtigung: ", h("b", null, data.permission)),
     ),
     h(
       "div",
       { className: "mos__lens-tools" },
       LENS_TOOLS.map((tl) =>
-        h("button", { key: tl.label, type: "button", className: "mos__tool" }, h(Icon, { name: tl.icon, size: 15 }), tl.label)),
+        h("button", { key: tl.label, type: "button", className: "mos__tool", title: NOT_WIRED }, h(Icon, { name: tl.icon, size: 15 }), tl.label)),
     ),
   );
 }
@@ -852,8 +931,9 @@ function TimelineCard(props) {
       h("span", { className: "mos__tl-card-sub" }, e.sub),
       // Keep the rail calm (reference has no pills on rows): only the focused card
       // carries its freshness pip; per-source provenance stays in the focus panel.
+      // (No progress bar — there is no per-event completion signal in the read
+      // model, so a fixed-width bar would fake a state that doesn't exist.)
       props.active && m ? h(StatePip, { module: m }) : null,
-      props.active ? h("span", { className: "mos__tl-progress", "aria-hidden": "true" }, h("span", { style: { width: "58%" } })) : null,
     ),
   );
 }
@@ -927,7 +1007,7 @@ function WhoopRing(props) {
       { className: "mos__whoop-center" },
       pct != null
         ? [h("b", { key: "v" }, pct + "%"), h("span", { key: "l" }, "Recovery")]
-        : [h(Icon, { key: "i", name: "heart-pulse", size: 22 }), h("b", { key: "v", className: "mos__whoop-conn" }, "Verbunden"), h("span", { key: "l" }, "Keine Werte")],
+        : [h(Icon, { key: "i", name: "heart-pulse", size: 22 }), h("b", { key: "v", className: "mos__whoop-conn" }, "Verbunden"), h("span", { key: "l" }, "WHOOP")],
     ),
   );
 }
@@ -941,6 +1021,15 @@ function TimelineFocusPanel(props) {
   const cal = byId["kalender"];
   const tasks = byId["tasks"];
   const body = byId["body"];
+  // Honest peripheral "Live-Signale": only modules backed by a real read-model
+  // (never demo), showing their genuine state + freshness. Fills the panel's
+  // lower fold with useful signal instead of dead space — no invented values.
+  const liveSignals = Object.keys(byId)
+    .map((k) => byId[k])
+    .filter((m) => m && !m._demo && m.title && m.icon &&
+      (m._state === "fresh" || m._state === "stale" || m._state === "partial"))
+    .sort((a, b) => (a._state === "fresh" ? -1 : 1) - (b._state === "fresh" ? -1 : 1))
+    .slice(0, 4);
   const calRows = (cal && cal._rows && cal._rows.length ? cal._rows : (LENS.kalender.rows)).slice(0, 3);
   const topRows = (tasks && tasks._rows && tasks._rows.length ? tasks._rows : (LENS.tasks.rows)).slice(0, 3);
   return h(
@@ -1004,40 +1093,62 @@ function TimelineFocusPanel(props) {
             h(
               "span",
               { className: "mos__tlfocus-top-body" },
-              h("span", { className: "mos__tlfocus-top-title" }, r.title),
+              h("span", { className: "mos__tlfocus-top-title", title: r.title }, r.title),
               h("span", { className: "mos__tlfocus-top-sub" }, r.sub),
             ),
           )),
       ),
       ),
-      // WHOOP – Körperstatus
-      h(
-        "section",
-        { className: "mos__tlfocus-sec mos__tlfocus-whoop" },
-        h(
-          "h3",
-          { className: "mos__tlfocus-h3" },
-          h(Icon, { name: "heart-pulse", size: 14 }), "WHOOP – Körperstatus",
-          body ? h(StatePip, { module: body }) : null,
-        ),
-        h(
-          "div",
-          { className: "mos__tlfocus-whoop-row" },
-          h(WhoopRing, { module: body }),
+      // WHOOP – Körperstatus. When the connector holds no detail values (no token
+      // in the plugin context) we do NOT render four dead "—" tiles that dominate
+      // the fold — we show the honest connection ring plus one compact note naming
+      // what the authorized connector would provide. If real values ever arrive
+      // (body live + numeric stats) the 2×2 value grid renders instead. Nothing
+      // is ever fabricated.
+      (function () {
+        const bodyLive = body && !body._demo && body._state === "fresh";
+        const stats = [
+          { k: "Schlaf", icon: "moon", v: bodyLive ? body._sleep : null },
+          { k: "HRV", icon: "activity", v: bodyLive ? body._hrv : null },
+          { k: "Ruhepuls", icon: "heart-pulse", v: bodyLive ? body._rhr : null },
+          { k: "Belastung", icon: "zap", v: bodyLive ? body._strain : null },
+        ];
+        const hasVals = stats.some((s) => s.v != null);
+        return h(
+          "section",
+          { className: "mos__tlfocus-sec mos__tlfocus-whoop" },
+          h(
+            "h3",
+            { className: "mos__tlfocus-h3" },
+            h(Icon, { name: "heart-pulse", size: 14 }), "WHOOP – Körperstatus",
+            body ? h(StatePip, { module: body }) : null,
+          ),
           h(
             "div",
-            { className: "mos__tlfocus-stats" },
-            [["Schlaf", "moon"], ["HRV", "activity"], ["Ruhepuls", "heart-pulse"], ["Belastung", "zap"]].map((s) =>
-              h(
-                "div",
-                { key: s[0], className: "mos__tlfocus-stat" },
-                h("span", { className: "mos__tlfocus-stat-k" }, h(Icon, { name: s[1], size: 12 }), s[0]),
-                h("span", { className: "mos__tlfocus-stat-v" }, "—"),
-              )),
+            { className: "mos__tlfocus-whoop-row" + (hasVals ? "" : " is-compact") },
+            h(WhoopRing, { module: body }),
+            hasVals
+              ? h(
+                  "div",
+                  { className: "mos__tlfocus-stats" },
+                  stats.map((s) =>
+                    h(
+                      "div",
+                      { key: s.k, className: "mos__tlfocus-stat" },
+                      h("span", { className: "mos__tlfocus-stat-k" }, h(Icon, { name: s.icon, size: 12 }), s.k),
+                      h("span", { className: "mos__tlfocus-stat-v" }, s.v),
+                    )),
+                )
+              : h(
+                  "div",
+                  { className: "mos__tlfocus-whoop-empty" },
+                  h("span", { className: "mos__tlfocus-whoop-empty-title" }, "Keine Detailwerte im Plugin-Kontext"),
+                  h("span", { className: "mos__tlfocus-whoop-empty-note" },
+                    "Schlaf · HRV · Ruhepuls · Belastung nur über den autorisierten WHOOP-Connector."),
+                ),
           ),
-        ),
-        h("span", { className: "mos__tlfocus-note" }, body && body._note ? "Detailwerte nur über autorisierten Connector-Endpunkt." : "WHOOP verbunden."),
-      ),
+        );
+      })(),
       // Jarvis Empfehlung
       h(
         "section",
@@ -1050,6 +1161,37 @@ function TimelineFocusPanel(props) {
         ),
         h("span", { className: "mos__pip mos__pip--konzept" }, h(Icon, { name: "flask-conical", size: 11 }), "schreibt nichts"),
       ),
+      // Live-Signale — real read-model modules only (honest state + freshness)
+      liveSignals.length
+        ? h(
+            "section",
+            { className: "mos__tlfocus-sec mos__tlfocus-signals" },
+            h("h3", { className: "mos__tlfocus-h3" }, h(Icon, { name: "activity", size: 14 }), "Live-Signale",
+              h("span", { className: "mos__tlfocus-sig-count" }, liveSignals.length + " aktiv")),
+            h(
+              "div",
+              { className: "mos__tlfocus-sig-grid" },
+              liveSignals.map((m) => {
+                const fresh = freshnessLabel(m._observedAt);
+                const sm = STATE_META[m._state] || STATE_META.loading;
+                return h(
+                  "div",
+                  { key: m.id, className: "mos__tlfocus-sig mos--" + m.accent },
+                  h("span", { className: "mos__tlfocus-sig-icon" }, h(Icon, { name: m.icon, size: 16 })),
+                  h(
+                    "span",
+                    { className: "mos__tlfocus-sig-body" },
+                    h("span", { className: "mos__tlfocus-sig-title" }, m.title),
+                    h("span", { className: "mos__tlfocus-sig-meta" },
+                      h("span", { className: "mos__tlfocus-sig-dot mos__tlfocus-sig-dot--" + sm.tone, "aria-hidden": "true" }),
+                      m._metric != null && m._metric !== "—" ? h("b", null, m._metric) : null,
+                      fresh ? h("span", { className: "mos__tlfocus-sig-age" }, fresh) : sm.label),
+                  ),
+                );
+              }),
+            ),
+          )
+        : null,
     ),
   );
 }
@@ -1122,14 +1264,18 @@ function MobileTopBar(props) {
   );
 }
 
+// Curated "Jetzt wichtig" zone — the two decisions that matter now (next event +
+// current focus), denser than a full card. Concept-badged: these are fixtures
+// until a calendar/focus read-model lands, so it must not read as live truth.
 function MobileHeute() {
   return h(
     "section",
-    { className: "mos__mheute" },
+    { className: "mos__mheute", "aria-label": "Jetzt wichtig" },
     h(
       "div",
       { className: "mos__mheute-head" },
-      h("h2", null, "Heute"),
+      h("h2", null, "Jetzt wichtig"),
+      h("span", { className: "mos__pip mos__pip--konzept" }, h(Icon, { name: "flask-conical", size: 11 }), "Konzept"),
     ),
     h(
       "div",
@@ -1172,10 +1318,22 @@ function DomainCardM(props) {
 
 function MobileHome(props) {
   const cards = ["body", "tasks", "kalender", "engineering", "risel", "journal"].map((id) => props.byId[id]).filter(Boolean);
+  // Home is the reference's calm start surface: the "Heute" summary + the module
+  // grid + the command dock. The big Jarvis hero banner and the horizontal
+  // Live-Signale rail were removed — both duplicated the grid (a third redundant
+  // orb + repeated module metrics) and pushed half the cards below the fold. Each
+  // grid card still carries its honest StatePip (live state + freshness), so the
+  // read-model provenance is unchanged; voice stays reachable via the dock mic
+  // and the persistent Jarvis tab.
   return h(
     "div",
     { className: "mos__m-scroll" },
     h(MobileHeute, null),
+    h(
+      "div",
+      { className: "mos__mgrid-head" },
+      h("span", { className: "mos__m-h3" }, h(Icon, { name: "layout-grid", size: 14 }), "Deine Module"),
+    ),
     h("div", { className: "mos__mgrid" }, cards.map((m) => h(DomainCardM, { key: m.id, module: m, onOpen: props.onOpen }))),
   );
 }
@@ -1243,7 +1401,8 @@ function WaveForm() {
 
 function MobileJarvis(props) {
   const st = STATES[props.stateIndex] || STATES[0];
-  const label = st.id === "listening" ? "Ich höre zu" : (st.id === "ready" ? "Bereit" : st.label);
+  const label = jarvisStateText(props.stateIndex);
+  const active = st.id !== "ready";
   const quick = [
     { icon: "sun", label: "Wetter", accent: "cyan" },
     { icon: "heart-pulse", label: "Recovery", accent: "emerald" },
@@ -1252,12 +1411,33 @@ function MobileJarvis(props) {
   return h(
     "div",
     { className: "mos__mjarvis" },
-    h("div", { className: "mos__mjarvis-orb" }, h(Orb, null)),
-    h("span", { className: "mos__mjarvis-state" }, label),
-    h(WaveForm, null),
+    h(
+      "header",
+      { className: "mos__mjarvis-top" },
+      h(
+        "span",
+        { className: "mos__mjarvis-id" },
+        h("span", { className: "mos__mjarvis-name" }, "Mikael"),
+        h("span", { className: "mos__mjarvis-date" }, TODAY.long),
+      ),
+      h("span", { className: "mos__mjarvis-avatar", "aria-hidden": "true" }, h(Icon, { name: "circle-user", size: 22 })),
+    ),
+    h(
+      "div",
+      { className: "mos__mjarvis-stage" },
+      h("div", { className: "mos__mjarvis-orb" + (active ? " is-active" : "") }, h(Orb, null)),
+      // state line is a status region so a reader hears "Ich höre zu" on change
+      h("span", { className: "mos__mjarvis-state", role: "status", "aria-live": "polite" }, label),
+      h(
+        "div",
+        { className: "mos__mjarvis-wavewrap" },
+        h(WaveForm, null),
+        h("span", { className: "mos__mjarvis-query" }, active ? "„Wie ist meine Recovery?“" : "Sage „Jarvis“ …"),
+      ),
+    ),
     h(
       "button",
-      { type: "button", className: "mos__mjarvis-ptt", onClick: props.onSpeak },
+      { type: "button", className: "mos__mjarvis-ptt", onClick: props.onSpeak, "aria-label": "Halten zum Sprechen (Demo)" },
       h(Icon, { name: "mic", size: 20 }), "Halten zum Sprechen",
     ),
     h(
@@ -1267,9 +1447,10 @@ function MobileJarvis(props) {
         h(
           "button",
           { key: q.label, type: "button", className: "mos__mquick mos--" + q.accent, onClick: () => props.onQuick(q.label) },
-          h(Icon, { name: q.icon, size: 20 }), q.label,
+          h("span", { className: "mos__mquick-icon" }, h(Icon, { name: q.icon, size: 20 })), q.label,
         )),
     ),
+    h("span", { className: "mos__mjarvis-note" }, h(Icon, { name: "flask-conical", size: 11 }), "Sprachdemo · schreibt nichts"),
   );
 }
 
@@ -1293,20 +1474,29 @@ function MobileCommandDock(props) {
 function MobileTabBar(props) {
   return h(
     "nav",
-    { className: "mos__mtabs", "aria-label": "Navigation" },
-    M_TABS.map((t) =>
-      h(
+    { className: "mos__mtabs", "aria-label": "Hauptnavigation" },
+    M_TABS.map((t) => {
+      const isJarvis = t.id === "jarvis";
+      return h(
         "button",
         {
           key: t.id,
           type: "button",
-          className: "mos__mtab" + (props.active === t.id ? " is-active" : "") + (t.id === "jarvis" ? " mos__mtab--jarvis" : ""),
+          className: "mos__mtab" + (props.active === t.id ? " is-active" : "") + (isJarvis ? " mos__mtab--jarvis" : ""),
           "aria-current": props.active === t.id ? "page" : undefined,
           onClick: () => props.onChange(t.id),
         },
-        h("span", { className: "mos__mtab-icon" }, h(Icon, { name: t.icon, size: 22 })),
+        isJarvis
+          ? h(
+              "span",
+              { className: "mos__mtab-orb", "aria-hidden": "true" },
+              h("span", { className: "mos__mtab-orb-core" }),
+              h(Icon, { name: "mic", size: 20 }),
+            )
+          : h("span", { className: "mos__mtab-icon" }, h(Icon, { name: t.icon, size: 22 })),
         h("span", { className: "mos__mtab-label" }, t.label),
-      )),
+      );
+    }),
   );
 }
 
@@ -1315,29 +1505,37 @@ const SHEET_DETENTS = [46, 76, 100];
 function MobileSheet(props) {
   const [dragVh, setDragVh] = useState(null);
   const dragRef = useRef(null);
+  // Mirror the live drag height into a ref so the drag listeners don't need
+  // `dragVh` in their dependency array — otherwise the effect tore down and
+  // re-registered all four window listeners on EVERY drag frame (~240 add/remove
+  // per second). Now they register once per open/detent.
+  const dragVhRef = useRef(null);
+  const sheetRef = useRef(null);
+  const restoreRef = useRef(null);
+  const setDrag = (v) => { dragVhRef.current = v; setDragVh(v); };
   useEffect(() => {
     function move(ev) {
       const d = dragRef.current;
       if (!d) return;
       const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
       const vh = Math.max(16, Math.min(100, d.startVh + ((d.startY - cy) / window.innerHeight) * 100));
-      setDragVh(vh);
+      setDrag(vh);
     }
     function up() {
       const d = dragRef.current;
       if (!d) return;
       dragRef.current = null;
-      const cur = dragVh != null ? dragVh : SHEET_DETENTS[props.detent];
+      const cur = dragVhRef.current != null ? dragVhRef.current : SHEET_DETENTS[props.detent];
       // pure tap on the grabber (no meaningful drag) → cycle detent upward
       if (Math.abs(cur - d.startVh) < 3) {
-        setDragVh(null);
+        setDrag(null);
         props.onDetent((props.detent + 1) % SHEET_DETENTS.length);
         return;
       }
-      if (cur < 30) { setDragVh(null); props.onClose(); return; }
+      if (cur < 30) { setDrag(null); props.onClose(); return; }
       let best = 0, bd = 1e9;
       SHEET_DETENTS.forEach((hh, i) => { const dd = Math.abs(hh - cur); if (dd < bd) { bd = dd; best = i; } });
-      setDragVh(null);
+      setDrag(null);
       props.onDetent(best);
     }
     window.addEventListener("pointermove", move);
@@ -1350,7 +1548,21 @@ function MobileSheet(props) {
       window.removeEventListener("touchmove", move);
       window.removeEventListener("touchend", up);
     };
-  }, [dragVh, props.detent, props.open]);
+  }, [props.detent, props.open, props.onClose, props.onDetent]);
+
+  // Modal focus management: on open, remember what was focused and move focus
+  // into the dialog; on close, restore it. (Escape-to-close is handled by the
+  // shell keydown handler.)
+  useEffect(() => {
+    if (!props.open) return;
+    restoreRef.current = (typeof document !== "undefined" && document.activeElement) || null;
+    const el = sheetRef.current;
+    if (el && el.focus) { try { el.focus(); } catch (_e) {} }
+    return () => {
+      const r = restoreRef.current;
+      if (r && r.focus) { try { r.focus(); } catch (_e) {} }
+    };
+  }, [props.open]);
 
   if (!props.open) return null;
   const data = resolveLens(props.focusId, props.liveModule);
@@ -1366,9 +1578,13 @@ function MobileSheet(props) {
     h(
       "section",
       {
+        ref: sheetRef,
         className: "mos__sheet" + (dragVh != null ? " is-dragging" : ""),
         style: { height: height + "vh" },
+        role: "dialog",
+        "aria-modal": "true",
         "aria-label": "Fokus: " + data.title,
+        tabIndex: -1,
         onClick: (e) => e.stopPropagation(),
       },
       h(
@@ -1394,28 +1610,64 @@ function MobileSheet(props) {
         ),
         h("button", { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Schließen", onClick: props.onClose }, h(Icon, { name: "x", size: 18 })),
       ),
-      h(
-        "div",
-        { className: "mos__sheet-body" },
-        data.rows && data.rows.length
-          ? data.rows.map((r, i) => h(LensRow, { key: r.title + i, row: r, index: i + 1 }))
-          : h(
-              "div",
-              { className: "mos__lens-empty mos--" + stMeta.tone },
-              h(Icon, { name: data.state === "unavailable" || data.state === "error" ? "unplug" : "inbox", size: 22 }),
-              h("span", { className: "mos__lens-empty-title" }, stMeta.label),
-              h("span", { className: "mos__lens-empty-note" }, data.note || "Keine Daten von dieser Quelle."),
-            ),
-      ),
+      (function () {
+        // The sheet is a FOCUS surface, not an unbounded list: cap to the same
+        // top-N the desktop lens uses and honestly count the rest as "+N weitere"
+        // (a real live module can carry 16+ rows — dumping them all turns the
+        // focus sheet into a scroll dump).
+        const allRows = data.rows || [];
+        const rows = allRows.slice(0, LENS_MAX_ROWS);
+        const extra = allRows.length - rows.length;
+        return h(
+          "div",
+          { className: "mos__sheet-body" },
+          rows.length
+            ? [
+                ...rows.map((r, i) => h(LensRow, { key: r.title + i, row: r, index: i + 1 })),
+                extra > 0
+                  ? h("div", { key: "more", className: "mos__lens-more" },
+                      h(Icon, { name: "ellipsis", size: 14 }),
+                      "+" + extra + " weitere",
+                      h("span", { className: "mos__lens-more-src" }, " · " + data.source))
+                  : null,
+              ]
+            : h(
+                "div",
+                { className: "mos__lens-empty mos--" + stMeta.tone },
+                h(Icon, { name: data.state === "unavailable" || data.state === "error" ? "unplug" : "inbox", size: 22 }),
+                h("span", { className: "mos__lens-empty-title" }, stMeta.label),
+                h("span", { className: "mos__lens-empty-note" }, data.note || "Keine Daten von dieser Quelle."),
+              ),
+        );
+      })(),
       h(
         "footer",
         { className: "mos__sheet-foot" },
+        // Phase-3 actions are shown but explicitly NOT wired — no write path
+        // exists yet. Buttons are disabled + carry a "Gate" pill so the surface
+        // is honest about what it can and cannot do (no gate bypass).
+        h(
+          "div",
+          { className: "mos__sheet-actions", "aria-label": "Aktionen (Phase 3, noch nicht verbunden)" },
+          [
+            { icon: "git-branch", label: "Als Codex-Task" },
+            { icon: "calendar-plus", label: "Termin vorschlagen" },
+          ].map((a) =>
+            h(
+              "button",
+              { key: a.label, type: "button", className: "mos__sheet-act", disabled: true, "aria-disabled": "true",
+                title: "Noch nicht verbunden — läuft in Phase 3 über Gates (propose-only)." },
+              h(Icon, { name: a.icon, size: 15 }), a.label,
+              h("span", { className: "mos__sheet-act-gate" }, h(Icon, { name: "lock", size: 10 }), "Gate"),
+            )),
+        ),
         h(
           "span",
           { className: "mos__sheet-prov" },
-          "Quelle ", h("b", null, data.source), " · Stand ", h("b", null, data.freshness), " · ", data.permission,
+          h(Icon, { name: "git-branch", size: 12 }), "Quelle ", h("b", null, data.source),
+          " · Stand ", h("b", null, data.freshness), " · ", data.permission,
         ),
-        h("button", { type: "button", className: "mos__sheet-cta mos--" + data.accent }, "Details anzeigen"),
+        h("button", { type: "button", className: "mos__sheet-cta mos--" + data.accent }, h(Icon, { name: "panels-top-left", size: 16 }), "Details anzeigen"),
       ),
     ),
   );
@@ -1451,13 +1703,22 @@ function MobileShell(props) {
   } else if (tab === "profil") {
     content = h(MobileProfile, { workspace: props.workspace, onWorkspace: props.onWorkspace });
   } else {
-    content = h(MobileHome, { byId: props.byId, onOpen: props.onOpen });
+    content = h(MobileHome, {
+      byId: props.byId, modules: props.modules, onOpen: props.onOpen,
+      stateIndex: props.stateIndex, greeting: props.greeting, onGoJarvis: props.onGoJarvis,
+    });
   }
   return h(
     "div",
     { className: "mos__m" },
-    tab === "jarvis" ? null : h(MobileTopBar, { loadState: props.loadState, liveCount: props.liveCount }),
-    h("main", { className: "mos__m-main" }, content),
+    h("h1", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
+    h(LiveAnnouncer, { message: props.announce }),
+    // The Jarvis surface has its own name/date header; the Timeline tab carries a
+    // single compact "Living Timeline" header of its own — so the global MIKAEL OS
+    // bar is suppressed on both to avoid a stacked double header (and, on Timeline,
+    // a second clock that could disagree with the "now" marker).
+    (tab === "jarvis" || tab === "timeline") ? null : h(MobileTopBar, { loadState: props.loadState, liveCount: props.liveCount }),
+    h("main", { className: "mos__m-main", role: "main" }, content),
     showDock ? h(MobileCommandDock, { command: props.command, onCommand: props.onCommand, onSubmit: props.onSubmit, onSpeak: props.onSpeak }) : null,
     h(MobileTabBar, { active: tab, onChange: props.onMobileTab }),
     h(MobileSheet, {
@@ -1535,7 +1796,10 @@ function TopBar(props) {
       h(
         "span",
         { className: "mos__topchip mos__topchip-time" },
-        h("b", null, "22:30"),
+        // Scene-consistent clock: on the Timeline the bar shows the same "now"
+        // the Jarvis marker sits at (16:42), so a single screen never shows two
+        // contradicting times; the Konstellation keeps its night reference time.
+        h("b", null, props.scene === "timeline" ? TIMELINE_NOW.time : "22:30"),
         h("span", null, TODAY.short + " · Berliner Zeit"),
       ),
       h("button", { type: "button", className: "mos__shieldbtn", "aria-label": "Privatsphäre & Berechtigungen" }, h(Icon, { name: "shield-check", size: 20 })),
@@ -1633,6 +1897,26 @@ function MikaelOS() {
     () => viewModules.filter((m) => !m._demo && (m._state === "fresh" || m._state === "stale" || m._state === "partial")).length,
     [viewModules],
   );
+  // Time-of-day greeting for the mobile Jarvis presence — a greeting, not data
+  // truth, so it may read the real clock without violating the concept honesty.
+  const greeting = useMemo(() => {
+    const hr = new Date().getHours();
+    if (hr < 5) return "Gute Nacht";
+    if (hr < 11) return "Guten Morgen";
+    if (hr < 17) return "Guten Tag";
+    if (hr < 22) return "Guten Abend";
+    return "Gute Nacht";
+  }, []);
+  // Polite screen-reader announcement — recomputed when the Jarvis lifecycle or
+  // the read-model load status changes, so non-visual users get the same signal
+  // the colour/motion cues carry. Kept terse so it isn't chatty.
+  const announce = useMemo(() => {
+    const load = loadState === "loading" ? "Read-Modelle werden geladen."
+      : loadState === "offline" ? "Quellen offline, Konzeptdaten."
+      : (liveCount > 0 ? liveCount + " Module live." : "Konzeptdaten.");
+    return "Jarvis: " + jarvisStateText(stateIndex) + ". " + load;
+  }, [stateIndex, loadState, liveCount]);
+  const goJarvis = useCallback(() => { setMobileTab("jarvis"); }, []);
   // Enriched lookup for the Focus-Lens — includes modules the adapter returns
   // that are NOT ring nodes (e.g. the default "engineering / Codex" lens), so
   // the lens projects their live read-model instead of falling back to fixtures.
@@ -1655,6 +1939,15 @@ function MikaelOS() {
   const dragRef = useRef(null);
   const timersRef = useRef([]);
   const [dragId, setDragId] = useState(null);
+
+  // "Latest value" refs so the global keydown handler can read current state
+  // WITHOUT listing modules/focusId/etc. in its effect deps — otherwise the
+  // window keydown listener was detached + re-attached on every drag frame (a
+  // node drag mutates `modules` ~60×/s). Assigned during render; always current.
+  const modulesRef = useRef(modules); modulesRef.current = modules;
+  const focusIdRef = useRef(focusId); focusIdRef.current = focusId;
+  const sheetOpenRef = useRef(sheetOpen); sheetOpenRef.current = sheetOpen;
+  const isMobileRef = useRef(isMobile); isMobileRef.current = isMobile;
 
   const clearTimers = useCallback(() => {
     timersRef.current.forEach((t) => window.clearTimeout(t));
@@ -1696,6 +1989,18 @@ function MikaelOS() {
   }, []);
 
   useEffect(() => {
+    // Coalesce pointer moves to one state commit per animation frame. Raw
+    // pointermove can fire several times per frame; each setModules re-renders
+    // all ten ring nodes + rebuilds every connector path, so committing at most
+    // once per rAF keeps the drag smooth instead of thrashing.
+    let rafId = 0;
+    let pending = null;
+    const commit = () => {
+      rafId = 0;
+      if (!pending) return;
+      const p = pending; pending = null;
+      setModules((prev) => prev.map((m) => (m.id === p.id ? { ...m, pos: { x: p.x, y: p.y } } : m)));
+    };
     function onMove(e) {
       const d = dragRef.current;
       if (!d) return;
@@ -1704,11 +2009,14 @@ function MikaelOS() {
       if (!d.moved) { d.moved = true; setDragId(d.id); }
       const nx = Math.max(4, Math.min(96, ((e.clientX - d.rect.left) / d.rect.width) * 100));
       const ny = Math.max(4, Math.min(96, ((e.clientY - d.rect.top) / d.rect.height) * 100));
-      setModules((prev) => prev.map((m) => (m.id === d.id ? { ...m, pos: { x: nx, y: ny } } : m)));
+      pending = { id: d.id, x: nx, y: ny };
+      if (!rafId) rafId = window.requestAnimationFrame(commit);
     }
     function onUp() {
       const d = dragRef.current;
       dragRef.current = null;
+      if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
+      if (pending) { commit(); }
       if (d && d.moved) { setDragId(null); }
     }
     window.addEventListener("pointermove", onMove);
@@ -1716,6 +2024,7 @@ function MikaelOS() {
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      if (rafId) window.cancelAnimationFrame(rafId);
     };
   }, []);
 
@@ -1733,15 +2042,16 @@ function MikaelOS() {
         if (k === "Escape" && inputRef.current) inputRef.current.blur();
         return;
       }
-      if (k === "Escape") { if (sheetOpen) { setSheetOpen(false); } else { closeFocus(); } return; }
+      const mods = modulesRef.current;
+      if (k === "Escape") { if (sheetOpenRef.current) { setSheetOpen(false); } else { closeFocus(); } return; }
       if (k >= "1" && k <= "9") {
         const idx = parseInt(k, 10) - 1;
-        if (modules[idx]) { if (isMobile) openModule(modules[idx].id); else activate(modules[idx].id); }
+        if (mods[idx]) { if (isMobileRef.current) openModule(mods[idx].id); else activate(mods[idx].id); }
         return;
       }
       if (k === "ArrowRight" || k === "ArrowLeft") {
-        const ids = modules.map((m) => m.id);
-        const cur = ids.indexOf(focusId);
+        const ids = mods.map((m) => m.id);
+        const cur = ids.indexOf(focusIdRef.current);
         const next = cur === -1
           ? (k === "ArrowRight" ? 0 : ids.length - 1)
           : (cur + (k === "ArrowRight" ? 1 : -1) + ids.length) % ids.length;
@@ -1750,7 +2060,7 @@ function MikaelOS() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [modules, focusId, activate, closeFocus, sheetOpen, isMobile, openModule]);
+  }, [activate, closeFocus, openModule]);
 
   // Very slow atmosphere parallax on pointer move (skipped under reduced motion).
   useEffect(() => {
@@ -1792,6 +2102,7 @@ function MikaelOS() {
         onSpeak: onSpeak, onQuick: onQuick, stateIndex: stateIndex,
         workspace: workspace, onWorkspace: setWorkspace,
         loadState: loadState, liveCount: liveCount,
+        greeting: greeting, onGoJarvis: goJarvis, announce: announce,
         sheetOpen: sheetOpen, sheetDetent: sheetDetent,
         onSheetDetent: setSheetDetent, onSheetClose: closeSheet,
       }),
@@ -1803,9 +2114,11 @@ function MikaelOS() {
     { className: "mos" + (scene === "timeline" ? " mos--timeline" : "") },
     h("div", { className: "mos__atmosphere", "aria-hidden": "true" }),
     h("div", { className: "mos__atmosphere-veil", "aria-hidden": "true" }),
+    h(LiveAnnouncer, { message: announce }),
     h(
-      "div",
-      { className: "mos__shell" },
+      "main",
+      { className: "mos__shell", role: "main" },
+      h("h1", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
       h(TopBar, { loadState: loadState, liveCount: liveCount, total: viewModules.length, scene: scene, onScene: setScene }),
       scene === "timeline"
         ? h("div", { className: "mos__stagewrap mos__stagewrap--tl" },
@@ -1817,6 +2130,18 @@ function MikaelOS() {
         h(
           "div",
           { className: "mos__stage", ref: stageRef },
+          // spatial depth field — cheap radial light-fields + a few drifting
+          // energy motes (transform/opacity only, GPU-friendly, static under
+          // reduced motion). Purely decorative, sits behind the connectors.
+          h(
+            "div",
+            { className: "mos__depth", "aria-hidden": "true" },
+            h("span", { className: "mos__depth-field mos__depth-field--a" }),
+            h("span", { className: "mos__depth-field mos__depth-field--b" }),
+            h("span", { className: "mos__motes" },
+              Array.from({ length: 14 }).map((_, i) =>
+                h("span", { key: i, className: "mos__mote mos__mote--" + (i % 7) }))),
+          ),
           h(Connectors, { modules: viewModules, focusId: focusId }),
           // orbiting module nodes
           viewModules.map((m) =>
@@ -1832,6 +2157,7 @@ function MikaelOS() {
           h(
             "div",
             { className: "mos__core" },
+            h("span", { className: "mos__core-aura", "aria-hidden": "true" }),
             h(
               "div",
               { className: "mos__core-row" },
@@ -1842,7 +2168,7 @@ function MikaelOS() {
                 h(Icon, { name: "orbit", size: 16 }),
                 h("b", null, "Jarvis"),
               ),
-              h(Orb, null),
+              h(Orb, { label: true }),
               h(
                 "span",
                 { className: "mos__handoff" },
@@ -1865,7 +2191,7 @@ function MikaelOS() {
           // add-module affordance (bottom-left of stage)
           h(
             "button",
-            { type: "button", className: "mos__addmodule" },
+            { type: "button", className: "mos__addmodule", title: NOT_WIRED },
             h("span", { className: "mos__addmodule-plus" }, h(Icon, { name: "circle-plus", size: 18 })),
             "Modul hinzufügen",
           ),
@@ -1904,7 +2230,7 @@ function MikaelOS() {
         { className: "mos__footer" },
         h(
           "button",
-          { type: "button", className: "mos__quick" },
+          { type: "button", className: "mos__quick", title: NOT_WIRED },
           h(Icon, { name: "layout-grid", size: 16 }), "Schnellzugriffe", h(Icon, { name: "chevron-up", size: 14 }),
         ),
         h(StateRail, { activeIndex: stateIndex }),

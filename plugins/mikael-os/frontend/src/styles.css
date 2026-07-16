@@ -26,7 +26,7 @@
   --mos-border-strong: rgba(150, 190, 240, 0.30);
   --mos-text: #eaf0f8;
   --mos-text-dim: #b3c1d4;
-  --mos-text-faint: #8695ab;
+  --mos-text-faint: #9aacc2;
   --mos-cyan: #38bdf8;
   --mos-cyan-bright: #4dd6ff;
   --mos-emerald: #34d399;
@@ -70,20 +70,25 @@
   pointer-events: none;
   background-image: url(./assets/atmosphere-night.png);
   background-size: cover;
-  background-position: 60% 55%;
+  background-position: 50% 50%;
   transform: translate3d(var(--mos-par-x), var(--mos-par-y), 0) scale(1.06);
   transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
+/* Darkening veil: centred + lighter than before so the photographic depth reads
+ * evenly across the WHOLE surface (previously the heavy bottom-centre radial +
+ * 0.92 floor crushed the left/centre to near-black, leaving only the right edge
+ * with visible skyline — two zones instead of one system). Glass still guarantees
+ * text legibility, so the veil can be gentler. */
 .mos__atmosphere-veil {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(1200px 760px at 50% 34%, rgba(10, 30, 60, 0.28), transparent 60%),
-    radial-gradient(1000px 900px at 50% 108%, rgba(4, 8, 16, 0.9), transparent 66%),
-    linear-gradient(180deg, rgba(6, 10, 20, 0.78) 0%, rgba(6, 10, 20, 0.44) 26%, rgba(5, 8, 16, 0.5) 62%, rgba(4, 7, 14, 0.92) 100%);
+    radial-gradient(1300px 820px at 50% 32%, rgba(10, 30, 60, 0.24), transparent 64%),
+    radial-gradient(1200px 1040px at 50% 112%, rgba(4, 8, 16, 0.66), transparent 70%),
+    linear-gradient(180deg, rgba(6, 10, 20, 0.66) 0%, rgba(6, 10, 20, 0.32) 28%, rgba(5, 8, 16, 0.38) 64%, rgba(4, 7, 14, 0.8) 100%);
 }
 
 .mos__shell {
@@ -220,6 +225,65 @@
   z-index: 1;
 }
 
+/* ---- spatial depth field: light-fields + drifting energy motes ------------ */
+.mos__depth { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.mos__depth-field {
+  position: absolute; border-radius: 50%;
+  filter: blur(6px);
+  will-change: transform, opacity;
+}
+/* two big, faint colour-fields drifting on slow, offset loops give the empty
+ * corners parallax depth without a heavy full-surface blur. */
+.mos__depth-field--a {
+  left: 8%; top: 58%; width: 460px; height: 460px;
+  background: radial-gradient(circle, rgba(56, 130, 235, 0.14), transparent 66%);
+  animation: mos-drift-a 26s ease-in-out infinite;
+}
+.mos__depth-field--b {
+  right: 6%; top: 16%; width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(96, 84, 220, 0.11), transparent 66%);
+  animation: mos-drift-b 32s ease-in-out infinite;
+}
+@keyframes mos-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.7; }
+  50% { transform: translate3d(34px, -26px, 0) scale(1.1); opacity: 1; }
+}
+@keyframes mos-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); opacity: 0.6; }
+  50% { transform: translate3d(-30px, 28px, 0) scale(1); opacity: 0.95; }
+}
+.mos__motes { position: absolute; inset: 0; }
+.mos__mote {
+  position: absolute;
+  width: 3px; height: 3px; border-radius: 50%;
+  background: rgba(150, 210, 255, 0.85);
+  box-shadow: 0 0 6px 1px rgba(90, 190, 255, 0.7);
+  opacity: 0.5;
+  will-change: transform, opacity;
+  animation: mos-mote-rise 15s linear infinite;
+}
+@keyframes mos-mote-rise {
+  0% { transform: translate3d(0,0,0); opacity: 0; }
+  10% { opacity: 0.6; }
+  90% { opacity: 0.5; }
+  100% { transform: translate3d(14px, -120px, 0); opacity: 0; }
+}
+/* scatter the motes across the stage on varied phases/positions */
+.mos__mote--0 { left: 18%; top: 40%; animation-delay: 0s;   animation-duration: 16s; }
+.mos__mote--1 { left: 30%; top: 66%; animation-delay: -3s;  animation-duration: 19s; }
+.mos__mote--2 { left: 44%; top: 78%; animation-delay: -7s;  animation-duration: 14s; width: 2px; height: 2px; }
+.mos__mote--3 { left: 62%; top: 60%; animation-delay: -5s;  animation-duration: 21s; }
+.mos__mote--4 { left: 74%; top: 46%; animation-delay: -9s;  animation-duration: 17s; width: 2px; height: 2px; }
+.mos__mote--5 { left: 84%; top: 68%; animation-delay: -2s;  animation-duration: 23s; }
+.mos__mote--6 { left: 52%; top: 34%; animation-delay: -11s; animation-duration: 18s; width: 2px; height: 2px; }
+.mos__mote--0:nth-of-type(8)  { left: 24%; top: 30%; }
+.mos__mote--1:nth-of-type(9)  { left: 38%; top: 52%; }
+.mos__mote--2:nth-of-type(10) { left: 58%; top: 82%; }
+.mos__mote--3:nth-of-type(11) { left: 70%; top: 30%; }
+.mos__mote--4:nth-of-type(12) { left: 88%; top: 52%; }
+.mos__mote--5:nth-of-type(13) { left: 14%; top: 74%; }
+.mos__mote--6:nth-of-type(14) { left: 46%; top: 22%; }
+
 /* constellation connectors (decorative svg) */
 .mos__connectors {
   position: absolute; inset: 0; z-index: 0;
@@ -257,22 +321,23 @@
  * motion). offset-path keeps the dot locked to the ring's own coordinate space,
  * so it inherits the ring's tilt and traces the visible ellipse. */
 .mos__orbitring {
-  position: absolute; left: 22px; top: 50%;
-  width: 150px; height: 66px;
+  position: absolute; left: 20px; top: 50%;
+  width: 172px; height: 82px;
   transform: translate(-50%, -50%) rotate(-18deg);
   border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--mos-accent) 30%, transparent);
-  opacity: 0.55;
+  border: 1px solid color-mix(in srgb, var(--mos-accent) 52%, transparent);
+  box-shadow: 0 0 10px -3px color-mix(in srgb, var(--mos-accent) 60%, transparent);
+  opacity: 0.8;
   pointer-events: none;
 }
 .mos__orbitring--2 {
-  width: 96px; height: 42px;
+  width: 108px; height: 50px;
   transform: translate(-50%, -50%) rotate(16deg);
-  opacity: 0.36;
+  opacity: 0.6;
 }
 .mos__nodewrap.is-active .mos__orbitring {
-  border-color: color-mix(in srgb, var(--mos-accent) 44%, transparent);
-  opacity: 0.72;
+  border-color: color-mix(in srgb, var(--mos-accent) 66%, transparent);
+  opacity: 0.95;
 }
 
 .mos__sat {
@@ -285,19 +350,19 @@
   offset-rotate: 0deg;
 }
 .mos__orbitring .mos__sat--a {
-  offset-path: ellipse(75px 33px at 50% 50%);
+  offset-path: ellipse(86px 41px at 50% 50%);
   offset-distance: 14%;
   animation: mos-orbit 15s linear infinite;
 }
 .mos__orbitring .mos__sat--b {
   width: 3.5px; height: 3.5px;
-  offset-path: ellipse(75px 33px at 50% 50%);
+  offset-path: ellipse(86px 41px at 50% 50%);
   offset-distance: 58%;
   animation: mos-orbit 15s linear infinite;
   animation-delay: -7s;
 }
 .mos__orbitring--2 .mos__sat--c {
-  offset-path: ellipse(48px 21px at 50% 50%);
+  offset-path: ellipse(54px 25px at 50% 50%);
   offset-distance: 42%;
   animation: mos-orbit 11s linear infinite reverse;
 }
@@ -315,8 +380,8 @@
   padding: 10px 12px;
   text-align: left;
   border-radius: var(--mos-radius-md);
-  background: var(--mos-glass-base);
-  border: 1px solid var(--mos-border);
+  background: color-mix(in srgb, var(--mos-accent) 6%, rgba(10, 18, 32, 0.44));
+  border: 1px solid color-mix(in srgb, var(--mos-accent) 16%, var(--mos-border));
   color: var(--mos-text);
   cursor: pointer;
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
@@ -336,19 +401,49 @@
 
 .mos__node-orbit {
   position: relative;
-  width: 44px; height: 44px; flex: none;
+  width: 46px; height: 46px; flex: none;
   display: grid; place-items: center;
   border-radius: 50%;
   color: var(--mos-accent);
-  background: rgba(8, 16, 30, 0.72);
-  border: 1px solid color-mix(in srgb, var(--mos-accent) 48%, transparent);
-  box-shadow: 0 0 20px -6px var(--mos-accent), inset 0 0 12px -6px var(--mos-accent);
+  background:
+    radial-gradient(circle at 42% 34%, color-mix(in srgb, var(--mos-accent) 32%, transparent), rgba(8, 16, 30, 0.86) 72%);
+  border: 1px solid color-mix(in srgb, var(--mos-accent) 58%, transparent);
+  box-shadow:
+    0 0 22px -4px var(--mos-accent),
+    inset 0 0 14px -6px color-mix(in srgb, var(--mos-accent) 80%, #eafaff);
 }
 .mos__node-orbit::before {
   content: "";
   position: absolute; inset: -5px;
   border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--mos-accent) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mos-accent) 26%, transparent);
+}
+.mos__node-orbit .mos__icon { position: relative; z-index: 1; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--mos-accent) 60%, transparent)); }
+/* live-pulse ring — a breathing halo that means "this node has a fresh read
+ * model". Only fires on .is-live; stale keeps a static ring; concept none. */
+.mos__node-pulse {
+  position: absolute; inset: -3px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+}
+.mos__nodewrap.is-live .mos__node-pulse {
+  opacity: 1;
+  border: 1.5px solid color-mix(in srgb, var(--mos-accent) 70%, transparent);
+  box-shadow: 0 0 12px 0 color-mix(in srgb, var(--mos-accent) 55%, transparent);
+  animation: mos-node-pulse 2.6s ease-out infinite;
+}
+.mos__nodewrap.is-stale .mos__node-orbit {
+  border-color: color-mix(in srgb, var(--mos-amber) 50%, transparent);
+}
+.mos__nodewrap.is-stale .mos__node-pulse {
+  opacity: 1;
+  border: 1.5px dashed color-mix(in srgb, var(--mos-amber) 45%, transparent);
+}
+@keyframes mos-node-pulse {
+  0%   { transform: scale(1);    opacity: 0.9; }
+  70%  { transform: scale(1.5);  opacity: 0; }
+  100% { transform: scale(1.5);  opacity: 0; }
 }
 .mos__node-body { min-width: 0; display: flex; flex-direction: column; }
 .mos__node-title {
@@ -367,19 +462,37 @@
 .mos__node-grip {
   align-self: center;
   color: var(--mos-text-faint);
-  opacity: 0; transition: opacity 140ms ease;
+  opacity: 0.4; transition: opacity 140ms ease;
 }
-.mos__node:hover .mos__node-grip { opacity: 0.7; }
+.mos__node:hover .mos__node-grip { opacity: 0.85; }
 
 /* --------------------------------- core / orb ------------------------------ */
+/* Orb centre is lowered to ~33% (was 22%) and the sphere shrunk, so the top ring
+ * cards clear the orb entirely and the lens below keeps real breathing room —
+ * mirrors CORE_POS / the connector origin in index.jsx. */
 .mos__core {
   position: absolute;
-  left: 50%; top: 27%;
+  left: 50%; top: 33%;
   transform: translate(-50%, -50%);
   z-index: 2;
 }
+/* soft volumetric aura well behind the orb — a cheap radial light-field (no
+ * blur), giving the constellation centre real depth. Gentle breathing pulse. */
+.mos__core-aura {
+  position: absolute; left: 50%; top: 50%;
+  width: 620px; height: 620px;
+  transform: translate(-50%, -50%);
+  pointer-events: none; z-index: -1;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(56, 150, 240, 0.24), rgba(40, 110, 210, 0.12) 30%, rgba(20, 60, 130, 0.05) 52%, transparent 68%);
+  animation: mos-aura 7.5s ease-in-out infinite;
+}
+@keyframes mos-aura {
+  0%, 100% { opacity: 0.72; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+}
 .mos__core-row {
-  display: flex; align-items: center; justify-content: center; gap: 18px;
+  display: flex; align-items: center; justify-content: center; gap: clamp(30px, 4vw, 60px);
 }
 .mos__handoff {
   display: flex; align-items: center; gap: 8px;
@@ -398,14 +511,14 @@
 
 .mos__orb {
   position: relative;
-  width: clamp(168px, 15vw, 208px);
+  width: clamp(150px, 12.5vw, 190px);
   aspect-ratio: 1;
   display: grid; place-items: center;
   flex: none;
 }
 .mos__orb-canvas {
-  position: absolute; inset: -18%;
-  width: 136%; height: 136%;
+  position: absolute; inset: -20%;
+  width: 140%; height: 140%;
   pointer-events: none;
 }
 .mos__orb-label {
@@ -415,26 +528,13 @@
   text-shadow: 0 0 16px rgba(120, 220, 255, 0.7);
   pointer-events: none;
 }
-.mos__orb-mic {
-  position: absolute;
-  bottom: 4%; left: 50%; transform: translateX(-50%);
-  width: 38px; height: 38px;
-  border-radius: 50%;
-  display: grid; place-items: center;
-  color: #eafaff;
-  background: radial-gradient(circle at 40% 35%, rgba(90, 210, 255, 0.9), rgba(18, 80, 150, 0.92));
-  border: 1px solid rgba(120, 220, 255, 0.55);
-  box-shadow: 0 0 20px -4px rgba(56, 189, 248, 0.8);
-  cursor: pointer;
-}
-
 /* ------------------------------- focus lens -------------------------------- */
 .mos__lens-slot {
   position: absolute;
-  left: 50%; top: 60%;
-  transform: translate(-50%, -50%);
+  left: 50%; top: 46%;
+  transform: translateX(-50%);
   z-index: 4;
-  width: min(660px, 92%);
+  width: min(632px, 90%);
 }
 .mos__lens {
   border-radius: var(--mos-radius-lg);
@@ -451,7 +551,7 @@
 }
 .mos__lens-head {
   display: flex; align-items: center; gap: 12px;
-  padding: 15px 18px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--mos-border);
 }
 .mos__lens-badge {
@@ -467,7 +567,7 @@
 .mos__lens-sub { font-size: 12px; color: var(--mos-text-dim); margin-top: 2px; }
 .mos__lens-actions { display: flex; align-items: center; gap: 2px; }
 .mos__iconbtn {
-  width: 40px; height: 40px;
+  width: var(--mos-touch); height: var(--mos-touch);
   display: grid; place-items: center;
   border-radius: var(--mos-radius-sm);
   border: 1px solid transparent;
@@ -481,16 +581,27 @@
 .mos__iconbtn--close { color: var(--mos-text-faint); }
 .mos__iconbtn--close:hover { color: var(--mos-danger); background: rgba(248, 113, 113, 0.12); }
 
-.mos__lens-body { padding: 6px 10px; display: flex; flex-direction: column; }
+.mos__lens-body { padding: 4px 10px; display: flex; flex-direction: column; }
 .mos__mission {
   display: grid;
-  grid-template-columns: 24px 34px 1fr auto minmax(46px, max-content);
+  grid-template-columns: 22px 32px 1fr auto minmax(44px, max-content);
   align-items: center;
   gap: 12px;
-  padding: 11px 8px;
+  padding: 6px 8px;
   border-radius: var(--mos-radius-sm);
   --mos-accent: var(--mos-cyan);
 }
+/* honest "+N weitere" overflow row — the lens shows the top rows and counts the
+ * rest rather than dumping a long live list that would eat the orb. */
+.mos__lens-more {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; margin-top: 1px;
+  border-top: 1px solid var(--mos-border);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.3px;
+  color: var(--mos-text-dim);
+}
+.mos__lens-more .mos__icon { color: var(--mos-text-faint); }
+.mos__lens-more-src { color: var(--mos-text-faint); font-weight: 500; }
 .mos__mission + .mos__mission { border-top: 1px solid var(--mos-border); }
 .mos__mission:hover { background: rgba(120, 150, 200, 0.08); }
 .mos__mission-idx { font-size: 13px; color: var(--mos-text-faint); text-align: center; }
@@ -503,8 +614,8 @@
   border: 1px solid color-mix(in srgb, var(--mos-accent) 30%, transparent);
 }
 .mos__mission-body { min-width: 0; display: flex; flex-direction: column; }
-.mos__mission-title { display: block; font-size: 14px; font-weight: 600; color: var(--mos-text); }
-.mos__mission-sub { display: block; font-size: 12px; color: var(--mos-text-dim); margin-top: 1px; }
+.mos__mission-title { display: block; font-size: 14px; font-weight: 600; color: var(--mos-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mos__mission-sub { display: block; font-size: 12px; color: var(--mos-text-dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mos__mission-pct { font-size: 13px; font-weight: 600; color: var(--mos-text); text-align: right; white-space: nowrap; }
 .mos__status-spacer { display: inline-block; }
 
@@ -520,24 +631,31 @@
 .mos__status--verified { color: var(--mos-cyan); background: rgba(56, 189, 248, 0.14); border: 1px solid rgba(56, 189, 248, 0.34); }
 
 .mos__lens-foot {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px;
-  padding: 11px 18px;
+  display: flex; align-items: center; flex-wrap: nowrap; gap: 6px 16px;
+  padding: 8px 16px;
   border-top: 1px solid var(--mos-border);
   font-size: 12px; color: var(--mos-text-dim);
+  overflow: hidden;
 }
-.mos__lens-foot .mos__meta { display: inline-flex; align-items: center; gap: 6px; }
+.mos__lens-foot .mos__meta { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.mos__lens-foot .mos__meta .mos__icon { flex: none; }
+.mos__lens-foot .mos__meta--fresh { flex: none; }
+.mos__lens-foot .mos__meta--src { flex: 1 1 auto; overflow: hidden; }
+.mos__lens-foot .mos__meta--perm { flex: 0 1 auto; overflow: hidden; }
+.mos__lens-foot .mos__meta--src b,
+.mos__lens-foot .mos__meta--perm b { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .mos__lens-foot .mos__meta b { color: var(--mos-text); font-weight: 600; }
 .mos__lens-foot-shield { margin-left: auto; color: var(--mos-cyan); display: inline-flex; }
 
 .mos__lens-tools {
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
-  padding: 11px 14px;
+  padding: 8px 12px;
   border-top: 1px solid var(--mos-border);
 }
 .mos__tool {
   display: inline-flex; align-items: center; gap: 7px;
-  min-height: 40px;
-  padding: 8px 12px;
+  min-height: 34px;
+  padding: 6px 11px;
   border-radius: var(--mos-radius-sm);
   border: 1px solid var(--mos-border);
   background: rgba(18, 28, 46, 0.5);
@@ -819,7 +937,12 @@
 }
 .mos__scene-tab:focus-visible { outline: 2px solid var(--mos-cyan); outline-offset: 2px; }
 
-.mos__stagewrap--tl { min-height: 0; overflow: hidden; padding-bottom: 2px; }
+/* On the Timeline scene pin the shell to the viewport height so the timeline
+ * column (flex:1, min-height:0, internally scrolled) shrinks to leave the shared
+ * command bar + state rail visible at the bottom — the primary way to talk to
+ * Jarvis stays on this screen instead of being pushed below the fold. */
+.mos--timeline .mos__shell { height: 100vh; }
+.mos__stagewrap--tl { flex: 1 1 auto; min-height: 0; overflow: hidden; padding-bottom: 2px; }
 .mos__timeline {
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(380px, 34%, 468px);
@@ -875,9 +998,16 @@
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
-/* category scan-colour: a coloured left edge per accent (blue/green/violet…),
- * so the day's categories are distinguishable at a glance like the reference. */
-.mos__tl-card { border-left-width: 3px; border-left-color: color-mix(in srgb, var(--mos-accent) 62%, transparent); }
+/* category scan-colour: the WHOLE card body carries a faint accent tint per
+ * category (blue/green/violet/gold) plus a stronger coloured left edge — so the
+ * day's categories read at a glance across the full card like the reference,
+ * not just a thin stripe. */
+.mos__tl-card {
+  border-left-width: 3px;
+  border-left-color: color-mix(in srgb, var(--mos-accent) 62%, transparent);
+  background: color-mix(in srgb, var(--mos-accent) 9%, var(--mos-glass-base));
+  border-color: color-mix(in srgb, var(--mos-accent) 22%, var(--mos-border));
+}
 .mos__tl-card:hover { border-color: var(--mos-border-strong); border-left-color: var(--mos-accent); transform: translateX(2px); }
 .mos__tl-card:focus-visible { outline: 2px solid var(--mos-cyan); outline-offset: 2px; }
 .mos__tl-card.is-active {
@@ -968,9 +1098,16 @@
   background: color-mix(in srgb, var(--mos-accent) 12%, transparent);
 }
 .mos__tlfocus-top-body { min-width: 0; display: flex; flex-direction: column; }
-.mos__tlfocus-top-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mos__tlfocus-top-title { font-size: 13px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .mos__tlfocus-top-sub { font-size: 11px; color: var(--mos-text-dim); }
 .mos__tlfocus-whoop-row { display: flex; align-items: center; gap: 16px; }
+/* no-detail-values state: a smaller ring + one honest note instead of a 2×2 grid
+ * of dead "—" tiles that dominated the fold. */
+.mos__tlfocus-whoop-row.is-compact { gap: 14px; }
+.mos__tlfocus-whoop-row.is-compact .mos__whoop-ring { width: 92px; height: 92px; }
+.mos__tlfocus-whoop-empty { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.mos__tlfocus-whoop-empty-title { font-size: 13px; font-weight: 600; color: var(--mos-text); }
+.mos__tlfocus-whoop-empty-note { font-size: 11.5px; color: var(--mos-text-faint); line-height: 1.45; }
 .mos__whoop-ring { position: relative; width: 116px; height: 116px; flex: none; }
 .mos__whoop-ring svg { width: 100%; height: 100%; }
 .mos__whoop-track { fill: none; stroke: rgba(120, 150, 200, 0.16); stroke-width: 9; }
@@ -994,6 +1131,35 @@
 .mos__tlfocus-stat-v { font-size: 15px; font-weight: 600; }
 .mos__tlfocus-note { font-size: 11px; color: var(--mos-text-faint); line-height: 1.4; }
 .mos__tlfocus-rec-text { font-size: 13px; color: var(--mos-text-dim); line-height: 1.55; margin: 0; }
+
+/* Live-Signale strip — fills the panel's lower fold with real read-model
+ * modules (state + freshness). Compact 2-col grid of signal chips. */
+.mos__tlfocus-signals { margin-top: 2px; padding-top: 14px; border-top: 1px solid var(--mos-border); }
+.mos__tlfocus-sig-count { margin-left: auto; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; color: var(--mos-text-faint); text-transform: none; }
+.mos__tlfocus-sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mos__tlfocus-sig {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 9px 11px; border-radius: 12px;
+  background: color-mix(in srgb, var(--mos-accent) 7%, rgba(120,150,200,0.05));
+  border: 1px solid color-mix(in srgb, var(--mos-accent) 24%, var(--mos-border));
+}
+.mos__tlfocus-sig-icon {
+  width: 30px; height: 30px; flex: none; border-radius: 9px;
+  display: grid; place-items: center; color: var(--mos-accent);
+  background: color-mix(in srgb, var(--mos-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mos-accent) 34%, transparent);
+}
+.mos__tlfocus-sig-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mos__tlfocus-sig-title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mos__tlfocus-sig-meta { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--mos-text-dim); min-width: 0; }
+.mos__tlfocus-sig-meta b { color: var(--mos-text); font-weight: 700; }
+.mos__tlfocus-sig-age { color: var(--mos-text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mos__tlfocus-sig-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: currentColor; }
+.mos__tlfocus-sig-dot--verified { color: var(--mos-cyan-bright); box-shadow: 0 0 6px var(--mos-cyan-bright); }
+.mos__tlfocus-sig-dot--amber { color: var(--mos-amber); box-shadow: 0 0 6px var(--mos-amber); }
+.mos__tlfocus-sig-dot--blue { color: #8ecbff; box-shadow: 0 0 6px #8ecbff; }
+.mos__tlfocus-sig-dot--muted { color: var(--mos-text-faint); }
+.mos__tlfocus-sig-dot--red { color: var(--mos-danger); box-shadow: 0 0 6px var(--mos-danger); }
 
 @media (max-width: 1080px) {
   .mos__timeline { grid-template-columns: 1fr; }
@@ -1063,9 +1229,13 @@
 .mos__mcard-sub { font-size: 12px; color: var(--mos-text-dim); }
 .mos__mcard .mos__pip { align-self: flex-start; margin-top: auto; }
 
-/* mobile Timeline hero — ONE compact line (icon + title + date), not a tall
- * second header stacked under the global top bar. */
-.mos__mtl-head { display: flex; align-items: center; gap: 10px; padding: 2px 2px 2px; }
+/* mobile Timeline hero — ONE compact line (icon + title + date). The global
+ * MIKAEL OS bar is suppressed on this tab (see MobileShell), so this is the only
+ * header; it carries the top safe-area inset itself. */
+.mos__mtl-head { display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top, 0px) + 6px) 2px 4px; }
+/* Reference mobile timeline has no Morgen/Mittag/Nacht dividers — drop them on
+ * the phone to save vertical space (kept on the desktop timeline). */
+.mos--mobile .mos__tl-period { display: none; }
 .mos__mtl-head .mos__tl-head-icon { width: 34px; height: 34px; border-radius: 10px; }
 .mos__mtl-head .mos__tl-head-title { font-size: 17px; }
 .mos__mtl-head .mos__tl-head-sub { font-size: 11px; }
@@ -1144,7 +1314,7 @@
 .mos__mdock-input { flex: 1; min-width: 0; border: none; background: transparent; color: var(--mos-text); font-size: 15px; }
 .mos__mdock-input::placeholder { color: var(--mos-text-faint); }
 .mos__mdock-input:focus-visible { outline: none; }
-.mos__mdock-send { width: 38px; height: 38px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--mos-text-dim); background: rgba(18, 28, 46, 0.6); border: 1px solid var(--mos-border); cursor: pointer; }
+.mos__mdock-send { width: var(--mos-touch); height: var(--mos-touch); flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--mos-text-dim); background: rgba(18, 28, 46, 0.6); border: 1px solid var(--mos-border); cursor: pointer; }
 
 .mos__mtabs { display: flex; align-items: stretch; justify-content: space-around; padding: 8px 6px calc(env(safe-area-inset-bottom, 0px) + 8px); background: rgba(8, 12, 22, 0.82); border-top: 1px solid var(--mos-border); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
 .mos__mtab { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px; min-height: var(--mos-touch); background: none; border: none; color: var(--mos-text-faint); font-size: 10.5px; font-weight: 600; cursor: pointer; }
@@ -1170,7 +1340,9 @@
   transition: height 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .mos__sheet.is-dragging { transition: none; }
-.mos__sheet-grab { align-self: center; padding: 12px 40px 8px; background: none; border: none; cursor: grab; touch-action: none; }
+/* ≥44px tap target for the detent grabber (was ~25px): the visible bar stays
+ * slim, the padding makes the hit area reach the HIG minimum. */
+.mos__sheet-grab { align-self: center; padding: 20px 44px; background: none; border: none; cursor: grab; touch-action: none; }
 .mos__sheet-grab-bar { display: block; width: 42px; height: 5px; border-radius: 3px; background: rgba(150, 180, 220, 0.42); }
 .mos__sheet-head { display: flex; align-items: center; gap: 12px; padding: 2px 18px 14px; border-bottom: 1px solid var(--mos-border); }
 .mos__sheet-badge {
@@ -1200,7 +1372,9 @@
   border-radius: 12px;
 }
 .mos__sheet-body .mos__mission + .mos__mission { border-top: 1px solid var(--mos-border); margin-top: 8px; }
-.mos__sheet-body .mos__mission-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* clamp to two lines — must reset white-space:normal, otherwise the base rule's
+ * `white-space:nowrap` wins and the title truncates mid-word on one line instead. */
+.mos__sheet-body .mos__mission-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
 .mos__sheet-body .mos__mission-pct { display: none; }
 .mos__sheet-foot { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 14px); border-top: 1px solid var(--mos-border); }
 .mos__sheet-prov { font-size: 11.5px; color: var(--mos-text-faint); line-height: 1.5; }
@@ -1210,4 +1384,227 @@
 @media (prefers-reduced-motion: reduce) {
   .mos__sheet { transition: none !important; }
   .mos__sheet-scrim { animation: none !important; }
+}
+
+/* =========================================================================
+ * Phase 5 — iPhone living-OS polish · A11Y · perf · state coverage
+ * All additive; nothing here changes the desktop constellation composition.
+ * ========================================================================= */
+
+/* ---- a11y utilities ------------------------------------------------------- */
+/* Screen-reader-only live region (visually hidden, still announced). */
+.mos__sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
+/* One consistent, high-contrast focus ring for EVERY interactive element in the
+ * surface (keyboard only). Individual components may still override offset. */
+.mos a:focus-visible,
+.mos button:focus-visible,
+.mos input:focus-visible,
+.mos [tabindex]:focus-visible {
+  outline: 2px solid var(--mos-cyan-bright);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* keep the ring visible over glowing/darker fills */
+.mos button:focus-visible { box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.22); }
+
+/* gated state pip — source reachable, writes gated (Phase 3). Slate-blue so it
+ * never shares the amber "stale" or red "error" alarm colour. Carries an icon +
+ * text, never colour alone. */
+.mos__pip--gated { color: #a8bce0; background: rgba(120, 150, 210, 0.14); border-color: rgba(140, 170, 225, 0.4); }
+.mos__msig-dot--gated, .mos__tlfocus-sig-dot--gated { color: #a8bce0; }
+.mos__msig-dot--verified { color: var(--mos-cyan-bright); }
+.mos__msig-dot--amber { color: var(--mos-amber); }
+.mos__msig-dot--blue { color: #8ecbff; }
+.mos__msig-dot--muted { color: var(--mos-text-faint); }
+.mos__msig-dot--red { color: var(--mos-danger); }
+
+/* ---- mobile: JARVIS presence hero (Home) ---------------------------------- */
+/* The band that makes Home read as a *living system*, not a card grid. */
+.mos__mhero {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  padding: 12px 14px; border-radius: 18px;
+  background: linear-gradient(120deg, rgba(30, 78, 130, 0.34), rgba(16, 28, 48, 0.5));
+  border: 1px solid rgba(90, 170, 240, 0.28);
+  color: var(--mos-text); cursor: pointer;
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+.mos__mhero-orb {
+  position: relative; width: 46px; height: 46px; flex: none;
+  display: grid; place-items: center;
+}
+.mos__mhero-orb-core {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #cdf3ff, #4dd6ff 42%, #1c78c4 78%);
+  box-shadow: 0 0 18px -2px rgba(77, 214, 255, 0.85), inset 0 0 8px -2px #eafaff;
+}
+.mos__mhero-orb-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 1.5px solid rgba(120, 210, 255, 0.5);
+  animation: mos-hero-pulse 3.4s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+@keyframes mos-hero-pulse {
+  0%, 100% { transform: scale(0.86); opacity: 0.75; }
+  50%      { transform: scale(1.08); opacity: 0.25; }
+}
+.mos__mhero.is-listening .mos__mhero-orb-ring { border-color: rgba(120, 230, 255, 0.85); animation-duration: 1.5s; }
+.mos__mhero-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.mos__mhero-greet { font-size: 16px; font-weight: 700; letter-spacing: 0.2px; }
+.mos__mhero-state { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--mos-cyan-bright); font-weight: 600; }
+.mos__mhero-state-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mos-cyan-bright); box-shadow: 0 0 8px var(--mos-cyan-bright); flex: none; }
+.mos__mhero-hint { color: var(--mos-text-faint); font-weight: 500; }
+.mos__mhero-mic {
+  width: var(--mos-touch); height: var(--mos-touch); flex: none; border-radius: 50%;
+  display: grid; place-items: center; color: var(--mos-cyan-bright);
+  background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+/* ---- mobile: denser "Jetzt wichtig" head + grid head ---------------------- */
+.mos__mheute { padding: 14px; }
+.mos__mheute-head h2 { font-size: 21px; }
+.mos__mheute-head .mos__pip { margin-top: 0; }
+.mos__mgrid-head { display: flex; align-items: center; justify-content: space-between; margin: 2px 2px -2px; }
+
+/* ---- mobile: Live-Signale strip ------------------------------------------- */
+.mos__msignals { display: flex; flex-direction: column; gap: 10px; }
+.mos__msignals-head { display: flex; align-items: center; justify-content: space-between; }
+.mos__msignals-count { font-size: 11px; font-weight: 650; color: var(--mos-cyan-bright); background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: var(--mos-pill); padding: 2px 9px; }
+.mos__msignals-rail {
+  display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; padding: 2px 2px 6px; margin: 0 -2px;
+  scrollbar-width: none;
+}
+.mos__msignals-rail::-webkit-scrollbar { display: none; }
+.mos__msig {
+  scroll-snap-align: start; flex: 0 0 auto; width: 118px;
+  display: flex; flex-direction: column; gap: 4px; text-align: left;
+  padding: 11px 12px; border-radius: 14px; color: var(--mos-text); cursor: pointer;
+  background: color-mix(in srgb, var(--mos-accent) 10%, var(--mos-glass-base));
+  border: 1px solid color-mix(in srgb, var(--mos-accent) 32%, transparent);
+}
+.mos__msig-top { display: flex; align-items: center; justify-content: space-between; }
+.mos__msig-icon { color: var(--mos-accent); display: grid; place-items: center; }
+.mos__msig-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor; flex: none; }
+.mos__msig-metric { font-size: 20px; font-weight: 700; color: var(--mos-accent); line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mos--neutral .mos__msig-metric { color: var(--mos-text); }
+.mos__msig-title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mos__msig-age { font-size: 10.5px; color: var(--mos-text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mos__msig-empty {
+  flex: 1; display: flex; align-items: center; gap: 10px;
+  padding: 14px 14px; border-radius: 14px; font-size: 12.5px; color: var(--mos-text-faint);
+  background: var(--mos-glass-base); border: 1px dashed var(--mos-border-strong);
+}
+.mos__msig-empty .mos__icon { color: var(--mos-text-faint); flex: none; }
+
+/* ---- mobile: denser domain cards ------------------------------------------ */
+.mos__mcard { min-height: 118px; padding: 13px; gap: 5px; }
+.mos__mcard-metric { font-size: clamp(20px, 8vw, 30px); }
+
+/* ---- mobile: Jarvis surface (faithful to ios-v2-04-jarvis) ---------------- */
+.mos__mjarvis { justify-content: flex-start; gap: 16px; padding: calc(env(safe-area-inset-top, 0px) + 20px) 20px 16px; }
+.mos__mjarvis-top { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; }
+.mos__mjarvis-id { display: flex; flex-direction: column; gap: 2px; }
+.mos__mjarvis-name { font-size: 26px; font-weight: 700; line-height: 1; }
+.mos__mjarvis-date { font-size: 13px; color: var(--mos-text-dim); }
+.mos__mjarvis-avatar {
+  width: 44px; height: 44px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; color: var(--mos-cyan-bright);
+  background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.42);
+}
+.mos__mjarvis-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; width: 100%; }
+.mos__mjarvis-orb { transition: transform 300ms ease; }
+.mos__mjarvis-orb.is-active { transform: scale(1.03); }
+.mos__mjarvis-wavewrap { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+.mos__mjarvis-query { font-size: 15px; color: var(--mos-text-dim); font-weight: 500; }
+.mos__mjarvis-note { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--mos-text-faint); }
+.mos__mjarvis-note .mos__icon { color: var(--mos-cyan); }
+.mos__mquick-icon {
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--mos-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mos-accent) 30%, transparent);
+}
+.mos__mquick { padding: 12px 8px; gap: 9px; }
+
+/* ---- mobile: persistent Jarvis orb in the tab bar ------------------------- */
+/* Present on EVERY screen (the bar never unmounts), giving persistent voice
+ * reach — plus the command dock's mic on content screens. It sits INLINE inside
+ * the bar (like the reference's glowing "J"), NOT as a raised FAB: the old
+ * margin-top:-20px floated it 20px above the bar and overlapped the last card. */
+.mos__mtab-orb {
+  position: relative; width: 34px; height: 34px; flex: none;
+  border-radius: 50%; display: grid; place-items: center; color: #04121f;
+  background: radial-gradient(circle at 40% 34%, #cdf3ff, #4dd6ff 46%, #1885cf 82%);
+  border: 1.5px solid rgba(8, 14, 24, 0.7);
+  box-shadow: 0 0 16px -4px rgba(77, 214, 255, 0.8);
+}
+.mos__mtab-orb-core {
+  position: absolute; inset: -4px; border-radius: 50%;
+  border: 1.5px solid rgba(120, 210, 255, 0.5);
+  animation: mos-hero-pulse 3.2s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+.mos__mtab--jarvis.is-active .mos__mtab-orb { box-shadow: 0 0 22px -2px rgba(77, 214, 255, 0.95); }
+.mos__mtab--jarvis .mos__mtab-icon { display: none; }
+.mos__mtab--jarvis.is-active::before { display: none; }
+
+/* ---- mobile: bottom-sheet — gated Phase-3 actions ------------------------- */
+.mos__sheet-actions { display: flex; gap: 8px; }
+.mos__sheet-act {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: var(--mos-touch); padding: 8px 10px; border-radius: 12px;
+  font-size: 12.5px; font-weight: 600; cursor: not-allowed;
+  color: var(--mos-text-dim);
+  background: rgba(120, 150, 200, 0.06);
+  border: 1px dashed rgba(140, 170, 225, 0.4);
+}
+.mos__sheet-act .mos__icon { color: var(--mos-text-faint); }
+.mos__sheet-act-gate {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+  color: #a8bce0; background: rgba(120, 150, 210, 0.16);
+  border: 1px solid rgba(140, 170, 225, 0.4); border-radius: var(--mos-pill); padding: 1px 6px;
+}
+.mos__sheet-act-gate .mos__icon { color: #a8bce0; }
+.mos__sheet-foot { gap: 10px; }
+.mos__sheet-cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+/* ---- mobile: safe-area gutters + landscape / small-height fallbacks ------- */
+.mos__m-scroll { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+.mos__mtabs { padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); }
+
+/* very short viewports (landscape phones): the Jarvis stage must not clip the
+ * push-to-talk button — allow the surface to scroll instead of overflow-hidden. */
+@media (max-width: 430px) and (max-height: 560px) {
+  .mos__mjarvis { justify-content: flex-start; overflow-y: auto; }
+  .mos__mjarvis-orb .mos__orb { width: 150px; }
+  .mos__mheute-head h2 { font-size: 18px; }
+}
+/* narrow phones (<=360px): the live-signal tiles + quick tiles tighten. */
+@media (max-width: 380px) {
+  .mos__msig { width: 108px; }
+  .mos__mquick { padding: 10px 6px; font-size: 12px; }
+  .mos__mhero-greet { font-size: 15px; }
+}
+
+/* ---- reduced motion: kill the new decorative pulses (belt-and-braces; the
+ * global .mos * rule already covers this, but keep it explicit + documented) - */
+@media (prefers-reduced-motion: reduce) {
+  .mos__mhero-orb-ring,
+  .mos__mtab-orb-core { animation: none !important; }
+  .mos__mjarvis-orb { transition: none !important; }
+}
+
+/* ---- perf: promote only the genuinely animated layers ---------------------- */
+.mos__orb-canvas { will-change: transform; }
+.mos__mote { will-change: transform, opacity; }
+@media (prefers-reduced-motion: reduce) {
+  /* the full-screen atmosphere photo is the largest promoted layer; release its
+   * GPU layer under reduced motion too (its transform is frozen there). */
+  .mos__atmosphere, .mos__orb-canvas, .mos__mote, .mos__mhero-orb-ring, .mos__mtab-orb-core { will-change: auto; }
 }
