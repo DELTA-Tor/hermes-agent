@@ -68,7 +68,9 @@ var MikaelOSPlugin = function() {
     "moon-star": '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9" /> <path d="M20 3v4" /> <path d="M22 5h-4" />',
     "circle-user": '<circle cx="12" cy="12" r="10" /> <circle cx="12" cy="10" r="3" /> <path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662" />',
     "list-todo": '<rect x="3" y="5" width="6" height="6" rx="1" /> <path d="m3 17 2 2 4-4" /> <path d="M13 6h8" /> <path d="M13 12h8" /> <path d="M13 18h8" />',
-    "chevron-left": '<path d="m15 18-6-6 6-6" />'
+    "chevron-left": '<path d="m15 18-6-6 6-6" />',
+    "ban": '<circle cx="12" cy="12" r="10" /> <path d="m4.9 4.9 14.2 14.2" />',
+    "triangle-alert": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" />'
   };
   const SDK = typeof window !== "undefined" ? window.__HERMES_PLUGIN_SDK__ : void 0;
   const React = SDK && SDK.React;
@@ -350,10 +352,47 @@ var MikaelOSPlugin = function() {
     );
   }
   const PLUGIN_API = "/api/plugins/mikael-os";
+  const PROPOSE_API = PLUGIN_API + "/actions/propose";
+  const RECEIPT_API = PLUGIN_API + "/actions/receipt";
   MODULES.reduce((acc, m) => {
     acc[m.id] = m.pos;
     return acc;
   }, {});
+  function sdkPost(url, body) {
+    const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
+    if (typeof sdk.postJSON === "function") return Promise.resolve(sdk.postJSON(url, body));
+    if (typeof sdk.authedFetch === "function") {
+      return Promise.resolve(sdk.authedFetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      })).then((r) => r && typeof r.json === "function" ? r.json() : r);
+    }
+    if (typeof fetch === "function") {
+      return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.ok ? r.json() : Promise.reject(r.status));
+    }
+    return Promise.reject(new Error("no transport"));
+  }
+  function sdkGet(url) {
+    const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
+    if (typeof sdk.fetchJSON === "function") return Promise.resolve(sdk.fetchJSON(url));
+    if (typeof fetch === "function") return fetch(url).then((r) => r.ok ? r.json() : Promise.reject(r.status));
+    return Promise.reject(new Error("no transport"));
+  }
+  const PROPOSE_META = {
+    compose: { tone: "amber", icon: "git-branch", label: "Entwurf" },
+    loading: { tone: "muted", icon: "loader", label: "Baut Vorschau …" },
+    preview: { tone: "amber", icon: "flask-conical", label: "Vorschlag-Vorschau (Dry-Run)" },
+    submitting: { tone: "amber", icon: "loader", label: "Sende an Gate …" },
+    waiting_approval: { tone: "amber", icon: "clock", label: "Wartet auf Freigabe" },
+    approved: { tone: "cyan", icon: "shield-check", label: "Freigegeben" },
+    executed: { tone: "emerald", icon: "circle-check-big", label: "Ausgeführt" },
+    verified: { tone: "emerald", icon: "circle-check-big", label: "Verifiziert" },
+    denied: { tone: "red", icon: "ban", label: "Abgelehnt" },
+    error: { tone: "red", icon: "triangle-alert", label: "Fehler" },
+    auth_pending: { tone: "gated", icon: "triangle-alert", label: "Freigabe-Anbindung: Auth ausstehend" }
+  };
+  const PROPOSE_TERMINAL = { approved: 1, executed: 1, verified: 1, denied: 1, error: 1, auth_pending: 1 };
   const STATE_META = {
     loading: { tone: "muted", label: "Lädt …" },
     fresh: { tone: "verified", label: "Live" },
@@ -868,6 +907,15 @@ var MikaelOSPlugin = function() {
       h(
         "div",
         { className: "mos__lens-tools" },
+        // The ONE wired action: propose an engineering/Codex task (propose-only,
+        // gate-led). Everything else here stays honestly "noch nicht verbunden".
+        props.onPropose ? h("button", {
+          key: "propose",
+          type: "button",
+          className: "mos__tool mos__tool--propose",
+          onClick: () => props.onPropose(),
+          title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst."
+        }, h(Icon, { name: "git-branch", size: 15 }), "Codex-Aufgabe vorschlagen") : null,
         LENS_TOOLS.map((tl) => h("button", { key: tl.label, type: "button", className: "mos__tool", title: NOT_WIRED }, h(Icon, { name: tl.icon, size: 15 }), tl.label))
       )
     );
@@ -1569,24 +1617,36 @@ var MikaelOSPlugin = function() {
           // is honest about what it can and cannot do (no gate bypass).
           h(
             "div",
-            { className: "mos__sheet-actions", "aria-label": "Aktionen (Phase 3, noch nicht verbunden)" },
-            [
-              { icon: "git-branch", label: "Als Codex-Task" },
-              { icon: "calendar-plus", label: "Termin vorschlagen" }
-            ].map((a) => h(
+            { className: "mos__sheet-actions", "aria-label": "Aktionen" },
+            // "Als Codex-Task" is the ONE wired action (propose-only, gate-led).
+            // "Termin vorschlagen" (Kalender) + FSM stay honestly not-connected.
+            h(
               "button",
               {
-                key: a.label,
+                key: "propose",
+                type: "button",
+                className: "mos__sheet-act mos__sheet-act--propose",
+                onClick: () => props.onPropose && props.onPropose(data.title || ""),
+                title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst."
+              },
+              h(Icon, { name: "git-branch", size: 15 }),
+              "Als Codex-Task",
+              h("span", { className: "mos__sheet-act-gate mos__sheet-act-gate--live" }, h(Icon, { name: "shield-check", size: 10 }), "propose")
+            ),
+            h(
+              "button",
+              {
+                key: "cal",
                 type: "button",
                 className: "mos__sheet-act",
                 disabled: true,
                 "aria-disabled": "true",
-                title: "Noch nicht verbunden — läuft in Phase 3 über Gates (propose-only)."
+                title: "Noch nicht verbunden — Kalender-Vorschlag folgt (über Gates, propose-only)."
               },
-              h(Icon, { name: a.icon, size: 15 }),
-              a.label,
-              h("span", { className: "mos__sheet-act-gate" }, h(Icon, { name: "lock", size: 10 }), "Gate")
-            ))
+              h(Icon, { name: "calendar-plus", size: 15 }),
+              "Termin vorschlagen",
+              h("span", { className: "mos__sheet-act-gate" }, h(Icon, { name: "lock", size: 10 }), "nicht verbunden")
+            )
           ),
           h(
             "span",
@@ -1660,7 +1720,8 @@ var MikaelOSPlugin = function() {
         onDetent: props.onSheetDetent,
         onClose: props.onSheetClose,
         focusId: props.focusId,
-        liveModule: props.byId[props.focusId]
+        liveModule: props.byId[props.focusId],
+        onPropose: props.onPropose
       })
     );
   }
@@ -1782,6 +1843,197 @@ var MikaelOSPlugin = function() {
       ))
     );
   }
+  function ProposeStatusLine(props) {
+    const meta = PROPOSE_META[props.phase] || PROPOSE_META.error;
+    const spinning = props.phase === "submitting" || props.phase === "loading";
+    return h(
+      "div",
+      { className: "mos__pp-status mos__pp-status--" + meta.tone, role: "status", "aria-live": "polite" },
+      h("span", { className: "mos__pp-status-icon" + (spinning ? " is-spin" : "") }, h(Icon, { name: meta.icon, size: 16 })),
+      h("span", { className: "mos__pp-status-label" }, meta.label)
+    );
+  }
+  function ProposeFlow(props) {
+    const st = props.state;
+    if (!st) return null;
+    const phase = st.phase;
+    const meta = PROPOSE_META[phase] || PROPOSE_META.error;
+    const cp = st.controlPlane || st.preview && st.preview.controlPlane;
+    const reachable = cp ? cp.reachable : null;
+    const plan = st.preview && st.preview.plan;
+    const gate = st.preview && st.preview.predictedGate || st.gate;
+    const isTerminal = !!PROPOSE_TERMINAL[phase];
+    const canSend = phase === "preview" && (st.objective || "").trim().length > 0;
+    const body = [];
+    body.push(h(
+      "div",
+      { key: "banner", className: "mos__pp-honest" },
+      h(Icon, { name: "lock", size: 13 }),
+      "Propose-only — das Plugin führt nicht aus. Dein Gate entscheidet (ALLOW / DENY / Freigabe)."
+    ));
+    body.push(h(ProposeStatusLine, { key: "status", phase }));
+    if (phase === "compose" || phase === "loading") {
+      body.push(h(
+        "label",
+        { key: "compose", className: "mos__pp-field" },
+        h("span", { className: "mos__pp-field-k" }, "Was soll Codex / Engineering tun?"),
+        h("textarea", {
+          className: "mos__pp-textarea",
+          rows: 3,
+          placeholder: "z. B. Refactor: Deploy-Check als eigenes Modul extrahieren …",
+          value: st.objective || "",
+          disabled: phase === "loading",
+          onChange: (e) => props.onObjective(e.target.value),
+          autoFocus: true
+        }),
+        h(
+          "span",
+          { className: "mos__pp-scope" },
+          h(Icon, { name: "lock", size: 11 }),
+          "Nur Engineering · kein Geld / Kunde / Personal"
+        )
+      ));
+    }
+    if (phase === "preview" && plan) {
+      body.push(h(
+        "div",
+        { key: "preview", className: "mos__pp-preview" },
+        h(
+          "div",
+          { className: "mos__pp-line" },
+          h("span", { className: "mos__pp-line-k" }, "Das wird vorgeschlagen"),
+          h("span", { className: "mos__pp-line-v mos__pp-objective" }, plan.objective)
+        ),
+        h(
+          "div",
+          { className: "mos__pp-grid" },
+          h(
+            "div",
+            { className: "mos__pp-cell" },
+            h("span", { className: "mos__pp-cell-k" }, h(Icon, { name: "code-xml", size: 12 }), "Workspace"),
+            h("span", { className: "mos__pp-cell-v" }, plan.workspaceLabel)
+          ),
+          h(
+            "div",
+            { className: "mos__pp-cell" },
+            h("span", { className: "mos__pp-cell-k" }, h(Icon, { name: "git-branch", size: 12 }), "Job-Typ"),
+            h("span", { className: "mos__pp-cell-v" }, plan.jobType)
+          ),
+          h(
+            "div",
+            { className: "mos__pp-cell mos__pp-cell--wide" },
+            // `clock` (pending), NOT shield-check — a check-mark here would falsely
+            // read as "erledigt", while the proposal is still open.
+            h("span", { className: "mos__pp-cell-k" }, h(Icon, { name: "clock", size: 12 }), "Braucht Freigabe"),
+            h("span", { className: "mos__pp-cell-v mos__pp-gate" }, gate && gate.human || plan.gateHuman)
+          )
+        ),
+        h(
+          "div",
+          { className: "mos__pp-caps" },
+          (plan.capabilities || []).map((c) => h("span", { key: c, className: "mos__pp-cap" }, c))
+        ),
+        h(
+          "div",
+          { className: "mos__pp-cp" + (reachable ? " is-ok" : " is-pending") },
+          h(Icon, { name: reachable ? "shield-check" : "triangle-alert", size: 12 }),
+          reachable ? "Gate-Anbindung bereit (Control-Plane erreichbar · Loopback-Auth)" : "Freigabe-Anbindung: Auth ausstehend (Control-Plane nicht erreichbar)"
+        )
+      ));
+    }
+    if (isTerminal || phase === "waiting_approval" || phase === "submitting") {
+      if (st.objective) {
+        body.push(h(
+          "div",
+          { key: "obj", className: "mos__pp-echo" },
+          h(Icon, { name: "git-branch", size: 12 }),
+          st.objective
+        ));
+      }
+      if (st.cardId) {
+        body.push(h(
+          "div",
+          { key: "card", className: "mos__pp-receipt" },
+          h(Icon, { name: meta.icon, size: 12 }),
+          "Approval-Card ",
+          h("b", null, st.cardId)
+        ));
+      }
+      if (st.note) body.push(h("p", { key: "note", className: "mos__pp-note" }, st.note));
+      if (phase === "denied" || phase === "error" || phase === "auth_pending") {
+        body.push(h(
+          "p",
+          { key: "hint", className: "mos__pp-note mos__pp-note--muted" },
+          "Kein Gate umgangen — dieser Zustand kommt direkt von deinem Gate bzw. der Anbindung."
+        ));
+      }
+    }
+    if (st.error && !st.note) body.push(h("p", { key: "err", className: "mos__pp-note" }, st.error));
+    const actions = [];
+    if (phase === "compose" || phase === "loading") {
+      actions.push(h("button", { key: "cancel", type: "button", className: "mos__pp-btn", onClick: props.onClose }, "Abbrechen"));
+      actions.push(h("button", {
+        key: "prev",
+        type: "button",
+        className: "mos__pp-btn mos__pp-btn--primary",
+        disabled: phase === "loading" || !(st.objective || "").trim(),
+        onClick: () => props.onPreview(st.objective)
+      }, h(Icon, { name: "flask-conical", size: 15 }), "Vorschau erstellen"));
+    } else if (phase === "preview") {
+      actions.push(h("button", { key: "back", type: "button", className: "mos__pp-btn", onClick: () => props.onPreview(null, true) }, "Zurück"));
+      actions.push(h("button", {
+        key: "send",
+        type: "button",
+        className: "mos__pp-btn mos__pp-btn--send",
+        disabled: !canSend,
+        title: "Feuert live an dein Gate — erst dieser Klick sendet etwas.",
+        onClick: () => props.onSend(st.objective)
+      }, h(Icon, { name: "send-horizontal", size: 15 }), "An Gate senden"));
+    } else if (phase === "waiting_approval") {
+      actions.push(h("button", { key: "close", type: "button", className: "mos__pp-btn", onClick: props.onClose }, "Schließen"));
+      actions.push(h("button", {
+        key: "check",
+        type: "button",
+        className: "mos__pp-btn mos__pp-btn--primary",
+        onClick: () => props.onPoll(st)
+      }, h(Icon, { name: "loader", size: 15 }), "Status prüfen"));
+    } else if (phase === "submitting" || phase === "loading") ;
+    else {
+      actions.push(h("button", { key: "done", type: "button", className: "mos__pp-btn mos__pp-btn--primary", onClick: props.onClose }, "Schließen"));
+    }
+    return h(
+      "div",
+      { className: "mos__pp-scrim", onClick: props.onClose },
+      h(
+        "section",
+        {
+          className: "mos__pp mos__pp--" + meta.tone,
+          // The dialog NAME carries the live state so a screen reader announces the
+          // real phase (Entwurf / Wartet auf Freigabe / Freigegeben / Abgelehnt …),
+          // not a frozen "…vorschlagen" (WCAG 4.1.2 Name/Role/Value, 2.4.6).
+          role: "dialog",
+          "aria-modal": "true",
+          "aria-label": "Codex-Aufgabe vorschlagen · " + meta.label,
+          onClick: (e) => e.stopPropagation()
+        },
+        h(
+          "header",
+          { className: "mos__pp-head" },
+          // Badge glyph tracks the lifecycle icon (form, not colour alone).
+          h("span", { className: "mos__pp-badge" }, h(Icon, { name: meta.icon, size: 18 })),
+          h(
+            "span",
+            { className: "mos__pp-titles" },
+            h("span", { className: "mos__pp-title" }, "Codex-Aufgabe vorschlagen"),
+            h("span", { className: "mos__pp-sub" }, "Engineering · " + meta.label)
+          ),
+          h("button", { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Schließen", onClick: props.onClose }, h(Icon, { name: "x", size: 18 }))
+        ),
+        h("div", { className: "mos__pp-body" }, body),
+        h("footer", { className: "mos__pp-foot" }, actions)
+      )
+    );
+  }
   function MikaelOS() {
     const [workspace, setWorkspace] = useState("private");
     const [modules, setModules] = useState(MODULES);
@@ -1795,6 +2047,7 @@ var MikaelOSPlugin = function() {
     const [sheetDetent, setSheetDetent] = useState(1);
     const [live, setLive] = useState(null);
     const [loadState, setLoadState] = useState("loading");
+    const [propose, setPropose] = useState(null);
     useEffect(() => {
       let alive = true;
       const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
@@ -1909,6 +2162,91 @@ var MikaelOSPlugin = function() {
       setCommand(label);
       runStateSequence();
     }, [runStateSequence]);
+    const proposeOpen = useCallback((objective) => {
+      const obj = (objective || "").trim();
+      if (!obj) {
+        setPropose({ phase: "compose", objective: "" });
+        return;
+      }
+      setPropose({ phase: "loading", objective: obj });
+      sdkPost(PROPOSE_API, { objective: obj, dryRun: true }).then((r) => {
+        if (!r || r.ok === false) {
+          setPropose({
+            phase: "compose",
+            objective: obj,
+            error: r && r.note || "Vorschau nicht möglich."
+          });
+          return;
+        }
+        setPropose({
+          phase: "preview",
+          objective: r.plan.objective,
+          preview: r,
+          gate: r.predictedGate,
+          controlPlane: r.controlPlane,
+          note: null
+        });
+      }).catch(() => setPropose({ phase: "compose", objective: obj, error: "Vorschau nicht erreichbar." }));
+    }, []);
+    const proposeObjective = useCallback((v) => {
+      setPropose((prev) => prev ? { ...prev, objective: v, error: null } : prev);
+    }, []);
+    const proposePreview = useCallback((objective, back) => {
+      if (back) {
+        setPropose((prev) => ({ phase: "compose", objective: prev && prev.objective || "" }));
+        return;
+      }
+      proposeOpen(objective);
+    }, [proposeOpen]);
+    const proposeSend = useCallback((objective) => {
+      const obj = (objective || "").trim();
+      if (!obj) return;
+      setPropose((prev) => ({ ...prev || {}, phase: "submitting", objective: obj }));
+      sdkPost(PROPOSE_API, { objective: obj, dryRun: false }).then((r) => {
+        if (!r || r.ok === false && r.status !== "auth_pending") {
+          setPropose((prev) => ({
+            ...prev || {},
+            phase: "error",
+            objective: obj,
+            note: r && r.note || "An das Gate senden fehlgeschlagen."
+          }));
+          return;
+        }
+        const lifecycle = r.lifecycle || (r.status === "auth_pending" ? "auth_pending" : "waiting_approval");
+        setPropose((prev) => ({
+          ...prev || {},
+          phase: lifecycle,
+          objective: obj,
+          cardId: r.cardId,
+          controlPlane: r.controlPlane,
+          gate: r.gate,
+          note: r.note
+        }));
+      }).catch(() => setPropose((prev) => ({
+        ...prev || {},
+        phase: "error",
+        objective: obj,
+        note: "Control-Plane nicht erreichbar."
+      })));
+    }, []);
+    const proposePoll = useCallback((stt) => {
+      const s = stt || {};
+      const q = s.cardId ? "cardId=" + encodeURIComponent(s.cardId) : "objective=" + encodeURIComponent(s.objective || "");
+      sdkGet(RECEIPT_API + "?" + q).then((r) => {
+        if (!r) return;
+        const lifecycle = r.lifecycle || "waiting_approval";
+        setPropose((prev) => ({
+          ...prev || {},
+          phase: lifecycle,
+          cardId: r.cardId || prev && prev.cardId,
+          note: r.note
+        }));
+      }).catch(() => {
+      });
+    }, []);
+    const proposeClose = useCallback(() => {
+      setPropose(null);
+    }, []);
     const onNodePointerDown = useCallback((e, id) => {
       if (e.button != null && e.button !== 0) return;
       const stage = stageRef.current;
@@ -2054,7 +2392,16 @@ var MikaelOSPlugin = function() {
           sheetOpen,
           sheetDetent,
           onSheetDetent: setSheetDetent,
-          onSheetClose: closeSheet
+          onSheetClose: closeSheet,
+          onPropose: proposeOpen
+        }),
+        h(ProposeFlow, {
+          state: propose,
+          onObjective: proposeObjective,
+          onPreview: proposePreview,
+          onSend: proposeSend,
+          onPoll: proposePoll,
+          onClose: proposeClose
         })
       );
     }
@@ -2136,7 +2483,8 @@ var MikaelOSPlugin = function() {
               h(FocusLens, {
                 focusId,
                 liveModule: enrichedById[focusId],
-                onClose: closeFocus
+                onClose: closeFocus,
+                onPropose: () => proposeOpen(command)
               })
             ),
             // add-module affordance (bottom-left of stage)
@@ -2170,6 +2518,16 @@ var MikaelOSPlugin = function() {
           h(
             "div",
             { className: "mos__chips" },
+            // The propose chip is the entry to the ONE gated action. It opens the
+            // dry-run preview overlay (fires nothing); every other chip just
+            // pre-fills the command box.
+            h("button", {
+              key: "propose",
+              type: "button",
+              className: "mos__chip mos__chip--propose",
+              onClick: () => proposeOpen(command),
+              title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst."
+            }, h(Icon, { name: "git-branch", size: 14 }), "Codex-Aufgabe vorschlagen"),
             CHIPS.map((c) => h(
               "button",
               { key: c.label, type: "button", className: "mos__chip", onClick: () => {
@@ -2201,7 +2559,15 @@ var MikaelOSPlugin = function() {
             h("span", { className: "mos__kbd" }, h(Icon, { name: "command", size: 12 }), "K · Kurzbefehle")
           )
         )
-      )
+      ),
+      h(ProposeFlow, {
+        state: propose,
+        onObjective: proposeObjective,
+        onPreview: proposePreview,
+        onSend: proposeSend,
+        onPoll: proposePoll,
+        onClose: proposeClose
+      })
     );
   }
   if (SDK && React && typeof window !== "undefined" && window.__HERMES_PLUGINS__ && typeof window.__HERMES_PLUGINS__.register === "function") {

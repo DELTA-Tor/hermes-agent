@@ -1608,3 +1608,234 @@
    * GPU layer under reduced motion too (its transform is frozen there). */
   .mos__atmosphere, .mos__orb-canvas, .mos__mote, .mos__mhero-orb-ring, .mos__mtab-orb-core { will-change: auto; }
 }
+
+/* ==========================================================================
+ * Phase 3 — PROPOSE LIFECYCLE. The one write-adjacent action, propose-only.
+ * Tone semantics (never colour alone — always paired with text + icon in JSX):
+ *   amber   = proposed / preview / waiting     cyan    = approved
+ *   emerald = executed / verified              red     = denied / error
+ *   gated   = auth_pending (slate-blue)        muted   = in-flight
+ * ========================================================================== */
+
+/* entry affordances */
+.mos__chip--propose,
+.mos__tool--propose {
+  color: var(--mos-cyan-bright);
+  border-color: color-mix(in srgb, var(--mos-cyan) 46%, transparent);
+  background: color-mix(in srgb, var(--mos-cyan) 12%, transparent);
+  font-weight: 600;
+}
+.mos__chip--propose:hover,
+.mos__tool--propose:hover { border-color: var(--mos-cyan); color: #fff; }
+.mos__sheet-act--propose {
+  color: var(--mos-cyan-bright);
+  border-color: color-mix(in srgb, var(--mos-cyan) 46%, transparent);
+  background: color-mix(in srgb, var(--mos-cyan) 12%, transparent);
+  opacity: 1;
+}
+.mos__sheet-act-gate--live {
+  color: var(--mos-emerald);
+  background: rgba(52, 211, 153, 0.14);
+  border: 1px solid rgba(52, 211, 153, 0.32);
+}
+
+/* modal scrim + panel */
+.mos__pp-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 6, 12, 0.62);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: mos-pp-fade 180ms ease;
+}
+@keyframes mos-pp-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.mos__pp {
+  --pp-accent: var(--mos-amber);
+  width: min(520px, 100%);
+  max-height: min(86vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--mos-radius-lg);
+  background: var(--mos-glass-focus);
+  -webkit-backdrop-filter: blur(26px) saturate(1.1);
+  backdrop-filter: blur(26px) saturate(1.1);
+  border: 1px solid var(--mos-border-strong);
+  box-shadow: var(--mos-shadow), 0 0 0 1px color-mix(in srgb, var(--pp-accent) 22%, transparent);
+  color: var(--mos-text);
+  overflow: hidden;
+  animation: mos-pp-rise 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes mos-pp-rise { from { transform: translateY(12px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
+.mos__pp--amber   { --pp-accent: var(--mos-amber); }
+.mos__pp--cyan    { --pp-accent: var(--mos-cyan); }
+.mos__pp--emerald { --pp-accent: var(--mos-emerald); }
+.mos__pp--red     { --pp-accent: var(--mos-danger); }
+.mos__pp--gated   { --pp-accent: #a8bce0; }
+.mos__pp--muted   { --pp-accent: var(--mos-text-faint); }
+
+.mos__pp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--mos-border);
+}
+.mos__pp-badge {
+  width: 38px; height: 38px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+  color: var(--pp-accent);
+  background: color-mix(in srgb, var(--pp-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pp-accent) 34%, transparent);
+  flex: none;
+}
+.mos__pp-titles { display: flex; flex-direction: column; gap: 1px; margin-right: auto; }
+.mos__pp-title { font-size: 15px; font-weight: 650; }
+.mos__pp-sub { font-size: 12px; color: var(--mos-text-faint); }
+
+.mos__pp-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mos__pp-honest {
+  display: flex; align-items: flex-start; gap: 7px;
+  font-size: 11.5px; line-height: 1.35;
+  color: var(--mos-text-dim);
+  padding: 8px 10px;
+  border-radius: var(--mos-radius-sm);
+  background: rgba(120, 150, 210, 0.08);
+  border: 1px dashed var(--mos-border-strong);
+}
+.mos__pp-honest .mos__icon { color: var(--mos-cyan); flex: none; margin-top: 1px; }
+
+.mos__pp-field { display: flex; flex-direction: column; gap: 6px; }
+.mos__pp-field-k { font-size: 12px; font-weight: 600; color: var(--mos-text-dim); }
+.mos__pp-textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  color: var(--mos-text);
+  background: rgba(8, 14, 26, 0.6);
+  border: 1px solid var(--mos-border-strong);
+  border-radius: var(--mos-radius-sm);
+  padding: 10px 12px;
+}
+.mos__pp-textarea:focus-visible { outline: 2px solid var(--mos-cyan); outline-offset: 1px; }
+.mos__pp-scope { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--mos-text-faint); }
+
+/* preview */
+.mos__pp-preview { display: flex; flex-direction: column; gap: 10px; }
+.mos__pp-line { display: flex; flex-direction: column; gap: 3px; }
+.mos__pp-line-k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--mos-text-faint); }
+.mos__pp-objective { font-size: 14.5px; font-weight: 600; line-height: 1.35; color: var(--mos-text); }
+.mos__pp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mos__pp-cell {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 8px 10px;
+  border-radius: var(--mos-radius-sm);
+  background: rgba(15, 24, 40, 0.5);
+  border: 1px solid var(--mos-border);
+}
+.mos__pp-cell--wide { grid-column: 1 / -1; }
+.mos__pp-cell-k { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--mos-text-faint); }
+.mos__pp-cell-v { font-size: 13px; font-weight: 600; }
+.mos__pp-gate { color: var(--mos-amber); font-weight: 600; }
+.mos__pp-caps { display: flex; flex-wrap: wrap; gap: 6px; }
+.mos__pp-cap {
+  font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--mos-text-dim);
+  padding: 3px 8px; border-radius: var(--mos-pill);
+  background: rgba(120, 150, 210, 0.1); border: 1px solid var(--mos-border);
+}
+.mos__pp-cp {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 11.5px; padding: 7px 10px; border-radius: var(--mos-radius-sm);
+}
+.mos__pp-cp.is-ok { color: var(--mos-emerald); background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.28); }
+.mos__pp-cp.is-pending { color: #a8bce0; background: rgba(120, 150, 210, 0.12); border: 1px solid rgba(140, 170, 225, 0.34); }
+
+/* status line + terminal states */
+.mos__pp-status {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-size: 14px; font-weight: 650;
+  padding: 11px 14px; border-radius: var(--mos-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--pp-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--pp-accent) 12%, transparent);
+  color: var(--pp-accent);
+}
+.mos__pp-status--emerald { color: var(--mos-emerald); }
+.mos__pp-status--cyan { color: var(--mos-cyan-bright); }
+.mos__pp-status--amber { color: var(--mos-amber); }
+.mos__pp-status--red { color: var(--mos-danger); }
+.mos__pp-status--gated { color: #a8bce0; }
+.mos__pp-status-icon { display: inline-flex; }
+.mos__pp-status-icon.is-spin { animation: mos-pp-spin 900ms linear infinite; }
+@keyframes mos-pp-spin { to { transform: rotate(360deg); } }
+
+.mos__pp-echo, .mos__pp-receipt {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--mos-text-dim);
+}
+.mos__pp-receipt { color: var(--mos-text); }
+.mos__pp-receipt b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+.mos__pp-echo .mos__icon, .mos__pp-receipt .mos__icon { color: var(--mos-text-faint); flex: none; }
+.mos__pp-note { font-size: 12.5px; line-height: 1.4; color: var(--mos-text-dim); margin: 0; }
+.mos__pp-note--muted { color: var(--mos-text-faint); font-size: 11.5px; }
+
+.mos__pp-foot {
+  display: flex; gap: 10px; justify-content: flex-end;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--mos-border);
+}
+.mos__pp-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: inherit; font-weight: 600; font-size: 13px;
+  padding: 9px 15px; min-height: var(--mos-touch);
+  border-radius: var(--mos-pill);
+  color: var(--mos-text-dim);
+  background: rgba(20, 32, 52, 0.6);
+  border: 1px solid var(--mos-border-strong);
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+.mos__pp-btn:hover:not(:disabled) { color: var(--mos-text); border-color: var(--mos-cyan); }
+.mos__pp-btn:focus-visible { outline: 2px solid var(--mos-cyan); outline-offset: 2px; }
+.mos__pp-btn:disabled { opacity: 0.42; cursor: not-allowed; }
+.mos__pp-btn--primary { color: #04121f; background: var(--mos-cyan); border-color: transparent; }
+.mos__pp-btn--primary:hover:not(:disabled) { background: var(--mos-cyan-bright); color: #04121f; }
+/* the live-fire button — emphasised so the user knows THIS click sends */
+.mos__pp-btn--send {
+  color: #04121f;
+  background: linear-gradient(135deg, var(--mos-cyan-bright), var(--mos-cyan));
+  border-color: transparent;
+  box-shadow: 0 6px 18px -8px var(--mos-cyan);
+}
+.mos__pp-btn--send:hover:not(:disabled) { filter: brightness(1.08); color: #04121f; }
+
+@media (max-width: 430px) {
+  .mos__pp-scrim { align-items: flex-end; padding: 0; }
+  .mos__pp {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: var(--mos-radius-lg) var(--mos-radius-lg) 0 0;
+    animation: mos-pp-sheet 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .mos__pp-grid { grid-template-columns: 1fr; }
+  .mos__pp-foot { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
+@keyframes mos-pp-sheet { from { transform: translateY(100%); } to { transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mos__pp, .mos__pp-scrim { animation: none; }
+  .mos__pp-status-icon.is-spin { animation: none; }
+}

@@ -71,6 +71,7 @@ from urllib.request import Request, urlopen
 try:
     from fastapi import APIRouter
     from fastapi import HTTPException
+    from fastapi import Body
 except Exception:  # pragma: no cover - allow import/unit use without FastAPI
     class HTTPException(Exception):  # type: ignore
         def __init__(self, status_code: int = 404, detail: str = "") -> None:
@@ -84,6 +85,9 @@ except Exception:  # pragma: no cover - allow import/unit use without FastAPI
 
         def post(self, *_args, **_kwargs):
             return lambda fn: fn
+
+    def Body(default=None, **_kwargs):  # type: ignore
+        return default
 
 
 router = APIRouter()
@@ -99,6 +103,36 @@ APPROVALS_DIR = Path(os.environ.get("MIKAELOS_APPROVALS_DIR", str(HERMES_ROOT / 
 WHOOP_BASE = os.environ.get("MIKAELOS_WHOOP_BASE", "http://127.0.0.1:18090")
 WHOOP_TOKEN = os.environ.get("WHOOP_INTERNAL_TOKEN", "").strip()
 HTTP_TIMEOUT = float(os.environ.get("MIKAELOS_HTTP_TIMEOUT", "2.5"))
+
+# ---------------------------------------------------------------------------
+# Phase 3 — the ONE propose capability. The plugin never writes and never
+# executes; it builds a validated *intent* and, only on an explicit user click
+# (dry_run=False), hands it to the EXISTING gated seam:
+#     POST http://127.0.0.1:18083/actions
+# The control-plane runs route.resolve → gate/queue seam → dispatch and decides
+# ALLOW / DENY / REQUIRE_APPROVAL itself, minting a server-side Approval-Card when
+# needed. The plugin NEVER calls /approvals/decide (that is the operator's
+# execution-granting path) — there is no self-approve here, structurally.
+#
+# Auth to :18083: the controller binds 127.0.0.1 and gates purely on
+# ``ip_address(...).is_loopback`` — there is NO token/header scheme. This plugin
+# router runs inside the dashboard process on the same host, so a loopback POST
+# is the intended, sufficient authorization. We treat *reachability of GET
+# /healthz* as the connection check; if it is unreachable we report an honest
+# ``auth_pending`` rather than faking a queued action.
+CONTROL_PLANE_BASE = os.environ.get("MIKAELOS_CONTROL_PLANE", "http://127.0.0.1:18083")
+# The single action kind this surface may propose: an engineering / Codex job.
+# Private/engineering workspace only — never money, customer, or personnel.
+PROPOSE_WORKSPACE = "engineering"
+PROPOSE_JOB_TYPE = "engineering_task"
+PROPOSE_CAPS = ["repo_read", "code_write", "propose_only"]
+# Objectives that clearly belong to a gated business lane (money/customer/
+# personnel) are refused here — this surface is engineering-only by design.
+_OUT_OF_SCOPE_TERMS = (
+    "rechnung", "sevdesk", "kunde", "kunden", "mahnung", "gehalt", "lohn",
+    "personal", "zahlung", "überweis", "ueberweis", "angebot", "invoice",
+    "buchung", "auftrag anlegen", "auftrag neu",
+)
 
 # How long a module's reading stays "fresh" before we call it stale.
 STALE = {
@@ -360,6 +394,25 @@ def _http_get_json(url: str, *, token: str = "") -> Tuple[Optional[int], Optiona
             return resp.status, json.loads(body)
     except HTTPError as exc:
         return exc.code, None
+    except (URLError, OSError, ValueError, TimeoutError):
+        return None, None
+
+
+def _http_post_json(url: str, body: Dict[str, Any]) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
+    """POST a JSON body to a fixed loopback URL. Read-side helper for the ONE
+    gated propose seam (never used during dry-run). Returns (status, json)."""
+    data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    try:
+        req = Request(url, data=data, headers=headers, method="POST")
+        with urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 - fixed loopback base
+            raw = resp.read().decode("utf-8")
+            return resp.status, (json.loads(raw) if raw.strip() else {})
+    except HTTPError as exc:
+        try:
+            return exc.code, json.loads(exc.read().decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return exc.code, None
     except (URLError, OSError, ValueError, TimeoutError):
         return None, None
 
@@ -726,17 +779,274 @@ def _safe_read(reader: Callable[[], Dict[str, Any]], meta: Dict[str, Any]) -> Di
     return merged
 
 
+# ===========================================================================
+# Phase 3 — propose lifecycle (the ONLY write-adjacent path). Everything below
+# is propose-only: it builds/validates an intent, previews it (dry-run, no
+# network), and on an explicit live submit hands it to the gated :18083/actions
+# seam. It NEVER calls /approvals/decide and NEVER self-approves.
+# ===========================================================================
+def _idempotency_key(objective: str, workspace: str, job_type: str) -> str:
+    """Deterministic key: the same objective proposes the same job, so a repeat
+    click can be de-duplicated by the control-plane instead of double-queued."""
+    raw = f"{workspace}|{job_type}|{objective.strip()}".encode("utf-8")
+    return "mos-" + hashlib.sha256(raw).hexdigest()[:16]
+
+
+def build_intent(objective: str) -> Dict[str, Any]:
+    """The exact intent this surface would propose. Pure/deterministic — no I/O."""
+    objective = objective.strip()
+    return {
+        "objective": objective,
+        "mandant": None,                     # engineering/private — no company mandant
+        "workspace": PROPOSE_WORKSPACE,
+        "workspaceType": PROPOSE_WORKSPACE,
+        "jobType": PROPOSE_JOB_TYPE,
+        "requiredCapabilities": list(PROPOSE_CAPS),
+        "requiredGate": "engineering_propose",
+        "idempotencyKey": _idempotency_key(objective, PROPOSE_WORKSPACE, PROPOSE_JOB_TYPE),
+        "provenance": {
+            "plugin": "mikael-os",
+            "surface": "engineering-lens",
+            "proposeOnly": True,
+            "createdUtc": _iso(_now()),
+        },
+    }
+
+
+def predict_gate(intent: Dict[str, Any]) -> Dict[str, Any]:
+    """The gate this intent is EXPECTED to hit. A prediction only — the real
+    ALLOW/DENY/REQUIRE_APPROVAL decision is made server-side by the control-plane
+    when (and only when) the user submits live."""
+    return {
+        "gateClass": intent.get("requiredGate", "engineering_propose"),
+        "expectedOutcome": "require_approval",
+        "human": "Voraussichtlich: Freigabe nötig · Engineering-Vorschlag (propose-only).",
+        "note": "Das Plugin führt nichts aus — dein Gate entscheidet.",
+    }
+
+
+def _scope_reason(objective: str) -> Optional[str]:
+    low = objective.lower()
+    hit = next((t for t in _OUT_OF_SCOPE_TERMS if t in low), None)
+    if hit:
+        return (f"Außerhalb Engineering-Scope (Treffer: „{hit}“). Geld/Kunde/Personal "
+                f"laufen über die gegateten Fach-Lanes, nicht über diese Fläche.")
+    return None
+
+
+def control_plane_status() -> Dict[str, Any]:
+    """Honest reachability/auth probe for :18083. No token scheme exists — the
+    controller authorizes by loopback only — so 'reachable' IS the auth check."""
+    code, body = _http_get_json(f"{CONTROL_PLANE_BASE}/healthz")
+    reachable = code == 200 and isinstance(body, dict)
+    return {
+        "base": CONTROL_PLANE_BASE,
+        "reachable": bool(reachable),
+        "auth": "loopback" if reachable else "auth_pending",
+        "authNote": ("Controller bindet 127.0.0.1 und autorisiert per Loopback — "
+                     "kein Token nötig." if reachable else
+                     "Control-Plane :18083 nicht erreichbar — Freigabe-Anbindung ausstehend."),
+    }
+
+
+# Map a control-plane /actions response status onto the UI lifecycle vocabulary.
+_ACTION_STATUS_LIFECYCLE = {
+    "approval_required": "waiting_approval",
+    "proposed": "waiting_approval",   # propose-only draft; its write is gated downstream
+    "queued": "waiting_approval",
+    "read": "answered",
+    "answered": "answered",
+    "executed": "executed",
+    "unrouted": "error",
+    "error": "error",
+    "blocked": "denied",
+}
+
+
+def propose_intent(objective: str, dry_run: bool = True) -> Dict[str, Any]:
+    """Build+validate the intent. dry_run=True (default) previews it WITHOUT any
+    network call. dry_run=False hands it to the gated :18083/actions seam and maps
+    the response onto the lifecycle — it never grants execution itself."""
+    objective = (objective or "").strip()
+    if not objective:
+        return {"ok": False, "status": "invalid", "note": "Kein Ziel angegeben."}
+    if len(objective) > 600:
+        return {"ok": False, "status": "invalid", "note": "Ziel zu lang (max. 600 Zeichen)."}
+    scope = _scope_reason(objective)
+    if scope:
+        return {"ok": False, "status": "out_of_scope", "note": scope}
+
+    intent = build_intent(objective)
+    gate = predict_gate(intent)
+    plan = {
+        "objective": objective,
+        "workspaceLabel": "Engineering",
+        "jobType": intent["jobType"],
+        "capabilities": intent["requiredCapabilities"],
+        "requiredGate": intent["requiredGate"],
+        "gateHuman": gate["human"],
+    }
+
+    if dry_run:
+        cp = control_plane_status()
+        return {
+            "ok": True,
+            "mode": "dry_run",
+            "status": "vorschau",
+            "willFire": False,
+            "proposeOnly": True,
+            "intent": intent,
+            "plan": plan,
+            "predictedGate": gate,
+            "controlPlane": cp,
+            "note": ("Nur Vorschau — es wurde NICHTS an das Gate gesendet. "
+                     "Das Plugin führt nicht aus; dein Gate entscheidet."),
+        }
+
+    # ---- Live submit (explicit user click) -> the ONE gated POST. ----------
+    cp = control_plane_status()
+    if not cp["reachable"]:
+        return {
+            "ok": False, "mode": "live", "status": "auth_pending",
+            "lifecycle": "auth_pending", "intent": intent, "controlPlane": cp,
+            "note": cp["authNote"],
+        }
+    packet = {
+        "text": objective,                       # the controller routes on text
+        "source": "mikael-os",
+        "idempotency_key": intent["idempotencyKey"],
+        "workspace_type": PROPOSE_WORKSPACE,
+        "provenance": intent["provenance"],
+    }
+    code, resp = _http_post_json(f"{CONTROL_PLANE_BASE}/actions", packet)
+    if code is None or not isinstance(resp, dict):
+        return {
+            "ok": False, "mode": "live", "status": "error", "lifecycle": "error",
+            "intent": intent, "controlPlane": cp,
+            "note": "Antwort der Control-Plane nicht lesbar.",
+        }
+    action_status = str(resp.get("status") or "error")
+    lifecycle = _ACTION_STATUS_LIFECYCLE.get(action_status, "error")
+    card = resp.get("card") if isinstance(resp.get("card"), dict) else None
+    card_id = str(card.get("id")) if card and card.get("id") else None
+    return {
+        "ok": lifecycle not in {"error"},
+        "mode": "live",
+        "status": action_status,
+        "lifecycle": lifecycle,
+        "intent": intent,
+        "cardId": card_id,
+        "gate": resp.get("gate"),
+        "controlPlane": cp,
+        "raw": {k: resp.get(k) for k in ("status", "gate", "summary") if k in resp},
+        "note": ("An das Gate übergeben — wartet auf deine Freigabe."
+                 if lifecycle == "waiting_approval" else
+                 ("Von der Control-Plane beantwortet." if lifecycle == "answered" else
+                  resp.get("summary") or "Ergebnis von der Control-Plane.")),
+    }
+
+
+# Card status (as stored in /srv/hermes/approvals) -> UI lifecycle. Read-only.
+_CARD_STATUS_LIFECYCLE = {
+    "pending": "waiting_approval",
+    "": "waiting_approval",
+    "approved": "approved",
+    "allow": "approved",
+    "allowed": "approved",
+    "executed": "executed",
+    "done": "executed",
+    "denied": "denied",
+    "deny": "denied",
+    "rejected": "denied",
+    "error": "error",
+    "failed": "error",
+}
+
+
+def receipt_status(card_id: str = "", key: str = "", objective: str = "") -> Dict[str, Any]:
+    """Read-only receipt/status lookup over the Phase-2 read models
+    (Approval-Cards + mission.v2). Never writes, never decides. Matches a card by
+    id, or by objective text (the controller stores the objective as the card
+    ``text``). Returns the current lifecycle so the UI follows real receipts."""
+    card: Optional[Dict[str, Any]] = None
+    if card_id:
+        p = APPROVALS_DIR / f"{card_id}.json"
+        try:
+            card = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            card = None
+    if card is None and objective:
+        newest_dt: Optional[datetime] = None
+        for path in sorted(glob.glob(str(APPROVALS_DIR / "appr_*.json"))):
+            try:
+                c = json.loads(Path(path).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if str(c.get("text") or "").strip() != objective.strip():
+                continue
+            dt = _parse_iso(c.get("created_utc"))
+            if newest_dt is None or (dt and dt > newest_dt):
+                newest_dt, card = dt, c
+    if card is None:
+        return {
+            "ok": True, "found": False, "lifecycle": "waiting_approval",
+            "note": "Noch keine Freigabe-Entscheidung gefunden (Card offen oder nicht angelegt).",
+        }
+    cstatus = str(card.get("status") or "").lower()
+    lifecycle = _CARD_STATUS_LIFECYCLE.get(cstatus, "waiting_approval")
+    return {
+        "ok": True,
+        "found": True,
+        "cardId": card.get("id"),
+        "cardStatus": cstatus or "pending",
+        "lifecycle": lifecycle,
+        "gateClass": card.get("gate_class"),
+        "decidedBy": card.get("decided_by"),
+        "decidedUtc": card.get("decided_utc"),
+        "note": {
+            "waiting_approval": "Approval-Card offen — wartet auf Operator-Freigabe.",
+            "approved": "Freigegeben — Ausführung folgt server-seitig.",
+            "executed": "Ausgeführt (server-seitiges Receipt).",
+            "denied": "Abgelehnt.",
+            "error": "Fehler bei der Ausführung.",
+        }.get(lifecycle, "Status gelesen."),
+    }
+
+
 # ---------------------------------------------------------------------------
-# HTTP surface. GET only. Zero writes.
+# HTTP surface. GET reads are zero-write. The single POST route is propose-only:
+# dry-run previews with no network; a live submit hands the intent to the gated
+# :18083/actions seam. Neither path ever calls /approvals/decide.
 # ---------------------------------------------------------------------------
+@router.post("/actions/propose")
+def actions_propose(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Propose an engineering/Codex job. Body: ``{objective, dryRun}``.
+
+    ``dryRun`` defaults to **True** — the safe preview that fires nothing. Only an
+    explicit ``dryRun:false`` (a deliberate user click in the UI) hands the intent
+    to the gated control-plane. The gate decides; the plugin never executes.
+    """
+    if not isinstance(payload, dict):
+        payload = {}
+    objective = str(payload.get("objective") or "").strip()
+    dry_run = payload.get("dryRun", payload.get("dry_run", True))
+    return propose_intent(objective, dry_run=bool(dry_run))
+
+
+@router.get("/actions/receipt")
+def actions_receipt(cardId: str = "", key: str = "", objective: str = "") -> Dict[str, Any]:
+    """Read-only receipt/status lookup (Approval-Cards + mission.v2). No writes."""
+    return receipt_status(card_id=cardId, key=key, objective=objective)
+
+
 @router.get("/health")
 def health() -> Dict[str, Any]:
     """Liveness + which read paths resolved right now (diagnostic)."""
     return {
         "status": "ok",
         "plugin": "mikael-os",
-        "version": "0.2.0",
-        "phase": 2,
+        "version": "0.3.0",
+        "phase": 3,
         "readPaths": {
             "missions_dir": str(MISSIONS_DIR),
             "missions_readable": MISSIONS_DIR.exists(),
@@ -745,6 +1055,12 @@ def health() -> Dict[str, Any]:
             "approvals_dir": str(APPROVALS_DIR),
             "whoop_base": WHOOP_BASE,
             "whoop_token_present": bool(WHOOP_TOKEN),
+        },
+        "propose": {
+            "capability": "engineering_task (propose-only)",
+            "controlPlane": CONTROL_PLANE_BASE,
+            "selfApprove": False,
+            "note": "Plugin proposes via gated /actions only; never calls /approvals/decide.",
         },
         "observedAt": _iso(_now()),
     }
