@@ -11,9 +11,33 @@ Timeline view and the Spatial-Core focus-lens behavior come in later phases.
 
 ## Phase status
 
-**Phase 0 — clean foundation (this commit).** Goal: prove a dashboard-plugin
-route can render a full-screen private surface without modifying FSM or the host,
-and pin the visual references to the branch.
+**Phase 2 — real read models (current).** The modules now project the
+control-plane's authoritative read models through a **read-only** adapter
+(`dashboard/plugin_api.py`, mounted at `/api/plugins/mikael-os/`). Zero writes;
+every module carries an honest `state`
+(`loading·fresh·stale·unavailable·empty·partial·error`) plus `source`,
+`observedAt` and `staleAfterSeconds`. Fixture modules keep `demo:true` + the
+"Konzept" pill until a source exists.
+
+Resolved read paths (no hard cross-repo import — file / HTTP / subprocess only):
+
+| Module | Read path | Source |
+| --- | --- | --- |
+| Aufgaben & Ziele | (b) files | `mission.v2` last-line projections in `/srv/hermes/missions/*.jsonl` + `registry/task_priority_policy.yaml` (lanes/WIP-3/version+SHA) |
+| Engineering / Codex | (b) files | same mission.v2 projections, `workspace_type=engineering` |
+| Rise-L Prozesse | (c) subprocess + (b) file | `systemctl --user` unit health + `/srv/hermes/schedule_state.json` routine freshness |
+| Körper / WHOOP | (a) HTTP | `http://127.0.0.1:18090/healthz` (connection/scopes); `/internal/summary` only if `WHOOP_INTERNAL_TOKEN` is in the dashboard process env |
+| Firma-Signale | (b) files | pending Approval-Cards in `/srv/hermes/approvals/` (company-signal, read-only) |
+| Heute · Kalender · Lernplan · Reisen · Ernährung · Journal | — | **fixtures** (`demo:true`, `source:"konzept"`) — no control-plane read model yet (documented gap in each payload's `note`) |
+
+Every reader degrades gracefully to fixtures so the shell can never break; a
+down/stale source is reported as such, never back-filled with invented values.
+Writes remain a **Phase 3** concern and will go through the existing proposal /
+capability gates (FSM writes always via Cockpit `:18065`).
+
+_Earlier: **Phase 0** proved the dashboard-plugin route could render a
+full-screen private surface without touching FSM/host; **Phase 1** delivered the
+faithful WebGL/atmosphere shell + interactions._
 
 - Full-screen Command Constellation *shell* rendered as semantic React/DOM:
   top bar + identity, workspace switcher (Privat / Engineering / Firma-Signale),

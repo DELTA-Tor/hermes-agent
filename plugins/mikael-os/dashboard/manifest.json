@@ -1,9 +1,9 @@
 {
   "name": "mikael-os",
   "label": "MIKAEL OS",
-  "description": "Mikael's private full-screen Personal OS surface — Command Constellation shell. Phase 0: concept-data fixtures only, no live truth, no FSM writes.",
+  "description": "Mikael's private full-screen Personal OS surface — Command Constellation shell. Phase 2: read-only projections of control-plane read models (mission.v2, WHOOP, systemd, Approval-Cards) with honest freshness; fixtures elsewhere. No writes.",
   "icon": "Sparkles",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "tab": {
     "path": "/mikael-os",
     "position": "end"

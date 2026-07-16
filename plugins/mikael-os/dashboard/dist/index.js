@@ -51,6 +51,9 @@ var MikaelOSPlugin = function() {
     "chevron-right": '<path d="m9 18 6-6-6-6" />',
     "arrow-right": '<path d="M5 12h14" /> <path d="m12 5 7 7-7 7" />',
     "activity": '<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />',
+    "loader": '<path d="M12 2v4" /> <path d="m16.2 7.8 2.9-2.9" /> <path d="M18 12h4" /> <path d="m16.2 16.2 2.9 2.9" /> <path d="M12 18v4" /> <path d="m4.9 19.1 2.9-2.9" /> <path d="M2 12h4" /> <path d="m4.9 4.9 2.9 2.9" />',
+    "inbox": '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /> <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />',
+    "unplug": '<path d="m19 5 3-3" /> <path d="m2 22 3-3" /> <path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z" /> <path d="M7.5 13.5 10 11" /> <path d="M10.5 16.5 13 14" /> <path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z" />',
     "moon": '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />',
     "map": '<path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /> <path d="M15 5.764v15" /> <path d="M9 3.236v15" />',
     "utensils": '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" /> <path d="M7 2v20" /> <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />',
@@ -66,7 +69,7 @@ var MikaelOSPlugin = function() {
   });
   const useRef = H.useRef || (() => ({ current: null }));
   const useCallback = H.useCallback || ((fn) => fn);
-  H.useMemo || ((fn) => typeof fn === "function" ? fn() : fn);
+  const useMemo = H.useMemo || ((fn) => typeof fn === "function" ? fn() : fn);
   const h = React ? React.createElement : () => null;
   function Icon(props) {
     const { name, size = 20, className = "", label } = props;
@@ -278,6 +281,58 @@ var MikaelOSPlugin = function() {
     { id: "engineering", label: "Engineering" },
     { id: "company_signal", label: "Firma-Signale" }
   ];
+  const PLUGIN_API = "/api/plugins/mikael-os";
+  MODULES.reduce((acc, m) => {
+    acc[m.id] = m.pos;
+    return acc;
+  }, {});
+  const STATE_META = {
+    loading: { tone: "muted", label: "Lädt …" },
+    fresh: { tone: "verified", label: "Live" },
+    stale: { tone: "amber", label: "Veraltet" },
+    partial: { tone: "amber", label: "Teilweise" },
+    empty: { tone: "muted", label: "Leer" },
+    unavailable: { tone: "red", label: "Nicht erreichbar" },
+    error: { tone: "red", label: "Fehler" }
+  };
+  function freshnessLabel(iso) {
+    if (!iso) return null;
+    const t = Date.parse(iso);
+    if (Number.isNaN(t)) return null;
+    const s = Math.max(0, Math.round((Date.now() - t) / 1e3));
+    if (s < 60) return "gerade eben";
+    const m = Math.round(s / 60);
+    if (m < 60) return "vor " + m + " Min";
+    const h2 = Math.round(m / 60);
+    if (h2 < 48) return "vor " + h2 + " Std";
+    return "vor " + Math.round(h2 / 24) + " T";
+  }
+  function enrichModule(base, L, loading) {
+    if (!L) return { ...base, _state: loading ? "loading" : "empty" };
+    return {
+      ...base,
+      title: L.title || base.title,
+      icon: L.icon || base.icon,
+      accent: L.accent || base.accent,
+      meta: L.summary || base.meta,
+      readOnly: L.readOnly != null ? L.readOnly : base.readOnly,
+      _state: L.state || "fresh",
+      _demo: !!L.demo,
+      _source: L.source,
+      _sourceKind: L.sourceKind,
+      _observedAt: L.observedAt,
+      _permission: L.permission,
+      _note: L.note,
+      _rows: Array.isArray(L.rows) ? L.rows : []
+    };
+  }
+  function indexLive(live) {
+    const byId = {};
+    (live && live.modules ? live.modules : []).forEach((m) => {
+      byId[m.id] = m;
+    });
+    return byId;
+  }
   function prefersReducedMotion() {
     try {
       return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -504,6 +559,28 @@ var MikaelOSPlugin = function() {
       })
     );
   }
+  function StatePip(props) {
+    const m = props.module;
+    const st = m._state || "loading";
+    if (m._demo) {
+      return h(
+        "span",
+        { className: "mos__pip mos__pip--konzept", title: m._note || "Konzeptdaten" },
+        h(Icon, { name: "flask-conical", size: 11 }),
+        "Konzept"
+      );
+    }
+    const meta = STATE_META[st] || STATE_META.loading;
+    const fresh = freshnessLabel(m._observedAt);
+    const tip = [m._source && "Quelle: " + m._source, fresh && "Stand: " + fresh, m._note].filter(Boolean).join(" · ");
+    return h(
+      "span",
+      { className: "mos__pip mos__pip--" + meta.tone, title: tip || meta.label },
+      h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+      meta.label,
+      fresh && (st === "fresh" || st === "stale" || st === "partial") ? h("span", { className: "mos__pip-age" }, fresh) : null
+    );
+  }
   function ModuleNode(props) {
     const m = props.module;
     return h(
@@ -539,6 +616,7 @@ var MikaelOSPlugin = function() {
           { className: "mos__node-body" },
           h("span", { className: "mos__node-title" }, m.title),
           h("span", { className: "mos__node-meta" }, m.meta),
+          h(StatePip, { module: m }),
           m.readOnly && h("span", { className: "mos__node-readonly" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")
         ),
         h("span", { className: "mos__node-grip", "aria-hidden": "true" }, h(Icon, { name: "grip-vertical", size: 14 }))
@@ -568,9 +646,60 @@ var MikaelOSPlugin = function() {
       h("span", { className: "mos__mission-pct" }, r.value)
     );
   }
+  function resolveLens(focusId, liveModule) {
+    const fixture = LENS[focusId] || LENS.engineering;
+    const L = liveModule;
+    const hasLive = L && !L._demo && Array.isArray(L._rows) && L._rows.length > 0;
+    const st = L ? L._state || "loading" : "loading";
+    if (hasLive) {
+      const fresh = freshnessLabel(L._observedAt);
+      return {
+        icon: L.icon || fixture.icon,
+        accent: L.accent || fixture.accent,
+        title: L.title || fixture.title,
+        sub: L.meta || fixture.sub,
+        rows: L._rows,
+        source: L._source || fixture.source,
+        freshness: fresh || (st === "partial" ? "Verbindung ok" : "—"),
+        permission: L._permission || fixture.permission,
+        state: st,
+        demo: false,
+        note: L._note
+      };
+    }
+    if (L && !L._demo && st !== "fresh") {
+      return {
+        icon: L.icon || fixture.icon,
+        accent: L.accent || fixture.accent,
+        title: L.title || fixture.title,
+        sub: L.meta || fixture.sub,
+        rows: Array.isArray(L._rows) ? L._rows : [],
+        source: L._source || fixture.source,
+        freshness: freshnessLabel(L._observedAt) || "—",
+        permission: L._permission || fixture.permission,
+        state: st,
+        demo: false,
+        note: L._note
+      };
+    }
+    return {
+      icon: L && L.icon || fixture.icon,
+      accent: L && L.accent || fixture.accent,
+      title: L && L.title || fixture.title,
+      sub: L && L.meta || fixture.sub,
+      rows: fixture.rows,
+      source: "Konzept",
+      freshness: "Konzeptdaten",
+      permission: fixture.permission,
+      state: L ? "fresh" : "loading",
+      demo: true,
+      note: L && L._note
+    };
+  }
   function FocusLens(props) {
-    const data = LENS[props.focusId] || LENS.engineering;
+    const data = resolveLens(props.focusId, props.liveModule);
     const closable = props.focusId !== "engineering";
+    const stMeta = STATE_META[data.state] || STATE_META.loading;
     return h(
       "section",
       { className: "mos__lens", "aria-label": "Fokus-Linse: " + data.title, key: props.focusId },
@@ -583,6 +712,15 @@ var MikaelOSPlugin = function() {
           { className: "mos__lens-titles" },
           h("span", { className: "mos__lens-title" }, data.title),
           h("span", { className: "mos__lens-sub" }, data.sub)
+        ),
+        h(
+          "span",
+          {
+            className: "mos__lens-state mos__pip mos__pip--" + (data.demo ? "konzept" : stMeta.tone),
+            title: data.note || stMeta.label
+          },
+          data.demo ? h(Icon, { name: "flask-conical", size: 12 }) : h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+          data.demo ? "Konzept" : stMeta.label
         ),
         h(
           "span",
@@ -600,7 +738,13 @@ var MikaelOSPlugin = function() {
       h(
         "div",
         { className: "mos__lens-body" },
-        data.rows.map((r, i) => h(LensRow, { key: r.title, row: r, index: i + 1 }))
+        data.rows && data.rows.length ? data.rows.map((r, i) => h(LensRow, { key: r.title, row: r, index: i + 1 })) : h(
+          "div",
+          { className: "mos__lens-empty mos--" + (STATE_META[data.state] || STATE_META.loading).tone },
+          h(Icon, { name: data.state === "unavailable" || data.state === "error" ? "unplug" : "inbox", size: 22 }),
+          h("span", { className: "mos__lens-empty-title" }, stMeta.label),
+          h("span", { className: "mos__lens-empty-note" }, data.note || "Keine Daten von dieser Quelle.")
+        )
       ),
       h(
         "footer",
@@ -636,12 +780,35 @@ var MikaelOSPlugin = function() {
       h(
         "div",
         { className: "mos__topright" },
-        h(
-          "span",
-          { className: "mos__concept", title: "Alle angezeigten Werte sind Konzeptdaten (Phase 1). Keine Live-Wahrheit." },
-          h(Icon, { name: "flask-conical", size: 14 }),
-          "Konzeptdaten"
-        ),
+        function() {
+          const ls = props.loadState;
+          const liveN = props.liveCount || 0;
+          if (ls === "loading") {
+            return h(
+              "span",
+              { className: "mos__concept mos__concept--loading", title: "Read-Modelle werden geladen …" },
+              h(Icon, { name: "loader", size: 14 }),
+              "Lädt Read-Modelle …"
+            );
+          }
+          if (liveN > 0) {
+            return h(
+              "span",
+              {
+                className: "mos__concept mos__concept--live",
+                title: "Phase 2: " + liveN + " Module projizieren echte Read-Modelle (mission.v2 / WHOOP / systemd / Approval-Cards); übrige bleiben Konzept."
+              },
+              h(Icon, { name: "activity", size: 14 }),
+              liveN + " Live · " + Math.max(0, (props.total || 0) - liveN) + " Konzept"
+            );
+          }
+          return h(
+            "span",
+            { className: "mos__concept", title: ls === "offline" ? "Read-Modelle nicht erreichbar — Konzeptdaten angezeigt." : "Konzeptdaten. Keine Live-Wahrheit." },
+            h(Icon, { name: "flask-conical", size: 14 }),
+            ls === "offline" ? "Quellen offline · Konzept" : "Konzeptdaten"
+          );
+        }(),
         h(
           "span",
           { className: "mos__topchip" },
@@ -702,6 +869,54 @@ var MikaelOSPlugin = function() {
     const [focusId, setFocusId] = useState("engineering");
     const [stateIndex, setStateIndex] = useState(0);
     const [command, setCommand] = useState("");
+    const [live, setLive] = useState(null);
+    const [loadState, setLoadState] = useState("loading");
+    useEffect(() => {
+      let alive = true;
+      const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
+      const getJSON = sdk.fetchJSON ? (u) => sdk.fetchJSON(u) : typeof fetch === "function" ? (u) => fetch(u).then((r) => r.ok ? r.json() : Promise.reject(r.status)) : null;
+      if (!getJSON) {
+        setLoadState("offline");
+        return;
+      }
+      Promise.resolve().then(() => getJSON(PLUGIN_API + "/overview")).then((data) => {
+        if (alive) {
+          setLive(data);
+          setLoadState("ready");
+        }
+      }).catch(() => {
+        if (alive) setLoadState("offline");
+      });
+      return () => {
+        alive = false;
+      };
+    }, []);
+    const liveById = useMemo(() => indexLive(live), [live]);
+    const loadingModules = loadState === "loading";
+    const viewModules = useMemo(
+      () => modules.map((base) => enrichModule(base, liveById[base.id], loadingModules)),
+      [modules, liveById, loadingModules]
+    );
+    const liveCount = useMemo(
+      () => viewModules.filter((m) => !m._demo && (m._state === "fresh" || m._state === "stale" || m._state === "partial")).length,
+      [viewModules]
+    );
+    const enrichedById = useMemo(() => {
+      const map = {};
+      viewModules.forEach((m) => {
+        map[m.id] = m;
+      });
+      Object.keys(liveById).forEach((id) => {
+        if (map[id]) return;
+        const L = liveById[id];
+        map[id] = enrichModule(
+          { id, title: L.title, icon: L.icon, accent: L.accent, pos: { x: 50, y: 50 } },
+          L,
+          loadingModules
+        );
+      });
+      return map;
+    }, [viewModules, liveById, loadingModules]);
     const stageRef = useRef(null);
     const inputRef = useRef(null);
     const dragRef = useRef(null);
@@ -829,7 +1044,7 @@ var MikaelOSPlugin = function() {
       h(
         "div",
         { className: "mos__shell" },
-        h(TopBar, null),
+        h(TopBar, { loadState, liveCount, total: viewModules.length }),
         h(
           "div",
           { className: "mos__stagewrap" },
@@ -837,9 +1052,9 @@ var MikaelOSPlugin = function() {
           h(
             "div",
             { className: "mos__stage", ref: stageRef },
-            h(Connectors, { modules, focusId }),
+            h(Connectors, { modules: viewModules, focusId }),
             // orbiting module nodes
-            modules.map((m) => h(ModuleNode, {
+            viewModules.map((m) => h(ModuleNode, {
               key: m.id,
               module: m,
               active: focusId === m.id,
@@ -875,7 +1090,11 @@ var MikaelOSPlugin = function() {
             h(
               "div",
               { className: "mos__lens-slot" },
-              h(FocusLens, { focusId, onClose: closeFocus })
+              h(FocusLens, {
+                focusId,
+                liveModule: enrichedById[focusId],
+                onClose: closeFocus
+              })
             ),
             // add-module affordance (bottom-left of stage)
             h(

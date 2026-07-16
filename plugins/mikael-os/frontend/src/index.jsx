@@ -227,6 +227,74 @@ const WORKSPACES = [
   { id: "company_signal", label: "Firma-Signale" },
 ];
 
+// ---------------------------------------------------------------------------
+// Phase 2 — live read-model wiring.
+// The module ring positions are frontend-only composition; the *data* (summary,
+// rows, state, provenance/freshness) is projected from the control-plane via the
+// plugin's read-only adapter (/api/plugins/mikael-os/overview). Nothing here is
+// ever presented as live when it isn't: each module carries an honest `state`
+// (loading·fresh·stale·unavailable·empty·partial·error) plus source + observedAt,
+// and fixture modules keep `demo:true` so the "Konzept" pill stays on them.
+// ---------------------------------------------------------------------------
+const PLUGIN_API = "/api/plugins/mikael-os";
+const POS = MODULES.reduce((acc, m) => { acc[m.id] = m.pos; return acc; }, {});
+
+// Honest per-module state vocabulary → tone (colours the node dot / lens badge)
+// and a German label. `loading` is the pre-fetch state; fixtures report `fresh`
+// but with demo:true so the UI still shows "Konzept" rather than a live source.
+const STATE_META = {
+  loading:     { tone: "muted",    label: "Lädt …" },
+  fresh:       { tone: "verified", label: "Live" },
+  stale:       { tone: "amber",    label: "Veraltet" },
+  partial:     { tone: "amber",    label: "Teilweise" },
+  empty:       { tone: "muted",    label: "Leer" },
+  unavailable: { tone: "red",      label: "Nicht erreichbar" },
+  error:       { tone: "red",      label: "Fehler" },
+};
+
+// Compact German "vor X" freshness from an ISO timestamp (no external dep).
+function freshnessLabel(iso) {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 60) return "gerade eben";
+  const m = Math.round(s / 60);
+  if (m < 60) return "vor " + m + " Min";
+  const h = Math.round(m / 60);
+  if (h < 48) return "vor " + h + " Std";
+  return "vor " + Math.round(h / 24) + " T";
+}
+
+// Enrich one positional (draggable) module with its live read-model payload.
+// The base keeps pos authority; live summary/state/rows/provenance win.
+function enrichModule(base, L, loading) {
+  if (!L) return { ...base, _state: loading ? "loading" : "empty" };
+  return {
+    ...base,
+    title: L.title || base.title,
+    icon: L.icon || base.icon,
+    accent: L.accent || base.accent,
+    meta: L.summary || base.meta,
+    readOnly: L.readOnly != null ? L.readOnly : base.readOnly,
+    _state: L.state || "fresh",
+    _demo: !!L.demo,
+    _source: L.source,
+    _sourceKind: L.sourceKind,
+    _observedAt: L.observedAt,
+    _permission: L.permission,
+    _note: L.note,
+    _rows: Array.isArray(L.rows) ? L.rows : [],
+  };
+}
+
+// Index the overview payload's modules by id (empty until the fetch resolves).
+function indexLive(live) {
+  const byId = {};
+  (live && live.modules ? live.modules : []).forEach((m) => { byId[m.id] = m; });
+  return byId;
+}
+
 function prefersReducedMotion() {
   try {
     return typeof window !== "undefined" && window.matchMedia &&
@@ -470,6 +538,28 @@ function Connectors(props) {
   );
 }
 
+// Per-module honest freshness/provenance pip. Fixture modules (demo:true) keep
+// the calm "Konzept" pill; live modules show their state + source freshness so
+// no node ever silently implies live data it doesn't have.
+function StatePip(props) {
+  const m = props.module;
+  const st = m._state || "loading";
+  if (m._demo) {
+    return h("span", { className: "mos__pip mos__pip--konzept", title: m._note || "Konzeptdaten" },
+      h(Icon, { name: "flask-conical", size: 11 }), "Konzept");
+  }
+  const meta = STATE_META[st] || STATE_META.loading;
+  const fresh = freshnessLabel(m._observedAt);
+  const tip = [m._source && ("Quelle: " + m._source), fresh && ("Stand: " + fresh), m._note]
+    .filter(Boolean).join(" · ");
+  return h("span", { className: "mos__pip mos__pip--" + meta.tone, title: tip || meta.label },
+    h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+    meta.label,
+    fresh && (st === "fresh" || st === "stale" || st === "partial")
+      ? h("span", { className: "mos__pip-age" }, fresh) : null,
+  );
+}
+
 // A single orbiting domain module — button (click → focus) with a drag handle,
 // wrapped in a decorative orbit halo. Position comes from state so it can move.
 function ModuleNode(props) {
@@ -507,6 +597,7 @@ function ModuleNode(props) {
         { className: "mos__node-body" },
         h("span", { className: "mos__node-title" }, m.title),
         h("span", { className: "mos__node-meta" }, m.meta),
+        h(StatePip, { module: m }),
         m.readOnly &&
           h("span", { className: "mos__node-readonly" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen"),
       ),
@@ -541,9 +632,52 @@ function LensRow(props) {
   );
 }
 
+// Resolve the lens payload for a module: project the live read-model when the
+// plugin adapter returned rows, otherwise fall back to the fixture concept lens.
+// The returned object always carries an honest state + source + freshness so the
+// footer never implies live data that isn't there.
+function resolveLens(focusId, liveModule) {
+  const fixture = LENS[focusId] || LENS.engineering;
+  const L = liveModule;
+  const hasLive = L && !L._demo && Array.isArray(L._rows) && L._rows.length > 0;
+  const st = L ? (L._state || "loading") : "loading";
+  if (hasLive) {
+    const fresh = freshnessLabel(L._observedAt);
+    return {
+      icon: L.icon || fixture.icon, accent: L.accent || fixture.accent,
+      title: L.title || fixture.title, sub: L.meta || fixture.sub,
+      rows: L._rows, source: L._source || fixture.source,
+      freshness: fresh || (st === "partial" ? "Verbindung ok" : "—"),
+      permission: L._permission || fixture.permission,
+      state: st, demo: false, note: L._note,
+    };
+  }
+  // Live source present but empty/partial/unavailable/error → honest, no fixture rows.
+  if (L && !L._demo && st !== "fresh") {
+    return {
+      icon: L.icon || fixture.icon, accent: L.accent || fixture.accent,
+      title: L.title || fixture.title, sub: L.meta || fixture.sub,
+      rows: Array.isArray(L._rows) ? L._rows : [],
+      source: L._source || fixture.source,
+      freshness: freshnessLabel(L._observedAt) || "—",
+      permission: L._permission || fixture.permission,
+      state: st, demo: false, note: L._note,
+    };
+  }
+  // Fixture / concept module (or pre-fetch): keep the concept lens + Konzept badge.
+  return {
+    icon: (L && L.icon) || fixture.icon, accent: (L && L.accent) || fixture.accent,
+    title: (L && L.title) || fixture.title, sub: (L && L.meta) || fixture.sub,
+    rows: fixture.rows, source: "Konzept", freshness: "Konzeptdaten",
+    permission: fixture.permission, state: L ? "fresh" : "loading",
+    demo: true, note: L && L._note,
+  };
+}
+
 function FocusLens(props) {
-  const data = LENS[props.focusId] || LENS.engineering;
+  const data = resolveLens(props.focusId, props.liveModule);
   const closable = props.focusId !== "engineering";
+  const stMeta = STATE_META[data.state] || STATE_META.loading;
   return h(
     "section",
     { className: "mos__lens", "aria-label": "Fokus-Linse: " + data.title, key: props.focusId },
@@ -559,6 +693,15 @@ function FocusLens(props) {
       ),
       h(
         "span",
+        { className: "mos__lens-state mos__pip mos__pip--" + (data.demo ? "konzept" : stMeta.tone),
+          title: data.note || stMeta.label },
+        data.demo
+          ? h(Icon, { name: "flask-conical", size: 12 })
+          : h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+        data.demo ? "Konzept" : stMeta.label,
+      ),
+      h(
+        "span",
         { className: "mos__lens-actions" },
         h("button", { type: "button", className: "mos__iconbtn", "aria-label": "Anheften" }, h(Icon, { name: "pin", size: 18 })),
         h("button", { type: "button", className: "mos__iconbtn", "aria-label": "Einklappen" }, h(Icon, { name: "chevron-up", size: 18 })),
@@ -571,7 +714,15 @@ function FocusLens(props) {
     h(
       "div",
       { className: "mos__lens-body" },
-      data.rows.map((r, i) => h(LensRow, { key: r.title, row: r, index: i + 1 })),
+      data.rows && data.rows.length
+        ? data.rows.map((r, i) => h(LensRow, { key: r.title, row: r, index: i + 1 }))
+        : h(
+            "div",
+            { className: "mos__lens-empty mos--" + (STATE_META[data.state] || STATE_META.loading).tone },
+            h(Icon, { name: data.state === "unavailable" || data.state === "error" ? "unplug" : "inbox", size: 22 }),
+            h("span", { className: "mos__lens-empty-title" }, stMeta.label),
+            h("span", { className: "mos__lens-empty-note" }, data.note || "Keine Daten von dieser Quelle."),
+          ),
     ),
     h(
       "footer",
@@ -609,12 +760,27 @@ function TopBar(props) {
     h(
       "div",
       { className: "mos__topright" },
-      h(
-        "span",
-        { className: "mos__concept", title: "Alle angezeigten Werte sind Konzeptdaten (Phase 1). Keine Live-Wahrheit." },
-        h(Icon, { name: "flask-conical", size: 14 }),
-        "Konzeptdaten",
-      ),
+      (function () {
+        const ls = props.loadState;
+        const liveN = props.liveCount || 0;
+        if (ls === "loading") {
+          return h("span", { className: "mos__concept mos__concept--loading", title: "Read-Modelle werden geladen …" },
+            h(Icon, { name: "loader", size: 14 }), "Lädt Read-Modelle …");
+        }
+        if (liveN > 0) {
+          return h("span",
+            { className: "mos__concept mos__concept--live",
+              title: "Phase 2: " + liveN + " Module projizieren echte Read-Modelle (mission.v2 / WHOOP / systemd / Approval-Cards); übrige bleiben Konzept." },
+            h(Icon, { name: "activity", size: 14 }),
+            liveN + " Live · " + Math.max(0, (props.total || 0) - liveN) + " Konzept");
+        }
+        return h("span",
+          { className: "mos__concept", title: ls === "offline"
+              ? "Read-Modelle nicht erreichbar — Konzeptdaten angezeigt."
+              : "Konzeptdaten. Keine Live-Wahrheit." },
+          h(Icon, { name: "flask-conical", size: 14 }),
+          ls === "offline" ? "Quellen offline · Konzept" : "Konzeptdaten");
+      })(),
       h(
         "span",
         { className: "mos__topchip" },
@@ -683,6 +849,55 @@ function MikaelOS() {
   const [focusId, setFocusId] = useState("engineering");
   const [stateIndex, setStateIndex] = useState(0);
   const [command, setCommand] = useState("");
+  // Live read-model overview (null until the plugin adapter responds; a failed
+  // or absent fetch simply leaves the concept fixtures in place — the shell
+  // must never break because a source is down).
+  const [live, setLive] = useState(null);
+  const [loadState, setLoadState] = useState("loading"); // loading | ready | offline
+
+  // Fetch the read-only projection once on mount, via the host SDK's authed
+  // fetchJSON (falls back to window.fetch for the screenshot harness). Any error
+  // is swallowed into `offline` so fixtures remain visible.
+  useEffect(() => {
+    let alive = true;
+    const sdk = (typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__) || {};
+    const getJSON = sdk.fetchJSON
+      ? (u) => sdk.fetchJSON(u)
+      : (typeof fetch === "function" ? (u) => fetch(u).then((r) => (r.ok ? r.json() : Promise.reject(r.status))) : null);
+    if (!getJSON) { setLoadState("offline"); return; }
+    Promise.resolve()
+      .then(() => getJSON(PLUGIN_API + "/overview"))
+      .then((data) => { if (alive) { setLive(data); setLoadState("ready"); } })
+      .catch(() => { if (alive) setLoadState("offline"); });
+    return () => { alive = false; };
+  }, []);
+
+  const liveById = useMemo(() => indexLive(live), [live]);
+  const loadingModules = loadState === "loading";
+  const viewModules = useMemo(
+    () => modules.map((base) => enrichModule(base, liveById[base.id], loadingModules)),
+    [modules, liveById, loadingModules],
+  );
+  const liveCount = useMemo(
+    () => viewModules.filter((m) => !m._demo && (m._state === "fresh" || m._state === "stale" || m._state === "partial")).length,
+    [viewModules],
+  );
+  // Enriched lookup for the Focus-Lens — includes modules the adapter returns
+  // that are NOT ring nodes (e.g. the default "engineering / Codex" lens), so
+  // the lens projects their live read-model instead of falling back to fixtures.
+  const enrichedById = useMemo(() => {
+    const map = {};
+    viewModules.forEach((m) => { map[m.id] = m; });
+    Object.keys(liveById).forEach((id) => {
+      if (map[id]) return;
+      const L = liveById[id];
+      map[id] = enrichModule(
+        { id, title: L.title, icon: L.icon, accent: L.accent, pos: { x: 50, y: 50 } },
+        L, loadingModules,
+      );
+    });
+    return map;
+  }, [viewModules, liveById, loadingModules]);
 
   const stageRef = useRef(null);
   const inputRef = useRef(null);
@@ -809,7 +1024,7 @@ function MikaelOS() {
     h(
       "div",
       { className: "mos__shell" },
-      h(TopBar, null),
+      h(TopBar, { loadState: loadState, liveCount: liveCount, total: viewModules.length }),
       h(
         "div",
         { className: "mos__stagewrap" },
@@ -817,9 +1032,9 @@ function MikaelOS() {
         h(
           "div",
           { className: "mos__stage", ref: stageRef },
-          h(Connectors, { modules: modules, focusId: focusId }),
+          h(Connectors, { modules: viewModules, focusId: focusId }),
           // orbiting module nodes
-          modules.map((m) =>
+          viewModules.map((m) =>
             h(ModuleNode, {
               key: m.id,
               module: m,
@@ -856,7 +1071,11 @@ function MikaelOS() {
           h(
             "div",
             { className: "mos__lens-slot" },
-            h(FocusLens, { focusId: focusId, onClose: closeFocus }),
+            h(FocusLens, {
+              focusId: focusId,
+              liveModule: enrichedById[focusId],
+              onClose: closeFocus,
+            }),
           ),
           // add-module affordance (bottom-left of stage)
           h(
