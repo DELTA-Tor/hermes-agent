@@ -24,7 +24,16 @@ function createElement(type, props, ...children) {
   return { type, props: props || {}, children: children.flat(Infinity).filter((c) => c != null && c !== false) };
 }
 const mockReact = { createElement, Fragment };
-const hooks = { useState: (init) => [init, () => {}] };
+// Mock the full hook surface the host SDK exposes (useState/useEffect/useRef/
+// useMemo/useCallback). For a single static render pass effects never run,
+// refs are inert and memo/callback resolve eagerly — enough to render the tree.
+const hooks = {
+  useState: (init) => [typeof init === "function" ? init() : init, () => {}],
+  useEffect: () => {},
+  useRef: (init) => ({ current: init === undefined ? null : init }),
+  useMemo: (fn) => (typeof fn === "function" ? fn() : fn),
+  useCallback: (fn) => fn,
+};
 
 const registered = {};
 const win = {

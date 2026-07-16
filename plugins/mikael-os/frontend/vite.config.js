@@ -32,6 +32,10 @@ export default defineConfig({
     cssCodeSplit: false,
     minify: false,
     target: "es2020",
+    // Inline the photographic atmosphere (and any other asset) as a base64
+    // data: URI directly into style.css, so the shipped plugin stays exactly
+    // two files (index.js + style.css) — the host loads nothing else.
+    assetsInlineLimit: 10_000_000,
     lib: {
       entry: "src/index.jsx",
       formats: ["iife"],

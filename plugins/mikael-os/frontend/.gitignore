@@ -2,3 +2,5 @@
 node_modules/
 icons-extracted.json
 package-lock.json
+# Screenshot-QA harness — dev-only, never part of the shipped plugin bundle.
+demo/
