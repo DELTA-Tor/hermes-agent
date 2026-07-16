@@ -1,0 +1,14 @@
+{
+  "name": "mikael-os",
+  "label": "MIKAEL OS",
+  "description": "Mikael's private full-screen Personal OS surface — Command Constellation shell. Phase 0: concept-data fixtures only, no live truth, no FSM writes.",
+  "icon": "Sparkles",
+  "version": "0.1.0",
+  "tab": {
+    "path": "/mikael-os",
+    "position": "end"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

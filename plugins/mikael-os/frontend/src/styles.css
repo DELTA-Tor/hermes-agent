@@ -1,0 +1,576 @@
+/*
+ * MIKAEL OS — Personal OS dashboard-plugin surface (Phase 0 shell).
+ *
+ * Command Constellation shell rendered as semantic DOM. WebGL orb + photographic
+ * atmosphere land in Phase 1; here the orb and depth are CSS/SVG placeholders.
+ * Everything is namespaced under `.mos` so the bundle can never leak styles into
+ * the host dashboard or other plugins.
+ *
+ * Design tokens follow the V3 handoff design system: obsidian/navy canvas, cyan =
+ * Jarvis/active, emerald = verified/body, violet = learning, amber = attention.
+ * A Personal-OS token layer (--mos-*) sits on top of the host semantic tokens.
+ */
+
+.mos {
+  /* palette */
+  --mos-canvas-0: #05070d;
+  --mos-canvas-1: #0a111d;
+  --mos-navy: #0d1a2e;
+  --mos-glass-base: rgba(17, 26, 42, 0.55);
+  --mos-glass-raised: rgba(24, 36, 56, 0.66);
+  --mos-glass-focus: rgba(13, 22, 38, 0.86);
+  --mos-border: rgba(122, 155, 200, 0.16);
+  --mos-border-strong: rgba(150, 190, 240, 0.30);
+  --mos-text: #eaf0f8;
+  --mos-text-dim: #aebcce;
+  --mos-text-faint: #8695ab;
+  --mos-cyan: #38bdf8;
+  --mos-cyan-bright: #4dd6ff;
+  --mos-emerald: #34d399;
+  --mos-violet: #a78bfa;
+  --mos-amber: #fbbf24;
+  --mos-danger: #f87171;
+
+  --mos-radius-lg: 22px;
+  --mos-radius-md: 16px;
+  --mos-radius-sm: 12px;
+  --mos-pill: 999px;
+  --mos-touch: 44px;
+  --mos-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.75);
+
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  color: var(--mos-text);
+  background:
+    radial-gradient(1200px 700px at 18% 12%, rgba(24, 44, 78, 0.55), transparent 60%),
+    radial-gradient(1000px 800px at 88% 78%, rgba(30, 26, 60, 0.45), transparent 62%),
+    linear-gradient(160deg, var(--mos-canvas-1) 0%, var(--mos-canvas-0) 55%, #04060a 100%);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mos *,
+.mos *::before,
+.mos *::after { box-sizing: border-box; }
+
+/* -------- decorative atmosphere (placeholder for Phase-1 photography) ------- */
+.mos__atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(2px 2px at 20% 30%, rgba(180, 210, 255, 0.35), transparent 60%),
+    radial-gradient(1.5px 1.5px at 70% 20%, rgba(160, 200, 255, 0.28), transparent 60%),
+    radial-gradient(1.5px 1.5px at 40% 70%, rgba(150, 255, 220, 0.20), transparent 60%),
+    radial-gradient(2px 2px at 85% 60%, rgba(200, 180, 255, 0.25), transparent 60%),
+    radial-gradient(1px 1px at 55% 45%, rgba(200, 220, 255, 0.3), transparent 60%);
+  opacity: 0.7;
+}
+.mos__atmosphere::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(900px 620px at 50% 42%, rgba(30, 120, 190, 0.16), transparent 68%);
+}
+
+.mos__shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 100vh;
+  padding: 20px clamp(16px, 3vw, 40px) 18px;
+}
+
+/* --------------------------------- top bar --------------------------------- */
+.mos__topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+}
+.mos__identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mos__avatar {
+  width: 46px; height: 46px; flex: none;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 18px; letter-spacing: 0.5px;
+  color: var(--mos-text);
+  background: radial-gradient(circle at 35% 30%, rgba(90, 200, 255, 0.35), rgba(20, 40, 70, 0.9));
+  border: 1px solid var(--mos-border-strong);
+}
+.mos__identity-name { font-weight: 600; font-size: 15px; }
+.mos__identity-sub { font-size: 12px; color: var(--mos-text-dim); }
+
+.mos__wordmark {
+  font-size: 15px; font-weight: 600;
+  letter-spacing: 8px; text-indent: 8px;
+  color: var(--mos-text);
+  opacity: 0.92;
+  white-space: nowrap;
+}
+
+.mos__topright { display: flex; align-items: center; gap: 12px; }
+.mos__topchip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--mos-radius-sm);
+  background: var(--mos-glass-base);
+  border: 1px solid var(--mos-border);
+  color: var(--mos-text-dim);
+  font-size: 12px;
+  backdrop-filter: blur(10px);
+}
+.mos__topchip strong { color: var(--mos-text); font-weight: 600; }
+.mos__topchip-time { text-align: right; line-height: 1.25; }
+.mos__topchip-time b { display: block; font-size: 15px; color: var(--mos-text); }
+.mos__shieldbtn {
+  width: var(--mos-touch); height: var(--mos-touch); flex: none;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--mos-cyan);
+  background: var(--mos-glass-base);
+  border: 1px solid var(--mos-border);
+  cursor: pointer;
+}
+
+/* concept-data badge — always visible, unmistakable */
+.mos__concept {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px;
+  border-radius: var(--mos-pill);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.3px;
+  color: #0b1220;
+  background: linear-gradient(90deg, var(--mos-amber), #f5d67a);
+  border: 1px solid rgba(255, 210, 120, 0.6);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+}
+
+/* ------------------------------ workspace tabs ----------------------------- */
+.mos__workspace {
+  display: inline-flex; align-items: center; gap: 4px;
+  align-self: flex-start;
+  padding: 5px;
+  border-radius: var(--mos-radius-md);
+  background: var(--mos-glass-base);
+  border: 1px solid var(--mos-border);
+  backdrop-filter: blur(10px);
+}
+.mos__workspace-label {
+  font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--mos-text-faint);
+  padding: 0 10px 0 6px;
+}
+.mos__ws-tab {
+  appearance: none;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: var(--mos-radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--mos-text-dim);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.4px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+.mos__ws-tab[aria-pressed="true"] {
+  color: var(--mos-text);
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+/* ------------------------------- constellation ----------------------------- */
+.mos__stage {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr) minmax(200px, 260px);
+  gap: clamp(14px, 2vw, 28px);
+  align-items: start;
+}
+.mos__rail { display: flex; flex-direction: column; gap: 14px; }
+.mos__rail--right { align-items: stretch; }
+
+/* orbit module node */
+.mos__node {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--mos-touch);
+  padding: 12px 14px;
+  text-align: left;
+  border-radius: var(--mos-radius-md);
+  background: var(--mos-glass-base);
+  border: 1px solid var(--mos-border);
+  color: var(--mos-text);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.mos__node:hover { transform: translateY(-1px); border-color: var(--mos-border-strong); }
+.mos__node:focus-visible { outline: 2px solid var(--mos-cyan); outline-offset: 2px; }
+.mos__node[aria-current="true"] {
+  border-color: rgba(56, 189, 248, 0.55);
+  background: rgba(20, 40, 66, 0.7);
+}
+.mos__node-orbit {
+  position: relative;
+  width: 46px; height: 46px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: var(--mos-accent, var(--mos-cyan));
+  background: rgba(10, 18, 32, 0.7);
+  border: 1px solid color-mix(in srgb, var(--mos-accent, var(--mos-cyan)) 45%, transparent);
+  box-shadow: 0 0 18px -6px var(--mos-accent, var(--mos-cyan));
+}
+.mos__node-orbit::before {
+  content: "";
+  position: absolute; inset: -5px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--mos-accent, var(--mos-cyan)) 22%, transparent);
+}
+.mos__node-body { min-width: 0; }
+.mos__node-title {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--mos-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mos__node-meta { font-size: 12px; color: var(--mos-text-dim); margin-top: 2px; }
+.mos__node-readonly {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 4px;
+  font-size: 11px; color: var(--mos-text-faint);
+}
+
+/* accent variants */
+.mos--cyan { --mos-accent: var(--mos-cyan); }
+.mos--emerald { --mos-accent: var(--mos-emerald); }
+.mos--violet { --mos-accent: var(--mos-violet); }
+.mos--amber { --mos-accent: var(--mos-amber); }
+.mos--neutral { --mos-accent: #9fb2c9; }
+
+/* --------------------------------- core ------------------------------------ */
+.mos__center { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.mos__core-row {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+.mos__handoff {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--mos-pill);
+  background: var(--mos-glass-base);
+  border: 1px solid var(--mos-border);
+  color: var(--mos-text-dim);
+  font-size: 12px;
+  backdrop-filter: blur(10px);
+}
+.mos__handoff span { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--mos-text-faint); }
+.mos__handoff b { color: var(--mos-text); font-weight: 600; }
+
+.mos__orb {
+  position: relative;
+  width: clamp(150px, 20vw, 210px);
+  aspect-ratio: 1;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 42% 36%, rgba(120, 220, 255, 0.9), rgba(30, 120, 200, 0.55) 42%, rgba(8, 20, 40, 0.9) 72%);
+  box-shadow:
+    0 0 60px -8px rgba(56, 189, 248, 0.55),
+    inset 0 0 40px rgba(10, 40, 80, 0.8);
+}
+.mos__orb::before {
+  content: "";
+  position: absolute; inset: -14px;
+  border-radius: 50%;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  animation: mos-orb-pulse 3.4s ease-in-out infinite;
+}
+.mos__orb-label {
+  position: relative;
+  font-size: 18px; font-weight: 600; letter-spacing: 3px;
+  color: #eafaff;
+  text-shadow: 0 0 12px rgba(120, 220, 255, 0.6);
+}
+@keyframes mos-orb-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.05); opacity: 0.9; }
+}
+
+/* ------------------------------- focus lens -------------------------------- */
+.mos__lens {
+  width: min(720px, 100%);
+  border-radius: var(--mos-radius-lg);
+  background: var(--mos-glass-focus);
+  border: 1px solid var(--mos-border-strong);
+  box-shadow: var(--mos-shadow);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+}
+.mos__lens-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--mos-border);
+}
+.mos__lens-badge {
+  width: 42px; height: 42px; flex: none;
+  display: grid; place-items: center;
+  border-radius: var(--mos-radius-sm);
+  color: var(--mos-cyan);
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+}
+.mos__lens-titles { flex: 1 1 auto; min-width: 0; }
+.mos__lens-title { font-size: 17px; font-weight: 600; letter-spacing: 0.4px; }
+.mos__lens-sub { font-size: 12px; color: var(--mos-text-dim); margin-top: 2px; }
+.mos__lens-actions { display: flex; align-items: center; gap: 4px; }
+.mos__iconbtn {
+  width: var(--mos-touch); height: var(--mos-touch);
+  display: grid; place-items: center;
+  border-radius: var(--mos-radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--mos-text-dim);
+  cursor: pointer;
+}
+.mos__iconbtn:hover { color: var(--mos-text); background: rgba(120, 150, 200, 0.12); }
+.mos__iconbtn:focus-visible { outline: 2px solid var(--mos-cyan); outline-offset: 2px; }
+
+.mos__lens-body { padding: 8px 12px; display: flex; flex-direction: column; }
+.mos__mission {
+  display: grid;
+  grid-template-columns: 26px 34px 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 8px;
+  border-radius: var(--mos-radius-sm);
+}
+.mos__mission + .mos__mission { border-top: 1px solid var(--mos-border); }
+.mos__mission:hover { background: rgba(120, 150, 200, 0.08); }
+.mos__mission-idx { font-size: 13px; color: var(--mos-text-faint); text-align: center; }
+.mos__mission-icon {
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  border-radius: 10px;
+  color: var(--mos-accent, var(--mos-cyan));
+  background: color-mix(in srgb, var(--mos-accent, var(--mos-cyan)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mos-accent, var(--mos-cyan)) 30%, transparent);
+}
+.mos__mission-body { min-width: 0; }
+.mos__mission-title { font-size: 14px; font-weight: 600; color: var(--mos-text); }
+.mos__mission-sub { font-size: 12px; color: var(--mos-text-dim); margin-top: 1px; }
+.mos__mission-pct { font-size: 13px; font-weight: 600; color: var(--mos-text); min-width: 42px; text-align: right; }
+
+.mos__status {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--mos-pill);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase;
+  white-space: nowrap;
+}
+.mos__status--running { color: var(--mos-emerald); background: rgba(52, 211, 153, 0.14); border: 1px solid rgba(52, 211, 153, 0.34); }
+.mos__status--waiting { color: var(--mos-amber); background: rgba(251, 191, 36, 0.14); border: 1px solid rgba(251, 191, 36, 0.34); }
+.mos__status--verified { color: var(--mos-cyan); background: rgba(56, 189, 248, 0.14); border: 1px solid rgba(56, 189, 248, 0.34); }
+
+.mos__lens-foot {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--mos-border);
+  font-size: 12px; color: var(--mos-text-dim);
+}
+.mos__lens-foot .mos__meta { display: inline-flex; align-items: center; gap: 6px; }
+.mos__lens-foot .mos__meta b { color: var(--mos-text); font-weight: 600; }
+.mos__lens-foot-shield { margin-left: auto; color: var(--mos-cyan); display: inline-flex; }
+
+.mos__lens-tools {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--mos-border);
+}
+.mos__tool {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: var(--mos-radius-sm);
+  border: 1px solid var(--mos-border);
+  background: rgba(20, 30, 48, 0.5);
+  color: var(--mos-text-dim);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase;
+  cursor: pointer;
+}
+.mos__tool:hover { color: var(--mos-text); border-color: var(--mos-border-strong); }
+
+/* add-module affordance */
+.mos__addmodule {
+  display: inline-flex; align-items: center; gap: 10px;
+  align-self: flex-start;
+  min-height: var(--mos-touch);
+  padding: 10px 16px;
+  border-radius: var(--mos-radius-md);
+  border: 1px dashed var(--mos-border-strong);
+  background: transparent;
+  color: var(--mos-text-dim);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase;
+  cursor: pointer;
+}
+.mos__addmodule:hover { color: var(--mos-text); border-color: var(--mos-cyan); }
+.mos__addmodule-plus {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 50%; color: var(--mos-cyan);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+/* ------------------------------- command bar ------------------------------- */
+.mos__command {
+  display: flex; flex-direction: column; gap: 10px;
+  width: min(920px, 100%);
+  margin: 0 auto;
+}
+.mos__command-bar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 12px;
+  border-radius: var(--mos-pill);
+  background: var(--mos-glass-raised);
+  border: 1px solid var(--mos-border-strong);
+  backdrop-filter: blur(14px);
+}
+.mos__mic {
+  width: 52px; height: 52px; flex: none;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  color: #eafaff;
+  background: radial-gradient(circle at 40% 35%, rgba(90, 210, 255, 0.9), rgba(20, 90, 160, 0.9));
+  border: 1px solid rgba(90, 210, 255, 0.5);
+  box-shadow: 0 0 22px -6px rgba(56, 189, 248, 0.7);
+  cursor: pointer;
+}
+.mos__command-input {
+  flex: 1 1 auto;
+  border: none; background: transparent;
+  color: var(--mos-text);
+  font-size: 15px;
+}
+.mos__command-input::placeholder { color: var(--mos-text-faint); }
+.mos__command-input:focus-visible { outline: none; }
+.mos__send {
+  width: var(--mos-touch); height: var(--mos-touch); flex: none;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--mos-text-dim);
+  background: rgba(20, 30, 48, 0.6);
+  border: 1px solid var(--mos-border);
+  cursor: pointer;
+}
+.mos__chips { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-left: 8px; }
+.mos__chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: var(--mos-pill);
+  border: 1px solid var(--mos-border);
+  background: var(--mos-glass-base);
+  color: var(--mos-text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+.mos__chip:hover { color: var(--mos-text); border-color: var(--mos-border-strong); }
+
+/* -------------------------------- foot rail -------------------------------- */
+.mos__footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap;
+}
+.mos__quick {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 40px; padding: 8px 14px;
+  border-radius: var(--mos-radius-md);
+  border: 1px solid var(--mos-border);
+  background: var(--mos-glass-base);
+  color: var(--mos-text-dim);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase;
+  cursor: pointer;
+}
+.mos__states {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 6px;
+  border-radius: var(--mos-pill);
+  background: var(--mos-glass-base);
+  border: 1px solid var(--mos-border);
+}
+.mos__state {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--mos-pill);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--mos-text-faint);
+}
+.mos__state-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid currentColor;
+}
+.mos__state[data-active="true"] { color: var(--mos-cyan); }
+.mos__state[data-active="true"] .mos__state-dot {
+  background: var(--mos-cyan);
+  box-shadow: 0 0 10px var(--mos-cyan);
+  animation: mos-blink 2.2s ease-in-out infinite;
+}
+.mos__state[data-tone="verified"] { color: var(--mos-emerald); }
+@keyframes mos-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+.mos__reorder {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 11px; color: var(--mos-text-faint);
+}
+.mos__reorder .mos__kbd {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 8px; border-radius: 8px;
+  border: 1px solid var(--mos-border);
+  background: var(--mos-glass-base);
+  color: var(--mos-text-dim);
+  font-size: 11px;
+}
+
+/* --------------------------------- icons ----------------------------------- */
+.mos__icon { display: inline-block; width: 20px; height: 20px; flex: none; }
+.mos__icon svg { width: 100%; height: 100%; display: block; }
+
+/* ------------------------------- responsive -------------------------------- */
+@media (max-width: 1180px) {
+  .mos__stage {
+    grid-template-columns: 1fr;
+  }
+  .mos__rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .mos__rail .mos__node { flex: 1 1 220px; }
+  .mos__center { order: -1; }
+}
+@media (max-width: 640px) {
+  .mos__shell { padding: 14px 14px 16px; }
+  .mos__wordmark { display: none; }
+  .mos__rail .mos__node { flex: 1 1 100%; }
+  .mos__footer { justify-content: center; }
+  .mos__states { order: -1; width: 100%; justify-content: center; }
+}
+
+/* --------------------------- reduced motion -------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .mos *,
+  .mos *::before,
+  .mos *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

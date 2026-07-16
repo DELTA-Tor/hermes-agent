@@ -1,0 +1,4 @@
+# Build tooling scratch — the shipped bundle lives in ../dashboard/dist (committed).
+node_modules/
+icons-extracted.json
+package-lock.json

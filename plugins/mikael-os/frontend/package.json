@@ -1,0 +1,14 @@
+{
+  "name": "mikael-os-dashboard-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Frontend source + Vite library build for the MIKAEL OS Nous Hermes dashboard plugin. Emits an IIFE bundle that reads React from window.__HERMES_PLUGIN_SDK__ and registers via window.__HERMES_PLUGINS__ — same contract as the kanban / hermes-achievements template bundles.",
+  "scripts": {
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "lucide-static": "0.469.0",
+    "vite": "5.4.11"
+  }
+}
