@@ -2,62 +2,46 @@
 
 Mikael's private, full-screen **Personal Operating Surface**, delivered as a
 dedicated **Nous Hermes dashboard plugin** (route `/mikael-os`). It is *not* part
-of FSM and *not* a second task database — it is a separate, replaceable surface
-that will later project over existing truth.
+of FSM and *not* a second task database — it is a separate, replaceable
+orchestration surface over existing truth.
 
 Primary visual direction: **Command Constellation** (see
-`docs/references/mikael-os-v3-command-constellation.png`). Secondary Living
-Timeline view and the Spatial-Core focus-lens behavior come in later phases.
+`docs/references/mikael-os-v3-command-constellation.png`), complemented by the
+Living Timeline, a cockpit view and focused area scenes.
 
-## Phase status
+## Current status
 
-**Phase 2 — real read models (current).** The modules now project the
-control-plane's authoritative read models through a **read-only** adapter
-(`dashboard/plugin_api.py`, mounted at `/api/plugins/mikael-os/`). Zero writes;
-every module carries an honest `state`
-(`loading·fresh·stale·unavailable·empty·partial·error`) plus `source`,
-`observedAt` and `staleAfterSeconds`. Fixture modules keep `demo:true` + the
-"Konzept" pill until a source exists.
+**M0–M5 are implemented in this draft branch, but not deployed.** The plugin
+contains the cockpit, Command Constellation, Living Timeline, dedicated area
+scenes and a mobile layout. Its adapter is mounted at
+`/api/plugins/mikael-os/`. Every projection reports an honest state
+(`loading·fresh·stale·unavailable·empty·partial·error`) plus source,
+observation time, freshness threshold, permission and workspace. Missing
+sources remain visibly empty or conceptual; they are never replaced with
+invented live values.
 
-Resolved read paths (no hard cross-repo import — file / HTTP / subprocess only):
-
-| Module | Read path | Source |
+| Area | Current evidence path | Draft status |
 | --- | --- | --- |
-| Aufgaben & Ziele | (b) files | `mission.v2` last-line projections in `/srv/hermes/missions/*.jsonl` + `registry/task_priority_policy.yaml` (lanes/WIP-3/version+SHA) |
-| Engineering / Codex | (b) files | same mission.v2 projections, `workspace_type=engineering` |
-| Rise-L Prozesse | (c) subprocess + (b) file | `systemctl --user` unit health + `/srv/hermes/schedule_state.json` routine freshness |
-| Körper / WHOOP | (a) HTTP | `http://127.0.0.1:18090/healthz` (connection/scopes); `/internal/summary` only if `WHOOP_INTERNAL_TOKEN` is in the dashboard process env |
-| Firma-Signale | (b) files | pending Approval-Cards in `/srv/hermes/approvals/` (company-signal, read-only) |
-| Heute · Kalender · Lernplan · Reisen · Ernährung · Journal | — | **fixtures** (`demo:true`, `source:"konzept"`) — no control-plane read model yet (documented gap in each payload's `note`) |
+| Heute / Kalender | `calendar-evidence.db` opened read-only | live projection; private and company Dispo remain separate |
+| Learning | Anki collection opened read-only + `exams.json` | L1–L3 read/coach flows; study-plan submission is propose/gate only |
+| Jarvis / Approvals | Brain-Gateway reachability + Approval-Card files | state, hints and card details; no decision endpoint |
+| Firma / Rise-L | FSM and belege read-only projections, billing/radar files, Paperless and service health | six read-only cards with deep links to the owning system |
+| Wissen / Kommunikation / Sessions | unified-search, Telegram/FreeScout signals, mission and session-broker projections | read-only, workspace-labelled and source-attributed |
+| Gesundheit | WHOOP connector | partial until the operator supplies the internal token |
+| Ziele / Reflexion | mission policy plus optional private journal directory | real mission view; hierarchy, habits and journal stay honestly empty without a source |
+| Betrieb 24/7 | client display state, PWA shell, mission/approval context | four Mac actions are typed previews only; execution remains deliberately unwired |
 
-Every reader degrades gracefully to fixtures so the shell can never break; a
-down/stale source is reported as such, never back-filled with invented values.
-Writes remain a **Phase 3** concern and will go through the existing proposal /
-capability gates (FSM writes always via Cockpit `:18065`).
-
-_Earlier: **Phase 0** proved the dashboard-plugin route could render a
-full-screen private surface without touching FSM/host; **Phase 1** delivered the
-faithful WebGL/atmosphere shell + interactions._
-
-- Full-screen Command Constellation *shell* rendered as semantic React/DOM:
-  top bar + identity, workspace switcher (Privat / Engineering / Firma-Signale),
-  orbit module nodes, Jarvis core, focus lens (Engineering/Codex), universal
-  command bar, and the Bereit→…→Verifiziert state rail.
-- The Jarvis orb and photographic depth are **CSS/SVG placeholders** and marked
-  `aria-hidden` — WebGL (Three.js / R3F) is Phase 1.
-- **All values are concept data / fixtures**, badged "Konzeptdaten" in the UI and
-  stamped `demo: true` + a `data_authority` note in every API payload. Nothing
-  here is live truth.
-
-Later: Phase 1 faithful shell + WebGL/atmosphere and interactions; Phase 2 real
-read models; Phase 3 proposals/receipts; Phase 4 Living Timeline + iPhone/PWA.
+The remaining operational gaps are explicit: this branch is not merged or
+deployed; the PWA host link and Mac-mini startup path are runbook steps; Hermes
+App shared context is not observed; Mac actions never execute; and external
+writes still require the existing Control-Plane proposal and Operator gate.
+FSM writes remain exclusively behind Cockpit `:18065`.
 
 ## Data authority (why there is no `tasks.db` here)
 
 Personal OS is **one navigable surface over federated truth**, never a copy of
-every source into a new store. When real data lands (Phase 2), each module
-projects over its authoritative system and exposes provenance / freshness /
-permissions:
+every source into a new store. Each connected module projects over its
+authoritative system and exposes provenance, freshness and permissions:
 
 - Personal jobs, goals, reminders, Codex/Claude work → existing **`mission.v2`**
   plus **`job_projection()`** / **`task_priority_preview`** and universal job
@@ -75,7 +59,7 @@ permissions:
 plugins/mikael-os/
 ├── dashboard/
 │   ├── manifest.json        # host discovery (name, tab /mikael-os, entry, css, api)
-│   ├── plugin_api.py         # read-only Phase-0 stub → /api/plugins/mikael-os/ (concept data only)
+│   ├── plugin_api.py         # read/propose adapter → /api/plugins/mikael-os/
 │   └── dist/
 │       ├── index.js          # built IIFE plugin bundle (committed)
 │       └── style.css         # extracted stylesheet (committed)

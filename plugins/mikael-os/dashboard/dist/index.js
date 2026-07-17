@@ -370,7 +370,7 @@ var MikaelOSPlugin = function() {
       ]
     }
   };
-  const NOT_WIRED = "Noch nicht verbunden — folgt in Phase 3 (über Gates, propose-only).";
+  const NOT_WIRED = "Noch nicht verbunden — in dieser Fläche keine Ausführung.";
   const LENS_TOOLS = [
     { icon: "folder-open", label: "Öffnen" },
     { icon: "panels-top-left", label: "Details" },
@@ -2089,7 +2089,7 @@ var MikaelOSPlugin = function() {
               "span",
               {
                 className: "mos__concept mos__concept--live",
-                title: "Phase 2: " + liveN + " Module projizieren echte Read-Modelle (mission.v2 / WHOOP / systemd / Approval-Cards); übrige bleiben Konzept."
+                title: liveN + " Module projizieren echte Read-Modelle mit Herkunft und Freshness; übrige bleiben sichtbar Konzept."
               },
               h(Icon, { name: "activity", size: 14 }),
               liveN + " Live · " + Math.max(0, (props.total || 0) - liveN) + " Konzept"

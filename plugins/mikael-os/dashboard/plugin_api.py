@@ -1,4 +1,4 @@
-"""MIKAEL OS dashboard-plugin backend — Phase 2 (real read models).
+"""MIKAEL OS dashboard backend — M0-M5 projections and gated proposals.
 
 Mounted at ``/api/plugins/mikael-os/`` by the Nous Hermes dashboard
 (``getattr(mod, "router")`` is included with that prefix — see
@@ -7,13 +7,15 @@ Mounted at ``/api/plugins/mikael-os/`` by the Nous Hermes dashboard
 sync endpoint in a threadpool, so the blocking file/HTTP/subprocess reads
 below are safe.
 
-Phase 2 scope — READ ONLY, ZERO WRITES
---------------------------------------
-This module **only reads**. It contains no ``INSERT``/``UPDATE``/``DELETE`` and
-issues no write call to any system. Writes remain a Phase-3 concern and will go
-through the existing proposal / capability gates (and FSM writes always through
-Cockpit :18065). The Personal OS *projects* over authoritative truth; it never
-becomes a second store.
+Runtime scope — READ BY DEFAULT, PROPOSE THROUGH EXISTING GATES
+---------------------------------------------------------------
+This module contains no direct ``INSERT``/``UPDATE``/``DELETE`` against a
+business truth. Most routes only read. Two explicit proposal routes can hand an
+intent to the existing Control-Plane ``/actions`` seam only after a deliberate
+``dryRun:false`` request; they never approve or execute it. Mac actions remain
+typed, deferred previews even when a live click is requested. FSM writes always
+stay behind Cockpit :18065. The Personal OS projects over authoritative truth;
+it never becomes a second store.
 
 Data authority = the **hermes-control-plane** (``/srv/hermes``). We deliberately
 avoid any hard cross-repo Python import (that would break in the Nous runtime).
@@ -5006,8 +5008,8 @@ def health() -> Dict[str, Any]:
     return {
         "status": "ok",
         "plugin": "mikael-os",
-        "version": "0.3.0",
-        "phase": 3,
+        "version": "0.5.0",
+        "phase": 5,
         "readPaths": {
             "missions_dir": str(MISSIONS_DIR),
             "missions_readable": MISSIONS_DIR.exists(),

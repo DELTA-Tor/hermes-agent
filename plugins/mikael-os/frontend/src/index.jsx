@@ -1,18 +1,16 @@
 /**
- * MIKAEL OS — Personal OS dashboard-plugin surface (Phase 1 shell).
- * ================================================================
+ * MIKAEL OS — Personal OS dashboard-plugin surface (M0-M5 draft).
+ * =================================================================
  *
  * A dedicated full-screen personal operating surface for Mikael, delivered as a
  * Nous Hermes *dashboard plugin* (not inside FSM, not a second task database).
  *
- * Phase 1 goal (per the V3 "Command Constellation" build handoff): render a
- * faithful, interactive full-screen private surface — photographic atmosphere
- * layer, a spatial JARVIS energy-orb, a ring of orbiting domain modules with
- * constellation connectors, a glass Focus-Lens, a command bar, and a Jarvis
- * state-rail — WITHOUT touching FSM or the host. All values here are CONCEPT
- * DATA / fixtures — explicitly badged in the UI and never presented as live
- * truth. Real read models (mission.v2 / job_projection / task_priority_preview,
- * WHOOP, calendar, Rise-L, company signals) arrive in Phase 2.
+ * The surface combines a photographic atmosphere, spatial JARVIS energy-orb,
+ * constellation modules, glass Focus-Lens, command bar, state rail, cockpit,
+ * timeline and focused area scenes. Connected modules project source-labelled
+ * read models; missing sources remain explicitly badged as concept/empty. The
+ * plugin never writes FSM directly. Proposals use the existing gated action
+ * seam, while Mac actions remain non-executing typed previews.
  *
  * Three deliberate render layers (spec):
  *   1. Atmosphere  — the photographic night-city background (CSS layer), very
@@ -94,9 +92,9 @@ function Icon(props) {
 }
 
 // ---------------------------------------------------------------------------
-// Concept fixtures — DEMO ONLY. Structure mirrors the eventual PersonalOSModule
-// contract (id/workspace/title/icon/accent/summary/pos) so Phase 2 can swap
-// fixtures for typed read-model projections without touching the renderer.
+// Concept fixtures — DEMO ONLY. Structure mirrors the PersonalOSModule
+// contract (id/workspace/title/icon/accent/summary/pos) so typed read-model
+// projections can replace fixtures without touching the renderer.
 // `pos` = centre of the node as a percentage of the constellation stage; this
 // is what reproduces the reference ring composition and what drag mutates.
 // ---------------------------------------------------------------------------
@@ -262,10 +260,9 @@ const LENS = {
   },
 };
 
-// Honest tooltip for the not-yet-wired chrome buttons (open/details/tools/add
-// etc.). Real actions arrive in Phase 3 through gates (propose-only); until then
-// these carry this hint rather than silently doing nothing.
-const NOT_WIRED = "Noch nicht verbunden — folgt in Phase 3 (über Gates, propose-only).";
+// Honest tooltip for chrome buttons that remain intentionally unwired. They
+// carry this hint rather than silently pretending to execute.
+const NOT_WIRED = "Noch nicht verbunden — in dieser Fläche keine Ausführung.";
 
 const LENS_TOOLS = [
   { icon: "folder-open", label: "Öffnen" },
@@ -323,7 +320,7 @@ function LiveAnnouncer(props) {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 — live read-model wiring.
+// Live read-model wiring.
 // The module ring positions are frontend-only composition; the *data* (summary,
 // rows, state, provenance/freshness) is projected from the control-plane via the
 // plugin's read-only adapter (/api/plugins/mikael-os/overview). Nothing here is
@@ -332,7 +329,7 @@ function LiveAnnouncer(props) {
 // and fixture modules keep `demo:true` so the "Konzept" pill stays on them.
 // ---------------------------------------------------------------------------
 const PLUGIN_API = "/api/plugins/mikael-os";
-// Phase 3 — the propose lifecycle talks ONLY to the plugin's own read/propose
+// The propose lifecycle talks ONLY to the plugin's own read/propose
 // routes (same-origin). The plugin backend is the thing that (server-side, on a
 // live submit) hands the intent to the gated control-plane :18083/actions. The
 // frontend NEVER addresses :18083 directly and NEVER calls /approvals/decide.
@@ -2101,7 +2098,7 @@ function TopBar(props) {
         if (liveN > 0) {
           return h("span",
             { className: "mos__concept mos__concept--live",
-              title: "Phase 2: " + liveN + " Module projizieren echte Read-Modelle (mission.v2 / WHOOP / systemd / Approval-Cards); übrige bleiben Konzept." },
+              title: liveN + " Module projizieren echte Read-Modelle mit Herkunft und Freshness; übrige bleiben sichtbar Konzept." },
             h(Icon, { name: "activity", size: 14 }),
             liveN + " Live · " + Math.max(0, (props.total || 0) - liveN) + " Konzept");
         }

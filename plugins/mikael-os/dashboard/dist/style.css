@@ -875,7 +875,7 @@
 }
 
 /* =========================================================================
- * Phase 2 — live read-model provenance chrome.
+ * Live read-model provenance chrome.
  * Per-module freshness pips (node + lens badge), honest empty/unavailable
  * states, and the header pill's live/loading/offline variants. Tones map to
  * the module state vocabulary: verified=live, amber=stale/partial,
