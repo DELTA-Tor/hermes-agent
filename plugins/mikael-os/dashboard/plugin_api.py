@@ -3618,8 +3618,13 @@ def _freescout_password() -> str:
     tok = (os.environ.get("MIKAELOS_FREESCOUT_PASSWORD") or "").strip()
     if not tok and os.environ.get("MIKAELOS_FREESCOUT_SECRET", "1") != "0":
         try:
-            proc = subprocess.run(["secret", "get", _FREESCOUT_SECRET_REF],
-                                  capture_output=True, text=True, timeout=6)
+            proc = subprocess.run(
+                ["secret", "get", _FREESCOUT_SECRET_REF],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=6,
+            )
             if proc.returncode == 0:
                 tok = (proc.stdout or "").strip()
         except (OSError, subprocess.SubprocessError):
