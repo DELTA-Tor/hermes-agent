@@ -2437,6 +2437,362 @@ def receipt_status(card_id: str = "", key: str = "", objective: str = "") -> Dic
     }
 
 
+# ===========================================================================
+# M1 — Cockpit read-only aggregates (glanceable KPI strip · Jarvis-Live state ·
+# Approval-Center). Everything here is ADDITIVE and READ-ONLY. Every field
+# carries the _prov envelope or an honest Strich/unavailable — NOTHING is
+# invented: no fake KPI number (missing => value=None => „—", never a fake 0),
+# no fabricated Jarvis reply, no invented proactive hint. Proactive hints are
+# DERIVED ONLY from real provider states; where a hint implies an in-scope
+# engineering action it is surfaced as a propose-only suggestion (dry-run
+# default, the existing gated /actions/propose seam) — never auto-fired, and
+# never for money/customer/personnel (out-of-scope guard applies).
+# ===========================================================================
+def _kpi(key: str, label: str, *, value: Any, unit: Optional[str], state: str,
+         source: str, source_kind: str, workspace: str, permission: str,
+         summary: str, observed_at: Optional[datetime] = None,
+         stale_after: Optional[int] = None, note: Optional[str] = None,
+         extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """One glanceable KPI + a _prov envelope. ``value=None`` is the honest Strich
+    (rendered „—"): a real reading is missing/partial/unavailable, never faked."""
+    payload: Dict[str, Any] = {
+        "key": key, "label": label,
+        "value": value,           # None => honest „—"; a scalar/str only when real
+        "unit": unit,
+        "state": state,           # fresh|stale|partial|empty|unavailable|error
+        "source": source, "sourceKind": source_kind,
+        "workspace": workspace, "permission": permission,
+        "observedAt": _iso(observed_at), "staleAfterSeconds": stale_after,
+        "summary": summary,
+    }
+    if note:
+        payload["note"] = note
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def _recovery_kpi_bits(body: Dict[str, Any]) -> Tuple[Optional[str], Optional[datetime], str]:
+    """Extract the measured Recovery % from a module_body() payload — the real
+    value only (statusLabel == „Gemessen"), else (None, observed, state)."""
+    state = str(body.get("state") or "")
+    observed = _parse_iso(body.get("observedAt"))
+    if state in ("fresh", "stale"):
+        for r in body.get("rows") or []:
+            if r.get("title") == "Recovery" and str(r.get("statusLabel")) == "Gemessen":
+                v = str(r.get("value") or "").strip()
+                if v.endswith("%") and v[:-1].strip() not in ("", "—"):
+                    return v[:-1].strip(), observed, state
+    return None, observed, state
+
+
+def kpi_recovery() -> Dict[str, Any]:
+    """KPI 1 — WHOOP Recovery. Honest Strich unless a real value is measured."""
+    body = module_body()
+    val, observed, bstate = _recovery_kpi_bits(body)
+    if val is not None:
+        return _kpi("recovery", "Recovery", value=val, unit="%",
+                    state=_freshness_state(observed, STALE["body"]) if observed else "fresh",
+                    source="WHOOP · /internal/summary", source_kind="http",
+                    workspace="private", permission="Nur lesen (privat)",
+                    summary=f"Recovery {val}%", observed_at=observed, stale_after=STALE["body"])
+    # No measured value: pass the module's honest state through as a Strich.
+    kpi_state = bstate if bstate in ("partial", "unavailable", "empty", "error") else "partial"
+    return _kpi("recovery", "Recovery", value=None, unit="%", state=kpi_state,
+                source=str(body.get("source") or "WHOOP-Connector :18090"), source_kind="http",
+                workspace="private", permission="Nur lesen (privat)",
+                summary=str(body.get("summary") or "Kein Recovery-Wert"),
+                stale_after=STALE["body"],
+                note=str(body.get("note") or "Recovery nicht im Plugin-Kontext lesbar (WHOOP-Token = gated)."))
+
+
+def kpi_next_exam() -> Dict[str, Any]:
+    """KPI 2 — nächste Klausur (Tage). Real countdown or honest empty/unavailable."""
+    row, nxt = _nearest_exam_bits()
+    ex = _read_exams()
+    observed = ex.get("observed")
+    if nxt:
+        days = int(nxt["daysLeft"])
+        return _kpi("next_exam", "Nächste Klausur", value=days, unit="Tage",
+                    state=_freshness_state(observed, STALE["study"]) if observed else "fresh",
+                    source=STUDY_SOURCE, source_kind="file", workspace="private",
+                    permission=_STUDY_PERM,
+                    summary=(f"{nxt['fach']} · " + ("heute" if days == 0 else f"in {days} T")),
+                    observed_at=observed, stale_after=STALE["study"],
+                    extra={"fach": nxt["fach"], "datum": nxt.get("datum")})
+    reason = ex.get("reason")
+    if reason in ("malformed", "read") or not ex.get("ok"):
+        return _kpi("next_exam", "Nächste Klausur", value=None, unit="Tage",
+                    state="unavailable", source=STUDY_SOURCE, source_kind="file",
+                    workspace="private", permission=_STUDY_PERM,
+                    summary="exams.json nicht lesbar", observed_at=observed,
+                    stale_after=STALE["study"], note="exams.json fehlt/defekt — kein Countdown.")
+    return _kpi("next_exam", "Nächste Klausur", value=None, unit="Tage", state="empty",
+                source=STUDY_SOURCE, source_kind="file", workspace="private",
+                permission=_STUDY_PERM, summary="Keine anstehende Klausur",
+                observed_at=observed, stale_after=STALE["study"],
+                note="Keine zukünftigen Klausurtermine in exams.json.")
+
+
+def kpi_open_gates() -> Dict[str, Any]:
+    """KPI 3 — offene Approval-Cards (Freigaben). Real count or honest unavailable."""
+    m = module_company()
+    state = str(m.get("state") or "")
+    observed = _parse_iso(m.get("observedAt"))
+    if state == "unavailable":
+        return _kpi("open_gates", "Offene Freigaben", value=None, unit=None,
+                    state="unavailable", source="/srv/hermes/approvals", source_kind="file",
+                    workspace="company_signal", permission="Nur lesen",
+                    summary="Approval-Speicher nicht lesbar", stale_after=STALE["company"],
+                    note=str(m.get("note") or "Approvals-Verzeichnis nicht erreichbar."))
+    pending = int(m.get("pending") or 0)
+    return _kpi("open_gates", "Offene Freigaben", value=pending, unit=None,
+                state="fresh" if state == "empty" else state,
+                source="/srv/hermes/approvals (Approval-Cards)", source_kind="file",
+                workspace="company_signal", permission="Nur lesen",
+                summary=("Keine offenen Freigaben" if pending == 0 else f"{pending} Freigaben offen"),
+                observed_at=observed, stale_after=STALE["company"],
+                extra={"readOnly": True})
+
+
+def kpi_running_jobs() -> Dict[str, Any]:
+    """KPI 4 — laufende Jobs, CROSS-WORKSPACE (all mission.v2, not just engineering).
+    A read of the missions dir: 0 running is an honest fact; an unreadable dir is
+    an honest unavailable (Strich), never conflated with 'zero'."""
+    if not MISSIONS_DIR.exists():
+        return _kpi("running_jobs", "Laufende Jobs", value=None, unit=None,
+                    state="unavailable", source="mission.v2 · /srv/hermes/missions",
+                    source_kind="file", workspace="engineering", permission="Nur lesen",
+                    summary="Missions-Verzeichnis nicht lesbar",
+                    note="Kein Read-Pfad auf /srv/hermes/missions.")
+    missions = _read_missions()
+    running = [m for m in missions if str(m.get("state")) == "running"]
+    observed = max((_parse_iso(m.get("updated_at")) for m in missions),
+                   default=None,
+                   key=lambda d: d or datetime.min.replace(tzinfo=timezone.utc))
+    return _kpi("running_jobs", "Laufende Jobs", value=len(running), unit=None,
+                state="fresh" if not missions else (
+                    _freshness_state(observed, STALE["tasks"]) if observed else "fresh"),
+                source="mission.v2 (alle Workspaces) · /srv/hermes/missions", source_kind="file",
+                workspace="engineering", permission="Nur lesen",
+                summary=("Keine laufenden Jobs" if not running else f"{len(running)} laufen"),
+                observed_at=observed, stale_after=STALE["tasks"],
+                extra={"total": len(missions)})
+
+
+def cockpit_kpi() -> Dict[str, Any]:
+    """The 4 glanceable KPIs, each with its own _prov envelope + honest Strich.
+    Thin aggregate over existing readers — no new data source, no fabrication."""
+    kpis = [kpi_recovery(), kpi_next_exam(), kpi_open_gates(), kpi_running_jobs()]
+    return {
+        "kpis": kpis,
+        "observedAt": _iso(_now()),
+        "note": ("Vier glanceable KPIs aus bestehenden Read-Providern. value=null "
+                 "bedeutet ehrlich „—“ (Messwert fehlt/gated/unavailable) — nie eine "
+                 "erfundene Zahl."),
+    }
+
+
+# --- Jarvis-Live: honest state summary + state-derived proactive hints -------
+# There is no dedicated conversational „Jarvis turn" endpoint that is grounded in
+# THIS plugin's state; the honest path (see BACKEND recce) is a state summary +
+# hints derived ONLY from real provider states, plus an honest chat-connectivity
+# flag reporting the REAL reachability of the one proven chat backend (Brain-
+# Gateway :18084). We never synthesize a chat reply here and never claim open
+# business-data chat (jarvis_rag.py's own stated boundary) is connected.
+_RECOVERY_DEEPWORK_MIN = int(os.environ.get("MIKAELOS_RECOVERY_DEEPWORK_MIN", "66"))
+_RECOVERY_REST_MAX = int(os.environ.get("MIKAELOS_RECOVERY_REST_MAX", "34"))
+_EXAM_FOCUS_DAYS = int(os.environ.get("MIKAELOS_EXAM_FOCUS_DAYS", "7"))
+
+
+def _jarvis_hints(body: Dict[str, Any], company: Dict[str, Any],
+                  risel: Dict[str, Any], missions: List[Dict[str, Any]],
+                  next_exam: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Proactive hints DERIVED ONLY from real provider states. Every hint names
+    its source; none is invented. A hint that implies an in-scope engineering
+    follow-up carries a propose-only suggestion (dry-run default, gated seam)."""
+    hints: List[Dict[str, Any]] = []
+
+    # (1) WHOOP recovery — advisory only (health signal, no control-plane action).
+    rec, _obs, _st = _recovery_kpi_bits(body)
+    if rec is not None:
+        try:
+            rv = float(rec.replace(",", "."))
+        except ValueError:
+            rv = None
+        if rv is not None and rv >= _RECOVERY_DEEPWORK_MIN:
+            hints.append({"id": "recovery_high", "severity": "info", "icon": "battery-full",
+                          "title": f"Recovery {rec}% — Deep-Work-Fenster",
+                          "detail": "Hohe Erholung gemessen — guter Tag für fokussierte, harte Arbeit.",
+                          "source": "WHOOP · /internal/summary", "workspace": "private"})
+        elif rv is not None and rv <= _RECOVERY_REST_MAX:
+            hints.append({"id": "recovery_low", "severity": "attention", "icon": "battery-low",
+                          "title": f"Recovery {rec}% — leichter Tag",
+                          "detail": "Niedrige Erholung gemessen — heute eher regenerativ planen.",
+                          "source": "WHOOP · /internal/summary", "workspace": "private"})
+
+    # (2) Nächste Klausur — advisory study focus (real countdown).
+    if next_exam and int(next_exam.get("daysLeft", 999)) <= _EXAM_FOCUS_DAYS:
+        d = int(next_exam["daysLeft"])
+        hints.append({"id": "exam_soon", "severity": "attention", "icon": "calendar-clock",
+                      "title": (f"Klausur {next_exam['fach']} " + ("heute" if d == 0 else f"in {d} T")),
+                      "detail": "Klausur steht kurz bevor — Lernfokus einplanen.",
+                      "source": STUDY_SOURCE, "workspace": "private"})
+
+    # (3) Offene Freigaben — operator-only decision; the plugin NEVER decides.
+    pending = int(company.get("pending") or 0)
+    if pending > 0:
+        hints.append({"id": "gates_pending", "severity": "attention", "icon": "shield-check",
+                      "title": f"{pending} Freigabe(n) warten",
+                      "detail": ("Approval-Cards offen — nur der Operator entscheidet "
+                                 "(/approvals/decide); dieses Cockpit liest sie nur."),
+                      "source": "/srv/hermes/approvals", "workspace": "company_signal"})
+
+    # (4) Rise-L gestörte Dienste — restart ist ein Gate; hier NUR Hinweis, kein Propose.
+    svc = risel.get("services") if isinstance(risel.get("services"), dict) else None
+    failed = int((svc or {}).get("failed") or 0)
+    if failed > 0:
+        hints.append({"id": "risel_failed", "severity": "attention", "icon": "server-off",
+                      "title": f"{failed} Dienst(e) gestört",
+                      "detail": ("systemd --user meldet gestörte Dienste — prüfen. "
+                                 "Neustart ist ein Prod-Restart-Gate (Operator)."),
+                      "source": "systemd --user", "workspace": "engineering"})
+
+    # (5) Blockierte Engineering-Mission -> in-scope Propose-Vorschlag (dry-run default).
+    for m in missions:
+        if str(m.get("workspace_type") or "") != "engineering":
+            continue
+        if str(m.get("state")) not in ("blocked", "reconcile_required"):
+            continue
+        goal = str(m.get("goal") or m.get("expected_result") or "Mission").strip()[:80]
+        objective = f"Blockierte Engineering-Mission prüfen: {goal}"
+        if _scope_reason(objective):   # never money/customer/personnel
+            continue
+        hints.append({
+            "id": "mission_blocked", "severity": "attention", "icon": "octagon-alert",
+            "title": f"Mission blockiert: {goal}",
+            "detail": "Engineering-Mission hängt — Follow-up als propose-only Vorschlag (dry-run).",
+            "source": "mission.v2 · /srv/hermes/missions", "workspace": "engineering",
+            "propose": {"route": "/actions/propose", "objective": objective,
+                        "dryRun": True, "proposeOnly": True,
+                        "note": "Vorschlag — nichts wird ausgeführt; das Gate entscheidet."},
+        })
+        break  # one is enough for a hint strip
+
+    return hints
+
+
+def cockpit_jarvis_state() -> Dict[str, Any]:
+    """Honest Jarvis-Live: a state summary + proactive hints derived ONLY from
+    real provider states, plus an honest chat-connectivity flag. No synthesized
+    reply, no invented hint, no false 'connected'."""
+    body = module_body()
+    company = module_company()
+    risel = module_risel()
+    missions = _read_missions() if MISSIONS_DIR.exists() else []
+    _row, next_exam = _nearest_exam_bits()
+    chat = _brain_status()   # REAL reachability of the one proven chat backend
+
+    running = sum(1 for m in missions if str(m.get("state")) == "running")
+    pending = int(company.get("pending") or 0)
+    svc = risel.get("services") if isinstance(risel.get("services"), dict) else None
+    failed = int((svc or {}).get("failed") or 0)
+
+    hints = _jarvis_hints(body, company, risel, missions, next_exam)
+
+    return {
+        "observedAt": _iso(_now()),
+        # Honest chat flag: connected iff a REAL chat backend answers AND a token
+        # is present. Otherwise connected=false with the honest reason — the UI
+        # shows „Jarvis-Chat nicht verbunden", never a fake conversation.
+        "chat": {
+            "connected": bool(chat.get("ready")),
+            "backend": chat.get("base"),
+            "reachable": bool(chat.get("reachable")),
+            "hasToken": bool(chat.get("hasToken")),
+            "mode": "coaching_reachable" if chat.get("ready") else "not_connected",
+            "note": chat.get("note"),
+            "scope": ("Doktrin/Coaching-Chat über Brain-Gateway erreichbar. Offener "
+                      "Geschäftsdaten-Chat (FSM/Paperless/Qdrant) ist NICHT verbunden "
+                      "(eigener Datenklassen-Vertrag nötig)."),
+        },
+        "state": {
+            "runningJobs": running,
+            "openGates": pending,
+            "failedServices": failed,
+            "nextExam": next_exam,
+            "recovery": _recovery_kpi_bits(body)[0],
+        },
+        "hints": hints,
+        "note": ("Zustands-Zusammenfassung + proaktive Hinweise ausschließlich aus "
+                 "realen Provider-States abgeleitet. Kein erfundener Hinweis, keine "
+                 "synthetische Chat-Antwort. Handlungs-Hinweise sind propose-only "
+                 "(dry-run default) — das Plugin führt nichts aus."),
+    }
+
+
+# --- Approval-Center read (offene Freigaben inkl. Intent-Hash) ---------------
+def cockpit_approvals(include_decided: bool = False) -> Dict[str, Any]:
+    """READ-ONLY Approval-Center: offene Approval-Cards inkl. Intent-Hash
+    (``intent_sha256``) + idempotency_key aus /srv/hermes/approvals. Liest nur;
+    entscheidet nie (kein /approvals/decide). Honest empty/unavailable."""
+    if not APPROVALS_DIR.exists():
+        return _prov(
+            state="unavailable", source="/srv/hermes/approvals", source_kind="file",
+            workspace="company_signal", permission="Nur lesen",
+            summary="Approval-Speicher nicht lesbar", stale_after=STALE["company"],
+            note="Approvals-Verzeichnis nicht erreichbar.",
+            extra={"readOnly": True, "cards": [], "pending": 0})
+    cards: List[Dict[str, Any]] = []
+    newest: Optional[datetime] = None
+    for path in sorted(glob.glob(str(APPROVALS_DIR / "appr_*.json"))):
+        try:
+            c = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        status = str(c.get("status") or "").lower() or "pending"
+        is_pending = status in ("pending", "")
+        if not include_decided and not is_pending:
+            continue
+        dt = _parse_iso(c.get("created_utc"))
+        if is_pending and dt and (newest is None or dt > newest):
+            newest = dt
+        cards.append({
+            "id": c.get("id"),
+            "text": str(c.get("text") or c.get("action") or "Approval")[:200],
+            "action": c.get("action"),
+            "gateClass": c.get("gate_class"),
+            "gateReason": c.get("gate_reason"),
+            "status": status,
+            "lifecycle": _CARD_STATUS_LIFECYCLE.get(status, "waiting_approval"),
+            "createdUtc": c.get("created_utc"),
+            "mandant": c.get("mandant"),
+            "targetSystem": c.get("target_system"),
+            # Intent-Hash + Idempotenz — der Nachweis, welche Absicht gegatet ist.
+            "intentSha256": c.get("intent_sha256"),
+            "idempotencyKey": c.get("idempotency_key"),
+            "payloadSha256": c.get("payload_sha256"),
+        })
+    pending_n = sum(1 for c in cards if c["lifecycle"] == "waiting_approval")
+    if not cards:
+        return _prov(
+            state="empty", source="/srv/hermes/approvals", source_kind="file",
+            workspace="company_signal", permission="Nur lesen",
+            summary="Keine offenen Approval-Cards", stale_after=STALE["company"],
+            extra={"readOnly": True, "cards": [], "pending": 0})
+    cards.sort(key=lambda c: str(c.get("createdUtc") or ""), reverse=True)
+    return _prov(
+        state=_freshness_state(newest, STALE["company"]) if newest else "fresh",
+        source="/srv/hermes/approvals (Approval-Cards)", source_kind="file",
+        workspace="company_signal", permission="Nur lesen (entscheidet nie)",
+        summary=f"{pending_n} Approval-Card(s) offen",
+        observed_at=newest, stale_after=STALE["company"],
+        note=("Read-only Approval-Center inkl. Intent-Hash. Freigabe/Ablehnung "
+              "läuft ausschließlich über den Operator (/approvals/decide) — dieses "
+              "Plugin liest nur."),
+        extra={"readOnly": True, "cards": cards, "pending": pending_n})
+
+
 # ---------------------------------------------------------------------------
 # HTTP surface. GET reads are zero-write. The single POST route is propose-only:
 # dry-run previews with no network; a live submit hands the intent to the gated
@@ -2461,6 +2817,30 @@ def actions_propose(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any
 def actions_receipt(cardId: str = "", key: str = "", objective: str = "") -> Dict[str, Any]:
     """Read-only receipt/status lookup (Approval-Cards + mission.v2). No writes."""
     return receipt_status(card_id=cardId, key=key, objective=objective)
+
+
+@router.get("/cockpit/kpi")
+def cockpit_kpi_route() -> Dict[str, Any]:
+    """READ-ONLY glanceable KPI strip: Recovery · nächste Klausur · offene
+    Freigaben · laufende Jobs. Each carries a _prov envelope; a missing reading
+    is an honest „—" (value=null), never a fabricated number. No writes."""
+    return cockpit_kpi()
+
+
+@router.get("/cockpit/jarvis-state")
+def cockpit_jarvis_state_route() -> Dict[str, Any]:
+    """READ-ONLY Jarvis-Live: state summary + proactive hints derived ONLY from
+    real provider states, plus an honest chat-connectivity flag (real Brain-
+    Gateway reachability). No synthesized reply, no invented hint. Action-shaped
+    hints are propose-only (dry-run default); nothing is executed here."""
+    return cockpit_jarvis_state()
+
+
+@router.get("/cockpit/approvals")
+def cockpit_approvals_route(includeDecided: bool = False) -> Dict[str, Any]:
+    """READ-ONLY Approval-Center: offene Approval-Cards inkl. Intent-Hash
+    (intent_sha256) + idempotency_key. Liest nur — nie /approvals/decide."""
+    return cockpit_approvals(include_decided=bool(includeDecided))
 
 
 @router.get("/review/session")

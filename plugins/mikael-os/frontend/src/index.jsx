@@ -283,12 +283,16 @@ const CHIPS = [
 ];
 
 // State-rail: the Jarvis conversational lifecycle. `tone` colours the active dot.
+// Per-state colour coding matches the master mockups' rail (green→cyan→violet→
+// amber→blue→green), not a mono-cyan strip. FOKUS carries the violet duoton.
 const STATES = [
   { id: "ready", icon: "circle", label: "Bereit", tone: "ready" },
-  { id: "listening", icon: "ear", label: "Hört zu", tone: "ready" },
-  { id: "thinking", icon: "brain", label: "Denkt", tone: "ready" },
+  { id: "listening", icon: "ear", label: "Hört zu", tone: "listen" },
+  { id: "thinking", icon: "brain", label: "Denkt", tone: "think" },
+  // FOKUS — deep-work / focus mode (violet), matches jd-master-A/B state rail.
+  { id: "focus", icon: "target", label: "Fokus", tone: "focus" },
   { id: "suggest", icon: "lightbulb", label: "Vorschlag", tone: "amber" },
-  { id: "executing", icon: "zap", label: "Ausführung", tone: "amber" },
+  { id: "executing", icon: "zap", label: "Ausführung", tone: "exec" },
   { id: "verified", icon: "circle-check-big", label: "Verifiziert", tone: "verified" },
 ];
 
@@ -349,6 +353,13 @@ const STUDY_PLAN_API = PLUGIN_API + "/study/plan";
 const FEYNMAN_API = PLUGIN_API + "/study/feynman";
 const FEYNMAN_EVAL_API = PLUGIN_API + "/study/feynman/evaluate";
 const STUDY_PROPOSE_API = PLUGIN_API + "/study/plan/propose";
+// Cockpit (M1) — the three read-only Cockpit routes (same-origin plugin routes;
+// GET only, zero-write). Each response carries the honest _prov envelope from
+// plugin_api.py; the value is never fabricated in the frontend. The Approval-
+// Center reads /cockpit/approvals ONLY — it never reaches /approvals/decide.
+const KPI_API = PLUGIN_API + "/cockpit/kpi";
+const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
+const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
 const POS = MODULES.reduce((acc, m) => { acc[m.id] = m.pos; return acc; }, {});
 
 // SDK-aware POST/GET. Prefer the host's authed transport; fall back to window
@@ -1463,7 +1474,13 @@ function MobileHome(props) {
   return h(
     "div",
     { className: "mos__m-scroll" },
-    h(MobileHeute, null),
+    // Cockpit stack (UI-SPEC §3) — KPI strip · Jarvis teaser · Heute · Firma ·
+    // Approvals — the glanceable command surface, above the module grid.
+    h(MobileCockpit, {
+      byId: props.byId, workspace: props.workspace || "private", load: props.loadState,
+      cockpit: props.cockpit || {}, cockpitLoad: props.cockpitLoad,
+      onGoJarvis: props.onGoJarvis, onGoTimeline: props.onGoTimeline, onGoApprovals: props.onGoApprovals,
+    }),
     h(
       "div",
       { className: "mos__mgrid-head" },
@@ -1869,6 +1886,9 @@ function MobileShell(props) {
     content = h(MobileHome, {
       byId: props.byId, modules: props.modules, onOpen: props.onOpen,
       stateIndex: props.stateIndex, greeting: props.greeting, onGoJarvis: props.onGoJarvis,
+      workspace: props.workspace, loadState: props.loadState,
+      cockpit: props.cockpit, cockpitLoad: props.cockpitLoad,
+      onChip: props.onChip, onGoTimeline: props.onGoTimeline, onGoApprovals: props.onGoApprovals,
     });
   }
   return h(
@@ -1899,13 +1919,19 @@ function MobileShell(props) {
 }
 
 function SceneSwitcher(props) {
+  // Order per UI-SPEC §0: Cockpit (default) · Konstellation · Timeline.
   return h(
     "div",
-    { className: "mos__scenes", role: "group", "aria-label": "Ansicht wechseln" },
-    [{ id: "constellation", icon: "orbit", label: "Konstellation" }, { id: "timeline", icon: "waypoints", label: "Timeline" }].map((s) =>
+    { className: "mos__scenes", role: "tablist", "aria-label": "Ansicht wechseln" },
+    [{ id: "cockpit", icon: "layout-dashboard", label: "Cockpit" },
+     { id: "constellation", icon: "orbit", label: "Konstellation" },
+     { id: "timeline", icon: "waypoints", label: "Timeline" }].map((s) =>
       h(
         "button",
-        { key: s.id, type: "button", className: "mos__scene-tab", "aria-pressed": props.scene === s.id ? "true" : "false", onClick: () => props.onScene(s.id) },
+        { key: s.id, type: "button", role: "tab", className: "mos__scene-tab",
+          "aria-selected": props.scene === s.id ? "true" : "false",
+          "aria-pressed": props.scene === s.id ? "true" : "false",
+          onClick: () => props.onScene(s.id) },
         h(Icon, { name: s.icon, size: 15 }), h("span", null, s.label),
       )),
   );
@@ -2722,6 +2748,439 @@ function CoachSurface(props) {
 // ---------------------------------------------------------------------------
 // Root component
 // ---------------------------------------------------------------------------
+// ===========================================================================
+// COCKPIT — the default scene (Synthese B+C+A). A glanceable 24/7 command-
+// center that reads ONLY from the three M1 read routes (/cockpit/kpi,
+// /cockpit/jarvis-state, /cockpit/approvals) + the existing /overview modules.
+// Every zone carries an honest state (loading·empty·stale·unavailable·error);
+// value:null renders the honest Strich „—" — NOTHING is ever fabricated. Chat is
+// honest: when the backend reports not-connected the UI says so — never a fake
+// answer. The Approval-Center reads only; it never reaches /approvals/decide.
+// ===========================================================================
+
+// KPI key → icon + accent (visual identity only; VALUE + STATE come from the
+// backend _prov envelope and are never invented here).
+const KPI_META = {
+  recovery:     { icon: "heart-pulse",    accent: "emerald" },
+  next_exam:    { icon: "graduation-cap", accent: "violet" },
+  open_gates:   { icon: "shield-check",   accent: "amber" },
+  running_jobs: { icon: "rocket",         accent: "cyan" },
+};
+// KPI/zone state → pip tone (reuse the module STATE_META vocabulary; no new colour).
+const ZONE_TONE = {
+  fresh: "verified", stale: "amber", partial: "blue",
+  empty: "muted", unavailable: "red", error: "red", loading: "muted", gated: "gated",
+};
+
+// Workspace id → short tag (used on Agenda rows + Jarvis chips; the "2+1" split
+// on the Heute tile is preserved by tagging each row, never blending a sum).
+const WS_TAG = {
+  private:        { label: "Privat", tone: "cyan" },
+  company_signal: { label: "Firma",  tone: "neutral" },
+  engineering:    { label: "Eng",    tone: "violet" },
+};
+
+// Approval gate-class → CATEGORY. Pure categorisation per UI-SPEC §5/§6 — NEVER
+// an action and never a decision path. Geld=amber · Kunde=blue · Personal=violet
+// · Restart/destruktiv=red. Falls back to a neutral gated pill.
+function gateCategory(gc, gr, text) {
+  const s = ((gc || "") + " " + (gr || "") + " " + (text || "")).toLowerCase();
+  if (/personal|personnel|\bhr\b|mitarbeiter|lohn|gehalt/.test(s)) return { label: "Personal", tone: "violet", icon: "user" };
+  if (/money|billing|invoice|sevdesk|payment|rechnung|buchen|zahlung|geld|betrag/.test(s)) return { label: "Geld", tone: "amber", icon: "banknote" };
+  if (/customer|extern|kunde|versand|auftrag|angebot|mail/.test(s)) return { label: "Kunde", tone: "blue", icon: "building-2" };
+  if (/restart|prod-restart|neustart/.test(s)) return { label: "Restart", tone: "red", icon: "server" };
+  if (/destructive|schema|delete|destruktiv|migration|\bdrop\b/.test(s)) return { label: "Daten", tone: "red", icon: "octagon-alert" };
+  return { label: "Gate", tone: "gated", icon: "shield-check" };
+}
+
+// Shared honest state pip for a cockpit zone header (loading spins; konzept for
+// fixtures; otherwise the STATE_META tone + freshness age + source tooltip).
+function ZonePip(props) {
+  const st = props.state || "loading";
+  if (st === "konzept") {
+    return h("span", { className: "mos__pip mos__pip--konzept mos__zone-pip", title: props.note || "Konzeptdaten" },
+      h(Icon, { name: "flask-conical", size: 11 }), "Konzept");
+  }
+  const meta = STATE_META[st] || STATE_META.loading;
+  const tone = ZONE_TONE[st] || "muted";
+  const fresh = props.observedAt ? freshnessLabel(props.observedAt) : null;
+  const tip = [props.source && ("Quelle: " + props.source), fresh && ("Stand: " + fresh), props.note].filter(Boolean).join(" · ");
+  return h("span", { className: "mos__pip mos__pip--" + tone + " mos__zone-pip", title: tip || meta.label },
+    st === "loading"
+      ? h(Icon, { name: "loader", size: 11, className: "is-spin" })
+      : h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+    meta.label,
+    fresh && (st === "fresh" || st === "stale" || st === "partial") ? h("span", { className: "mos__pip-age" }, fresh) : null);
+}
+
+// Shared honest empty/unavailable block. `unavailable`/`error` read red+unplug
+// (a real source is down); everything else reads a calm muted state — a 0 is a
+// fact, never an alarm.
+function ZoneEmpty(props) {
+  const st = props.state || "empty";
+  const bad = st === "unavailable" || st === "error";
+  return h("div", { className: "mos__zone-empty mos--" + (bad ? "red" : "muted") },
+    h(Icon, { name: bad ? "unplug" : (props.icon || "inbox"), size: 20 }),
+    h("span", { className: "mos__zone-empty-t" }, props.title || (STATE_META[st] || STATE_META.empty).label),
+    props.note ? h("span", { className: "mos__zone-empty-n" }, props.note) : null);
+}
+
+// --- KPI bar (top) — 4 glanceable pills, each referencing its own state -------
+function KpiPill(props) {
+  const k = props.kpi;
+  const meta = KPI_META[k.key] || { icon: "circle", accent: "cyan" };
+  const st = k.state || "loading";
+  const tone = ZONE_TONE[st] || "muted";
+  const spinning = st === "loading";
+  const hasVal = k.value !== null && k.value !== undefined && k.value !== "";
+  const tip = [k.summary, k.note, k.source && ("Quelle: " + k.source)].filter(Boolean).join(" · ");
+  return h("button", {
+    type: "button",
+    className: "mos__kpi mos__kpi--" + tone + " mos--" + meta.accent + (props.onClick ? " is-click" : ""),
+    title: tip || k.label,
+    onClick: props.onClick,
+    "aria-label": k.label + ": " + (hasVal ? (k.value + (k.unit ? " " + k.unit : "")) : "kein Wert (" + (STATE_META[st] || STATE_META.loading).label + ")"),
+  },
+    h("span", { className: "mos__kpi-ico" }, h(Icon, { name: spinning ? "loader" : meta.icon, size: 18, className: spinning ? "is-spin" : "" })),
+    h("span", { className: "mos__kpi-main" },
+      h("span", { className: "mos__kpi-label" }, k.label),
+      h("span", { className: "mos__kpi-val" },
+        hasVal
+          ? [String(k.value), k.unit ? h("i", { key: "u", className: "mos__kpi-unit" }, k.unit) : null]
+          : h("span", { className: "mos__kpi-dash", title: k.note || k.summary || "" }, "—")),
+    ),
+    h("span", { className: "mos__kpi-pip mos__pip mos__pip--" + tone }, h("span", { className: "mos__pip-dot", "aria-hidden": "true" })),
+  );
+}
+
+const KPI_FALLBACK = [
+  { key: "recovery", label: "Recovery", unit: "%" },
+  { key: "next_exam", label: "Nächste Klausur", unit: "Tage" },
+  { key: "open_gates", label: "Offene Freigaben", unit: null },
+  { key: "running_jobs", label: "Laufende Jobs", unit: null },
+];
+function KpiBar(props) {
+  const c = props.cockpit || {};
+  const load = props.load;
+  const real = c.kpi && Array.isArray(c.kpi.kpis) && c.kpi.kpis.length;
+  const kpis = real
+    ? c.kpi.kpis
+    : KPI_FALLBACK.map((f) => ({ ...f, value: null, state: load === "loading" ? "loading" : "unavailable" }));
+  return h("div", { className: "mos__kpibar", role: "group", "aria-label": "Kennzahlen" },
+    kpis.map((k) => h(KpiPill, { key: k.key, kpi: k, onClick: k.key === "open_gates" ? props.onGates : undefined })));
+}
+
+// --- Agenda rail (left) — HEUTE (calendar-evidence) / engineering work-streams -
+function AgendaRow(props) {
+  const r = props.row;
+  const wtag = WS_TAG[r.workspace];
+  return h("div", { className: "mos__agrow mos--" + (r.accent || "cyan") + (r.readOnly ? " is-ro" : "") },
+    h("span", { className: "mos__agrow-time" }, r.value || "—"),
+    h("span", { className: "mos__agrow-ico" }, h(Icon, { name: r.icon || "calendar-days", size: 15 })),
+    h("span", { className: "mos__agrow-body" },
+      h("span", { className: "mos__agrow-title" }, r.title),
+      r.sub ? h("span", { className: "mos__agrow-sub" }, r.sub) : null),
+    wtag ? h("span", { className: "mos__wtag mos__wtag--" + wtag.tone, title: r.workspace }, wtag.label) : null);
+}
+
+const AGENDA_MAX = 4;
+function AgendaRail(props) {
+  const ws = props.workspace;
+  const eng = ws === "engineering";
+  const src = eng ? props.engineeringModule : props.todayModule;
+  const st = src ? (src._state || "loading") : (props.load === "loading" ? "loading" : "empty");
+  let rows = (src && Array.isArray(src._rows)) ? src._rows.slice() : [];
+  // Workspace filter (UI-SPEC §4): private = only private calendar rows;
+  // company_signal = private + Dispo rows (never blended, each tagged);
+  // engineering = the work-streams instead of the calendar.
+  if (!eng && ws === "private") rows = rows.filter((r) => (r.workspace || "private") === "private");
+  const head = eng ? "Arbeitsstränge" : "Heute";
+  const headIcon = eng ? "git-branch" : "sun";
+  const shown = rows.slice(0, AGENDA_MAX);
+  const extra = rows.length - shown.length;
+  const demo = src && src._demo;
+  return h("section", { className: "mos__card mos__agenda" },
+    h("header", { className: "mos__card-head" },
+      h(Icon, { name: headIcon, size: 16 }),
+      h("span", { className: "mos__card-title" }, head),
+      h(ZonePip, { state: demo ? "konzept" : st, observedAt: src && src._observedAt, source: src && src._source, note: src && src._note })),
+    h("div", { className: "mos__agenda-body" },
+      props.load === "loading" && !src
+        ? [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" }))
+        : shown.length
+          ? [
+              ...shown.map((r, i) => h(AgendaRow, { key: i, row: r })),
+              extra > 0
+                ? h("button", { key: "more", type: "button", className: "mos__agenda-more", onClick: props.onMore },
+                    h(Icon, { name: "ellipsis", size: 14 }), "+" + extra + " weitere")
+                : null,
+            ]
+          : h(ZoneEmpty, { state: st, icon: "calendar-days", title: eng ? "Keine Arbeitsstränge" : "Keine Termine heute", note: src && src._note })));
+}
+
+// --- Jarvis-Live (center) — honest state summary + proactive hints + one Vorschlag
+function JarvisBubble(props) {
+  const b = props.bubble;
+  return h("div", { className: "mos__jbub is-" + (b.tone || "cyan") },
+    h("span", { className: "mos__jbub-ava" }, h(Icon, { name: b.icon || "orbit", size: 14 })),
+    h("div", { className: "mos__jbub-body" },
+      b.title ? h("span", { className: "mos__jbub-title" }, b.title) : null,
+      h("span", { className: "mos__jbub-text" }, b.text),
+      (b.source || b.workspace) ? h("span", { className: "mos__jbub-meta" },
+        b.workspace && WS_TAG[b.workspace] ? h("span", { className: "mos__wtag mos__wtag--" + WS_TAG[b.workspace].tone }, WS_TAG[b.workspace].label) : null,
+        b.source ? h("span", { className: "mos__jbub-src" }, b.source) : null) : null));
+}
+
+// The proactive Vorschlag — amber PROPOSE look. It only proposes (dry-run); the
+// gate decides. Nothing fires from here; the button opens the propose overlay.
+function SuggestionCard(props) {
+  const hint = props.hint;
+  const obj = hint.propose && hint.propose.objective;
+  return h("div", { className: "mos__suggest" },
+    h("div", { className: "mos__suggest-head" },
+      h(Icon, { name: "flask-conical", size: 15 }),
+      h("span", { className: "mos__suggest-kind" }, "Vorschlag · propose-only (Dry-Run)"),
+      h("span", { className: "mos__suggest-tag" }, h(Icon, { name: "shield-check", size: 12 }), "Gate entscheidet")),
+    h("div", { className: "mos__suggest-title" }, hint.title),
+    hint.detail ? h("div", { className: "mos__suggest-detail" }, hint.detail) : null,
+    h("div", { className: "mos__suggest-foot" },
+      h("button", { type: "button", className: "mos__suggest-btn", onClick: () => props.onPropose(obj),
+        title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst." },
+        h(Icon, { name: "git-branch", size: 15 }), "Als Codex-Aufgabe vorschlagen"),
+      h("span", { className: "mos__suggest-note" }, "Nichts wird ausgeführt.")));
+}
+
+function JarvisLive(props) {
+  const j = props.jarvis;
+  const load = props.load;
+  const ws = props.workspace;
+  const chat = j && j.chat;
+  // The right column (FirmaPanel + ApprovalCenter) OWNS the approval signal.
+  // Drop the company-signal "gates_pending" hint here so the center stays the
+  // Jarvis dialog/suggestion zone — no triple-render of "X Freigabe(n) warten"
+  // across middle + right (UI-SPEC §3 3-zone clarity). Backend still projects it
+  // honestly (KPI pill + right zone); the center just doesn't restate it.
+  const hints = (j && Array.isArray(j.hints)) ? j.hints.filter((x) => x.id !== "gates_pending") : [];
+  // Workspace-scoped Vorschlag (UI-SPEC §4): the engineering propose hint offers
+  // its action only in the engineering workspace; elsewhere it stays advisory.
+  const proposeHint = hints.find((x) => x.propose);
+  const showPropose = proposeHint && ws === "engineering";
+  const bubbles = [];
+  if (chat) {
+    bubbles.push(chat.connected
+      ? { icon: "orbit", tone: "cyan", title: "Coaching-Chat verbunden", text: chat.scope || chat.note || "Brain-Gateway erreichbar." }
+      : { icon: "unplug", tone: "red", title: "Jarvis-Chat nicht verbunden", text: chat.note || "Chat-Backend nicht erreichbar — keine Antwort erfunden." });
+  } else if (load === "offline") {
+    bubbles.push({ icon: "unplug", tone: "red", title: "Jarvis nicht erreichbar", text: "Read-Modelle offline — der Zustand erscheint, sobald die Quelle wieder antwortet." });
+  }
+  hints.forEach((x) => {
+    if (x === proposeHint && showPropose) return; // rendered as the SuggestionCard
+    bubbles.push({ icon: x.icon || "lightbulb", tone: x.severity === "attention" ? "amber" : "cyan",
+      title: x.title, text: x.detail, source: x.source, workspace: x.workspace });
+  });
+  const empty = !chat && load !== "offline" && load !== "loading" && !hints.length;
+  const chatOk = chat && chat.connected;
+  return h("section", { className: "mos__card mos__jlive" },
+    h("header", { className: "mos__jlive-head" },
+      h("span", { className: "mos__jlive-orb" }, h(Orb, { label: false })),
+      h("span", { className: "mos__jlive-id" },
+        h("b", null, "Jarvis"),
+        h("span", { className: "mos__jlive-sub" }, jarvisStateText(props.stateIndex))),
+      h("span", { className: "mos__jlive-ws mos__wtag mos__wtag--" + ((WS_TAG[ws] || {}).tone || "cyan") }, (WS_TAG[ws] || {}).label || ws),
+      chat
+        ? h("span", { className: "mos__pip mos__pip--" + (chatOk ? "verified" : "red"), title: chat.note || "" },
+            h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), chatOk ? "Chat bereit" : "Chat offline")
+        : h("span", { className: "mos__jlive-load" }, h(Icon, { name: load === "loading" ? "loader" : "unplug", size: 14, className: load === "loading" ? "is-spin" : "" })),
+      h("button", { type: "button", className: "mos__jlive-mic", title: NOT_WIRED, "aria-label": "Voice-Memo (folgt)" }, h(Icon, { name: "mic", size: 18 }))),
+    h("div", { className: "mos__jlive-stream" },
+      load === "loading" && !j
+        ? [0, 1].map((i) => h("div", { key: i, className: "mos__skbub" }))
+        : empty
+          ? h("div", { className: "mos__jlive-greet" },
+              h("span", { className: "mos__jlive-greet-t" }, (props.greeting || "Hallo") + ", Mikael."),
+              h("span", { className: "mos__jlive-greet-s" }, "Kein offener Hinweis. Frag mich etwas oder wähle einen Vorschlag."),
+              h("div", { className: "mos__jlive-chips" },
+                CHIPS.slice(0, 3).map((c) => h("button", { key: c.label, type: "button", className: "mos__chip", onClick: () => props.onChip(c.label) },
+                  h(Icon, { name: c.icon, size: 14 }), c.label))))
+          : [
+              ...bubbles.map((b, i) => h(JarvisBubble, { key: i, bubble: b })),
+              showPropose ? h(SuggestionCard, { key: "sug", hint: proposeHint, onPropose: props.onPropose }) : null,
+            ]));
+}
+
+// --- Firma / Rise-L panel (right, top) — compact read-only signal list ---------
+function FirmaMetric(props) {
+  const r = props.row;
+  return h("div", { className: "mos__firma-metric mos--" + (r.accent || "cyan") },
+    h("span", { className: "mos__firma-metric-ico" }, h(Icon, { name: r.icon || "activity", size: 15 })),
+    h("span", { className: "mos__firma-metric-body" },
+      h("span", { className: "mos__firma-metric-title" }, r.title),
+      r.sub ? h("span", { className: "mos__firma-metric-sub" }, r.sub) : null),
+    r.status ? h("span", { className: "mos__status mos__status--" + r.status }, r.statusLabel) : (r.value ? h("span", { className: "mos__firma-metric-val" }, r.value) : null));
+}
+function FirmaPanel(props) {
+  const risel = props.risel, company = props.company, load = props.load;
+  const rst = risel ? (risel._state || "loading") : (load === "loading" ? "loading" : "empty");
+  const rows = (risel && Array.isArray(risel._rows)) ? risel._rows.slice(0, 3) : [];
+  const demo = risel && risel._demo;
+  return h("section", { className: "mos__card mos__firma" },
+    h("header", { className: "mos__card-head" },
+      h(Icon, { name: "server", size: 16 }),
+      h("span", { className: "mos__card-title" }, "Firma / Rise-L"),
+      h(ZonePip, { state: demo ? "konzept" : rst, observedAt: risel && risel._observedAt, source: risel && risel._source, note: risel && risel._note })),
+    h("div", { className: "mos__firma-body" },
+      load === "loading" && !risel
+        ? [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" }))
+        : rows.length
+          ? rows.map((r, i) => h(FirmaMetric, { key: i, row: r }))
+          : h(ZoneEmpty, { state: rst, icon: "server", title: "Keine Signale", note: risel && risel._note })),
+    company
+      ? h("footer", { className: "mos__firma-foot" },
+          h(Icon, { name: "building-2", size: 13 }),
+          h("span", { className: "mos__firma-foot-t" }, company.meta || "Firma-Signale"),
+          h("span", { className: "mos__firma-foot-ro" }, h(Icon, { name: "lock", size: 11 }), "nur lesen"))
+      : null);
+}
+
+// --- Approval-Center (right, bottom) — READ-ONLY; Details = inline read details.
+// Hard correction to Mockup B: NO Genehmigen/Ablehnen button. Decisions happen
+// only in the operator's Hermes approval center — never from this plugin, never
+// via /approvals/decide, not even indirectly.
+function ApprovalCard(props) {
+  const c = props.card;
+  const cat = gateCategory(c.gateClass, c.gateReason, c.text);
+  const fresh = freshnessLabel(c.createdUtc);
+  const shortHash = c.intentSha256 ? c.intentSha256.slice(0, 12) : null;
+  const open = props.open;
+  return h("div", { className: "mos__appc-card mos__appc-card--" + cat.tone + (open ? " is-open" : "") },
+    h("div", { className: "mos__appc-top" },
+      h("span", { className: "mos__appc-cat mos__appc-cat--" + cat.tone }, h(Icon, { name: cat.icon, size: 12 }), cat.label),
+      h("span", { className: "mos__appc-text" }, c.text),
+      fresh ? h("span", { className: "mos__appc-when" }, fresh) : null),
+    h("div", { className: "mos__appc-meta" },
+      c.mandant ? h("span", { className: "mos__appc-tag" }, c.mandant) : null,
+      c.targetSystem ? h("span", { className: "mos__appc-tag" }, c.targetSystem) : null,
+      shortHash ? h("span", { className: "mos__appc-hash", title: "Intent-Hash: " + c.intentSha256 }, h(Icon, { name: "hash", size: 11 }), shortHash) : null,
+      h("button", { type: "button", className: "mos__appc-details", "aria-expanded": open ? "true" : "false",
+        onClick: () => props.onToggle(c.id),
+        title: "Nur-Lese-Details. Freigabe/Ablehnung ausschließlich im Operator-Approval-Center (Hermes) — nie aus dem Plugin." },
+        h(Icon, { name: "eye", size: 13 }), "Details")),
+    open
+      ? h("dl", { className: "mos__appc-detail" },
+          h("div", null, h("dt", null, "Gate"), h("dd", null, (c.gateClass || "—") + (c.gateReason ? " · " + c.gateReason : ""))),
+          c.intentSha256 ? h("div", null, h("dt", null, "Intent-Hash"), h("dd", { className: "mos__mono" }, c.intentSha256)) : null,
+          c.idempotencyKey ? h("div", null, h("dt", null, "Idempotenz"), h("dd", { className: "mos__mono" }, c.idempotencyKey)) : null,
+          c.payloadSha256 ? h("div", null, h("dt", null, "Payload-Hash"), h("dd", { className: "mos__mono" }, c.payloadSha256)) : null,
+          h("div", { className: "mos__appc-decidenote" }, h(Icon, { name: "shield-check", size: 12 }),
+            "Entscheidung nur im Operator-Approval-Center. Dieses Cockpit liest ausschließlich."))
+      : null);
+}
+
+const APPC_MAX = 4;
+function ApprovalCenter(props) {
+  const a = props.approvals, load = props.load;
+  const [openId, setOpenId] = useState(null);
+  const [showAll, setShowAll] = useState(false);
+  const st = a ? (a.state || "empty") : (load === "loading" ? "loading" : "unavailable");
+  const cards = (a && Array.isArray(a.cards)) ? a.cards : [];
+  const pending = a ? (a.pending != null ? a.pending : cards.length) : 0;
+  const max = props.compact ? 1 : APPC_MAX;
+  const shown = showAll ? cards : cards.slice(0, max);
+  const extra = cards.length - shown.length;
+  const onToggle = useCallback((id) => setOpenId((p) => (p === id ? null : id)), []);
+  return h("section", { className: "mos__card mos__appc" + (props.flash ? " is-flash" : ""), ref: props.innerRef, id: "mos-approvals" },
+    h("header", { className: "mos__card-head" },
+      h(Icon, { name: "shield-check", size: 16 }),
+      h("span", { className: "mos__card-title" }, "Freigaben"),
+      pending > 0 ? h("span", { className: "mos__appc-count" }, pending) : null,
+      h(ZonePip, { state: st, observedAt: a && a.observedAt, source: a && a.source, note: a && a.note })),
+    h("div", { className: "mos__appc-body" },
+      load === "loading" && !a
+        ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" }))
+        : cards.length
+          ? [
+              ...shown.map((c) => h(ApprovalCard, { key: c.id, card: c, open: openId === c.id, onToggle: onToggle })),
+              extra > 0
+                ? h("button", { key: "more", type: "button", className: "mos__appc-more", onClick: props.compact ? props.onMore : () => setShowAll(true) },
+                    h(Icon, { name: "ellipsis", size: 14 }), "+" + extra + " weitere")
+                : null,
+            ]
+          : h(ZoneEmpty, { state: st, icon: "inbox",
+              title: st === "unavailable" || st === "error" ? "Approval-Quelle nicht erreichbar" : "Keine offenen Freigaben",
+              note: a && a.note })));
+}
+
+// --- Cockpit desktop assembly (3-column grid) ---------------------------------
+function CockpitScene(props) {
+  return h("div", { className: "mos__ckpt" },
+    h("aside", { className: "mos__ckpt-col mos__ckpt-left" },
+      h(WorkspaceSwitcher, { active: props.workspace, onChange: props.onWorkspace }),
+      h(AgendaRail, { workspace: props.workspace, todayModule: props.byId.today,
+        engineeringModule: props.byId.engineering, load: props.load, onMore: props.onAgendaMore })),
+    h("section", { className: "mos__ckpt-col mos__ckpt-center" },
+      h(JarvisLive, { jarvis: props.cockpit.jarvis, load: props.cockpitLoad, workspace: props.workspace,
+        stateIndex: props.stateIndex, greeting: props.greeting, onPropose: props.onPropose, onChip: props.onChip })),
+    h("aside", { className: "mos__ckpt-col mos__ckpt-right" },
+      h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load }),
+      h(ApprovalCenter, { approvals: props.cockpit.approvals, load: props.cockpitLoad,
+        flash: props.approvalsFlash, innerRef: props.approvalsRef })));
+}
+
+// --- Mobile cockpit stack (inside the existing home tab) -----------------------
+function MobileCockpit(props) {
+  const c = props.cockpit || {};
+  const j = c.jarvis;
+  const chat = j && j.chat;
+  // Same dedup as the desktop JarvisLive: the approval zone (KPI pill + the
+  // ApprovalCenter card below) owns the "Freigaben" count — the Jarvis teaser
+  // does not restate it (UI-SPEC §3).
+  const hints = (j && Array.isArray(j.hints)) ? j.hints.filter((x) => x.id !== "gates_pending") : [];
+  const topHint = hints[0];
+  const chatOk = chat && chat.connected;
+  return h("div", { className: "mos__mckpt" },
+    // KPI strip — horizontal scroll, 2 visible + fade edge.
+    h("div", { className: "mos__mckpt-kpis" },
+      h(KpiBar, { cockpit: c, load: props.cockpitLoad, onGates: props.onGoApprovals })),
+    // Jarvis teaser → opens the full jarvis tab.
+    h("button", { type: "button", className: "mos__mckpt-jarvis", onClick: props.onGoJarvis, "aria-label": "Jarvis öffnen" },
+      h("span", { className: "mos__mckpt-orb" }, h(Orb, { label: false })),
+      h("span", { className: "mos__mckpt-jbody" },
+        h("span", { className: "mos__mckpt-jhead" }, h("b", null, "Jarvis"),
+          chat ? h("span", { className: "mos__pip mos__pip--" + (chatOk ? "verified" : "red") },
+            h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), chatOk ? "Chat bereit" : "Chat offline") : null),
+        h("span", { className: "mos__mckpt-jline" },
+          topHint ? topHint.title : (props.cockpitLoad === "loading" ? "Lädt Zustand …" : "Kein offener Hinweis."))),
+      h(Icon, { name: "chevron-right", size: 18 })),
+    // Agenda (Heute) — max 3.
+    h(AgendaRailMobile, { workspace: props.workspace, todayModule: props.byId.today,
+      engineeringModule: props.byId.engineering, load: props.load, onMore: props.onGoTimeline }),
+    // Firma compact.
+    h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load }),
+    // Approvals — compact (max 1 + counter → deep link).
+    h(ApprovalCenter, { approvals: c.approvals, load: props.cockpitLoad, compact: true, onMore: props.onGoApprovals }));
+}
+// Mobile agenda = the desktop AgendaRail capped at 3 rows.
+function AgendaRailMobile(props) {
+  return h("div", { className: "mos__mckpt-agenda" }, h(AgendaRail, { ...props }));
+}
+
+// Idle-Ambient morph (UI-SPEC §0): after `ms` with no interaction AND Jarvis at
+// rest, the Cockpit morphs to the Konstellation. Disabled under reduced motion
+// (the scene switch is a hard cut, not a skeleton detail). The user returns via
+// the SceneSwitcher — never auto-morphed back.
+function useIdleTimer(active, ms, onIdle) {
+  const cb = useRef(onIdle); cb.current = onIdle;
+  useEffect(() => {
+    if (!active || prefersReducedMotion() || typeof window === "undefined") return;
+    let t = null;
+    const reset = () => { if (t) window.clearTimeout(t); t = window.setTimeout(() => { if (cb.current) cb.current(); }, ms); };
+    const evs = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"];
+    evs.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+    return () => { if (t) window.clearTimeout(t); evs.forEach((e) => window.removeEventListener(e, reset)); };
+  }, [active, ms]);
+}
+
 function MikaelOS() {
   const [workspace, setWorkspace] = useState("private");
   const [modules, setModules] = useState(MODULES);
@@ -2730,7 +3189,7 @@ function MikaelOS() {
   const [command, setCommand] = useState("");
   // Phase 4 — desktop scene toggle (Konstellation ⇄ Timeline), iOS shell switch,
   // active mobile tab, and the mobile focus bottom-sheet (open + detent index).
-  const [scene, setScene] = useState("constellation"); // constellation | timeline
+  const [scene, setScene] = useState("cockpit"); // cockpit (default) | constellation | timeline
   const isMobile = useMediaQuery("(max-width: 430px)");
   const [mobileTab, setMobileTab] = useState("home"); // home | timeline | jarvis | module | profil
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -2740,6 +3199,13 @@ function MikaelOS() {
   // must never break because a source is down).
   const [live, setLive] = useState(null);
   const [loadState, setLoadState] = useState("loading"); // loading | ready | offline
+  // Cockpit read-model (M1): the three /cockpit/* routes. Each zone stays honest
+  // on its own — a missing payload shows unavailable, never a fabricated value.
+  const [cockpit, setCockpit] = useState({ kpi: null, jarvis: null, approvals: null });
+  const [cockpitLoad, setCockpitLoad] = useState("loading"); // loading | ready | offline
+  // Focus flash for the Approval-Center when the Gates-KPI is clicked (§6).
+  const [approvalsFlash, setApprovalsFlash] = useState(false);
+  const approvalsRef = useRef(null);
   // Phase 3 — the propose lifecycle overlay state (null = closed). Shape:
   // { phase, objective, preview, gate, cardId, controlPlane, note, error }.
   const [propose, setPropose] = useState(null);
@@ -2750,22 +3216,40 @@ function MikaelOS() {
   // { tab, planState, plan, fey: { phase, setup, explanation, result } }.
   const [coach, setCoach] = useState(null);
 
-  // Fetch the read-only projection once on mount, via the host SDK's authed
-  // fetchJSON (falls back to window.fetch for the screenshot harness). Any error
-  // is swallowed into `offline` so fixtures remain visible.
-  useEffect(() => {
-    let alive = true;
-    const sdk = (typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__) || {};
-    const getJSON = sdk.fetchJSON
-      ? (u) => sdk.fetchJSON(u)
-      : (typeof fetch === "function" ? (u) => fetch(u).then((r) => (r.ok ? r.json() : Promise.reject(r.status))) : null);
-    if (!getJSON) { setLoadState("offline"); return; }
-    Promise.resolve()
-      .then(() => getJSON(PLUGIN_API + "/overview"))
-      .then((data) => { if (alive) { setLive(data); setLoadState("ready"); } })
-      .catch(() => { if (alive) setLoadState("offline"); });
-    return () => { alive = false; };
+  // Fetch the read-only /overview projection. Refactored into a callback so a
+  // reconnect (window focus / back online) can re-run it and the UI shows the
+  // current state immediately. Any error → `offline` so fixtures remain visible.
+  const loadOverview = useCallback(() => {
+    setLoadState((p) => (p === "ready" ? "ready" : "loading"));
+    sdkGet(PLUGIN_API + "/overview")
+      .then((data) => { setLive(data); setLoadState("ready"); })
+      .catch(() => { setLoadState((p) => (p === "ready" ? "ready" : "offline")); });
   }, []);
+  // Fetch the three Cockpit read routes in parallel. Each is independently
+  // honest: a rejected route leaves its zone null (→ unavailable), the batch
+  // only flips to "offline" when ALL three fail. Never fabricates a value.
+  const loadCockpit = useCallback(() => {
+    setCockpitLoad((p) => (p === "ready" ? "ready" : "loading"));
+    Promise.allSettled([sdkGet(KPI_API), sdkGet(JARVIS_STATE_API), sdkGet(APPROVALS_API)])
+      .then(([k, j, a]) => {
+        setCockpit({
+          kpi: k.status === "fulfilled" ? k.value : null,
+          jarvis: j.status === "fulfilled" ? j.value : null,
+          approvals: a.status === "fulfilled" ? a.value : null,
+        });
+        setCockpitLoad([k, j, a].some((r) => r.status === "fulfilled") ? "ready" : "offline");
+      });
+  }, []);
+  useEffect(() => { loadOverview(); loadCockpit(); }, [loadOverview, loadCockpit]);
+  // Reconnect: on regained focus / online, re-read both models so a returning
+  // session sees the live state at once (no stale snapshot lingering).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const reload = () => { loadOverview(); loadCockpit(); };
+    window.addEventListener("online", reload);
+    window.addEventListener("focus", reload);
+    return () => { window.removeEventListener("online", reload); window.removeEventListener("focus", reload); };
+  }, [loadOverview, loadCockpit]);
 
   const liveById = useMemo(() => indexLive(live), [live]);
   const loadingModules = loadState === "loading";
@@ -2846,7 +3330,7 @@ function MikaelOS() {
   const runStateSequence = useCallback(() => {
     clearTimers();
     if (prefersReducedMotion()) { setStateIndex(STATES.length - 1); return; }
-    const steps = [1, 2, 3, 4, 5];
+    const steps = [1, 2, 3, 4, 5, 6];
     steps.forEach((s, i) => {
       timersRef.current.push(window.setTimeout(() => setStateIndex(s), (i + 1) * 750));
     });
@@ -3127,6 +3611,25 @@ function MikaelOS() {
     setCommand("");
   }, [runStateSequence]);
 
+  // Cockpit → Konstellation idle-morph (§0): only while the Cockpit is showing,
+  // Jarvis is at rest (stateIndex 0 / ready), and not on mobile. Disabled under
+  // reduced motion inside the hook. 90s of no interaction hands over to the orb.
+  useIdleTimer(scene === "cockpit" && stateIndex === 0 && !isMobile, 90000,
+    useCallback(() => setScene("constellation"), []));
+
+  // Gates-KPI click → focus the Approval-Center (scroll + brief flash), never a
+  // modal, never a decision. Chips in the Jarvis greeting just pre-fill the box.
+  const onGates = useCallback(() => {
+    const el = approvalsRef.current;
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
+    setApprovalsFlash(true);
+    window.setTimeout(() => setApprovalsFlash(false), 1400);
+  }, []);
+  const onChip = useCallback((label) => { setCommand(label); if (inputRef.current) inputRef.current.focus(); }, []);
+  const onAgendaMore = useCallback(() => setScene("timeline"), []);
+  const onGoTimeline = useCallback(() => { if (isMobile) setMobileTab("timeline"); else setScene("timeline"); }, [isMobile]);
+  const onGoApprovals = useCallback(() => { setMobileTab("home"); }, []);
+
   // iOS shell — a distinct vertical scene stack (not a shrunken desktop). All
   // state (focusId, stateIndex, command, live read-models) is shared, so opening
   // a module here is the same choice as the desktop lens.
@@ -3148,6 +3651,8 @@ function MikaelOS() {
         sheetOpen: sheetOpen, sheetDetent: sheetDetent,
         onSheetDetent: setSheetDetent, onSheetClose: closeSheet,
         onPropose: proposeOpen, onReview: reviewOpen, onCoach: coachOpen,
+        cockpit: cockpit, cockpitLoad: cockpitLoad,
+        onChip: onChip, onGoTimeline: onGoTimeline, onGoApprovals: onGoApprovals,
       }),
       h(ProposeFlow, {
         state: propose, onObjective: proposeObjective, onPreview: proposePreview,
@@ -3165,9 +3670,61 @@ function MikaelOS() {
     );
   }
 
+  // The command bar + chips and the constellation footer are shared across
+  // scenes (Cockpit reuses the command bar under a StateRail; Konstellation/
+  // Timeline keep command-bar → footer). Built once, placed per scene below.
+  const commandForm = h(
+    "form",
+    { className: "mos__command", onSubmit: submit },
+    h(
+      "div",
+      { className: "mos__command-bar" },
+      h("button", { type: "button", className: "mos__mic", "aria-label": "Sprachbefehl starten" }, h(Icon, { name: "mic", size: 22 })),
+      h("input", {
+        ref: inputRef,
+        className: "mos__command-input",
+        type: "text",
+        "aria-label": "Befehl eingeben",
+        placeholder: 'Sage „Jarvis“ oder schreibe einen Befehl …',
+        value: command,
+        onChange: (e) => setCommand(e.target.value),
+      }),
+      h("button", { type: "submit", className: "mos__send", "aria-label": "Senden" }, h(Icon, { name: "send-horizontal", size: 18 })),
+    ),
+    h(
+      "div",
+      { className: "mos__chips" },
+      h("button", {
+        key: "propose", type: "button", className: "mos__chip mos__chip--propose",
+        onClick: () => proposeOpen(command),
+        title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst.",
+      }, h(Icon, { name: "git-branch", size: 14 }), "Codex-Aufgabe vorschlagen"),
+      CHIPS.map((c) =>
+        h("button", { key: c.label, type: "button", className: "mos__chip", onClick: () => { setCommand(c.label); if (inputRef.current) inputRef.current.focus(); } },
+          h(Icon, { name: c.icon, size: 14 }), c.label)),
+    ),
+  );
+  const constFooter = h(
+    "footer",
+    { className: "mos__footer" },
+    h(
+      "button",
+      { type: "button", className: "mos__quick", title: NOT_WIRED },
+      h(Icon, { name: "layout-grid", size: 16 }), "Schnellzugriffe", h(Icon, { name: "chevron-up", size: 14 }),
+    ),
+    h(StateRail, { activeIndex: stateIndex }),
+    h(
+      "span",
+      { className: "mos__reorder" },
+      h(Icon, { name: "grip-vertical", size: 14 }),
+      "Ziehen um neu zu ordnen",
+      h("span", { className: "mos__kbd" }, h(Icon, { name: "command", size: 12 }), "K · Kurzbefehle"),
+    ),
+  );
+
   return h(
     "div",
-    { className: "mos" + (scene === "timeline" ? " mos--timeline" : "") },
+    { className: "mos" + (scene === "timeline" ? " mos--timeline" : scene === "cockpit" ? " mos--cockpit" : "") },
     h("div", { className: "mos__atmosphere", "aria-hidden": "true" }),
     h("div", { className: "mos__atmosphere-veil", "aria-hidden": "true" }),
     h(LiveAnnouncer, { message: announce }),
@@ -3176,7 +3733,20 @@ function MikaelOS() {
       { className: "mos__shell", role: "main" },
       h("h1", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
       h(TopBar, { loadState: loadState, liveCount: liveCount, total: viewModules.length, scene: scene, onScene: setScene }),
-      scene === "timeline"
+      scene === "cockpit"
+        ? h(
+            React.Fragment,
+            null,
+            h(KpiBar, { cockpit: cockpit, load: cockpitLoad, onGates: onGates }),
+            h("div", { className: "mos__stagewrap mos__stagewrap--ckpt" },
+              h(CockpitScene, {
+                byId: enrichedById, workspace: workspace, onWorkspace: setWorkspace,
+                cockpit: cockpit, cockpitLoad: cockpitLoad, load: loadState,
+                stateIndex: stateIndex, greeting: greeting,
+                onPropose: proposeOpen, onChip: onChip, onAgendaMore: onAgendaMore,
+                approvalsFlash: approvalsFlash, approvalsRef: approvalsRef,
+              })))
+        : scene === "timeline"
         ? h("div", { className: "mos__stagewrap mos__stagewrap--tl" },
             h(TimelineScene, { byId: enrichedById, focusId: focusId, onActivate: activate, onClose: closeFocus }))
         : h(
@@ -3256,59 +3826,13 @@ function MikaelOS() {
           ),
         ),
       ),
-      // command bar + chips
-      h(
-        "form",
-        { className: "mos__command", onSubmit: submit },
-        h(
-          "div",
-          { className: "mos__command-bar" },
-          h("button", { type: "button", className: "mos__mic", "aria-label": "Sprachbefehl starten" }, h(Icon, { name: "mic", size: 22 })),
-          h("input", {
-            ref: inputRef,
-            className: "mos__command-input",
-            type: "text",
-            "aria-label": "Befehl eingeben",
-            placeholder: 'Sage „Jarvis“ oder schreibe einen Befehl …',
-            value: command,
-            onChange: (e) => setCommand(e.target.value),
-          }),
-          h("button", { type: "submit", className: "mos__send", "aria-label": "Senden" }, h(Icon, { name: "send-horizontal", size: 18 })),
-        ),
-        h(
-          "div",
-          { className: "mos__chips" },
-          // The propose chip is the entry to the ONE gated action. It opens the
-          // dry-run preview overlay (fires nothing); every other chip just
-          // pre-fills the command box.
-          h("button", {
-            key: "propose", type: "button", className: "mos__chip mos__chip--propose",
-            onClick: () => proposeOpen(command),
-            title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst.",
-          }, h(Icon, { name: "git-branch", size: 14 }), "Codex-Aufgabe vorschlagen"),
-          CHIPS.map((c) =>
-            h("button", { key: c.label, type: "button", className: "mos__chip", onClick: () => { setCommand(c.label); if (inputRef.current) inputRef.current.focus(); } },
-              h(Icon, { name: c.icon, size: 14 }), c.label)),
-        ),
-      ),
-      // footer: quick access · state rail · reorder hint
-      h(
-        "footer",
-        { className: "mos__footer" },
-        h(
-          "button",
-          { type: "button", className: "mos__quick", title: NOT_WIRED },
-          h(Icon, { name: "layout-grid", size: 16 }), "Schnellzugriffe", h(Icon, { name: "chevron-up", size: 14 }),
-        ),
-        h(StateRail, { activeIndex: stateIndex }),
-        h(
-          "span",
-          { className: "mos__reorder" },
-          h(Icon, { name: "grip-vertical", size: 14 }),
-          "Ziehen um neu zu ordnen",
-          h("span", { className: "mos__kbd" }, h(Icon, { name: "command", size: 12 }), "K · Kurzbefehle"),
-        ),
-      ),
+      // Footer (UI-SPEC §1): in the Cockpit the StateRail sits directly ABOVE the
+      // command bar; Konstellation/Timeline keep the command bar → footer order.
+      scene === "cockpit"
+        ? h("footer", { className: "mos__ckpt-foot" },
+            h(StateRail, { activeIndex: stateIndex }),
+            commandForm)
+        : h(React.Fragment, null, commandForm, constFooter),
     ),
     h(ProposeFlow, {
       state: propose, onObjective: proposeObjective, onPreview: proposePreview,

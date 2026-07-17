@@ -100,15 +100,34 @@ try {
   process.exit(1);
 }
 
+// The default scene is the Cockpit (index.jsx: useState("cockpit")). These
+// strings are rendered in the Cockpit's initial static pass (TopBar identity,
+// the four KPI labels, the three zone cards, the 7-state rail incl. the new
+// FOKUS state, and the shared command bar).
 const mustContain = [
-  "MIKAEL OS", "Konzeptdaten", "Privates System", "JARVIS",
-  "Engineering / Codex", "Feature: KI Fokus-Modus", "Modul hinzufügen",
-  "Bereit", "Verifiziert", "Ziehen um neu zu ordnen",
+  "MIKAEL OS", "Privates System", "Mikael",
+  "Kennzahlen", "Recovery", "Nächste Klausur", "Offene Freigaben", "Laufende Jobs",
+  "Heute", "Jarvis", "Firma / Rise-L", "Freigaben",
+  "Bereit", "Fokus", "Verifiziert",
   'Sage „Jarvis“',
 ];
 const missing = mustContain.filter((s) => !html.includes(s));
 if (missing.length) {
   console.error("FAIL: rendered HTML missing:", missing);
+  process.exit(1);
+}
+
+// Constellation-scene content ships in the SAME bundle but is not in the default
+// Cockpit static render (the scene toggle is a real state change the static mock
+// cannot flip). Assert on the bundle SOURCE that this content is still present —
+// so a regression that drops the Konstellation is still caught.
+const constellationMust = [
+  "Konzeptdaten", "JARVIS", "Engineering / Codex",
+  "Feature: KI Fokus-Modus", "Modul hinzufügen", "Ziehen um neu zu ordnen",
+];
+const constMissing = constellationMust.filter((s) => !code.includes(s));
+if (constMissing.length) {
+  console.error("FAIL: bundle missing Konstellation-scene content:", constMissing);
   process.exit(1);
 }
 
@@ -144,4 +163,4 @@ if (l3Leak.length) {
   process.exit(1);
 }
 
-console.log(`PASS: registered 'mikael-os', rendered ${html.length} chars, ${svgCount} lucide icons, all ${mustContain.length} key strings + ${l3Must.length} L-3 markers present, no forbidden endpoint literals.`);
+console.log(`PASS: registered 'mikael-os', rendered ${html.length} chars, ${svgCount} lucide icons, all ${mustContain.length} Cockpit strings + ${constellationMust.length} Konstellation-source strings + ${l3Must.length} L-3 markers present, no forbidden endpoint literals.`);

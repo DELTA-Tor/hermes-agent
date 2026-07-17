@@ -78,7 +78,18 @@ var MikaelOSPlugin = function() {
     "fast-forward": '<polygon points="13 19 22 12 13 5 13 19" /> <polygon points="2 19 11 12 2 5 2 19" />',
     "eye": '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" />',
     "play": '<polygon points="6 3 20 12 6 21 6 3" />',
-    "party-popper": '<path d="M5.8 11.3 2 22l10.7-3.79" /> <path d="M4 3h.01" /> <path d="M22 8h.01" /> <path d="M15 2h.01" /> <path d="M22 20h.01" /> <path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10" /> <path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17" /> <path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7" /> <path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z" />'
+    "party-popper": '<path d="M5.8 11.3 2 22l10.7-3.79" /> <path d="M4 3h.01" /> <path d="M22 8h.01" /> <path d="M15 2h.01" /> <path d="M22 20h.01" /> <path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10" /> <path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17" /> <path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7" /> <path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z" />',
+    "layout-dashboard": '<rect width="7" height="9" x="3" y="3" rx="1" /> <rect width="7" height="5" x="14" y="3" rx="1" /> <rect width="7" height="9" x="14" y="12" rx="1" /> <rect width="7" height="5" x="3" y="16" rx="1" />',
+    "battery-full": '<rect width="16" height="10" x="2" y="7" rx="2" ry="2" /> <line x1="22" x2="22" y1="11" y2="13" /> <line x1="6" x2="6" y1="11" y2="13" /> <line x1="10" x2="10" y1="11" y2="13" /> <line x1="14" x2="14" y1="11" y2="13" />',
+    "battery-low": '<rect width="16" height="10" x="2" y="7" rx="2" ry="2" /> <line x1="22" x2="22" y1="11" y2="13" /> <line x1="6" x2="6" y1="11" y2="13" />',
+    "server-off": '<path d="M7 2h13a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-5" /> <path d="M10 10 2.5 2.5C2 2 2 2.5 2 5v3a2 2 0 0 0 2 2h6z" /> <path d="M22 17v-1a2 2 0 0 0-2-2h-1" /> <path d="M4 14a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h16.5l1-.5.5.5-8-8H4z" /> <path d="M6 18h.01" /> <path d="m2 2 20 20" />',
+    "octagon-alert": '<path d="M12 16h.01" /> <path d="M12 8v4" /> <path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z" />',
+    "hash": '<line x1="4" x2="20" y1="9" y2="9" /> <line x1="4" x2="20" y1="15" y2="15" /> <line x1="10" x2="8" y1="3" y2="21" /> <line x1="16" x2="14" y1="3" y2="21" />',
+    "external-link": '<path d="M15 3h6v6" /> <path d="M10 14 21 3" /> <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />',
+    "trending-up": '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /> <polyline points="16 7 22 7 22 13" />',
+    "banknote": '<rect width="20" height="12" x="2" y="6" rx="2" /> <circle cx="12" cy="12" r="2" /> <path d="M6 12h.01M18 12h.01" />',
+    "refresh-cw": '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" />',
+    "radio": '<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" /> <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" /> <circle cx="12" cy="12" r="2" /> <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" /> <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />'
   };
   const SDK = typeof window !== "undefined" ? window.__HERMES_PLUGIN_SDK__ : void 0;
   const React = SDK && SDK.React;
@@ -336,10 +347,12 @@ var MikaelOSPlugin = function() {
   ];
   const STATES = [
     { id: "ready", icon: "circle", label: "Bereit", tone: "ready" },
-    { id: "listening", icon: "ear", label: "Hört zu", tone: "ready" },
-    { id: "thinking", icon: "brain", label: "Denkt", tone: "ready" },
+    { id: "listening", icon: "ear", label: "Hört zu", tone: "listen" },
+    { id: "thinking", icon: "brain", label: "Denkt", tone: "think" },
+    // FOKUS — deep-work / focus mode (violet), matches jd-master-A/B state rail.
+    { id: "focus", icon: "target", label: "Fokus", tone: "focus" },
     { id: "suggest", icon: "lightbulb", label: "Vorschlag", tone: "amber" },
-    { id: "executing", icon: "zap", label: "Ausführung", tone: "amber" },
+    { id: "executing", icon: "zap", label: "Ausführung", tone: "exec" },
     { id: "verified", icon: "circle-check-big", label: "Verifiziert", tone: "verified" }
   ];
   const WORKSPACES = [
@@ -367,6 +380,9 @@ var MikaelOSPlugin = function() {
   const FEYNMAN_API = PLUGIN_API + "/study/feynman";
   const FEYNMAN_EVAL_API = PLUGIN_API + "/study/feynman/evaluate";
   const STUDY_PROPOSE_API = PLUGIN_API + "/study/plan/propose";
+  const KPI_API = PLUGIN_API + "/cockpit/kpi";
+  const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
+  const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
   MODULES.reduce((acc, m) => {
     acc[m.id] = m.pos;
     return acc;
@@ -1317,36 +1333,6 @@ var MikaelOSPlugin = function() {
       )
     );
   }
-  function MobileHeute() {
-    return h(
-      "section",
-      { className: "mos__mheute", "aria-label": "Jetzt wichtig" },
-      h(
-        "div",
-        { className: "mos__mheute-head" },
-        h("h2", null, "Jetzt wichtig"),
-        h("span", { className: "mos__pip mos__pip--konzept" }, h(Icon, { name: "flask-conical", size: 11 }), "Konzept")
-      ),
-      h(
-        "div",
-        { className: "mos__mheute-cols" },
-        h(
-          "div",
-          { className: "mos__mheute-col" },
-          h("span", { className: "mos__mheute-k" }, h(Icon, { name: "clock", size: 13 }), "Nächster Termin"),
-          h("span", { className: "mos__mheute-v" }, "10:30 · Team Sync"),
-          h("span", { className: "mos__mheute-sub" }, h(Icon, { name: "map", size: 12 }), "Q4 Roadmap · Virtuell")
-        ),
-        h(
-          "div",
-          { className: "mos__mheute-col" },
-          h("span", { className: "mos__mheute-k" }, h(Icon, { name: "target", size: 13 }), "Fokus"),
-          h("span", { className: "mos__mheute-v" }, "Engineering Deep Work"),
-          h("span", { className: "mos__mheute-sub" }, h(Icon, { name: "clock", size: 12 }), "bis 12:00")
-        )
-      )
-    );
-  }
   function DomainCardM(props) {
     const m = props.module;
     if (!m) return null;
@@ -1369,7 +1355,18 @@ var MikaelOSPlugin = function() {
     return h(
       "div",
       { className: "mos__m-scroll" },
-      h(MobileHeute, null),
+      // Cockpit stack (UI-SPEC §3) — KPI strip · Jarvis teaser · Heute · Firma ·
+      // Approvals — the glanceable command surface, above the module grid.
+      h(MobileCockpit, {
+        byId: props.byId,
+        workspace: props.workspace || "private",
+        load: props.loadState,
+        cockpit: props.cockpit || {},
+        cockpitLoad: props.cockpitLoad,
+        onGoJarvis: props.onGoJarvis,
+        onGoTimeline: props.onGoTimeline,
+        onGoApprovals: props.onGoApprovals
+      }),
       h(
         "div",
         { className: "mos__mgrid-head" },
@@ -1796,7 +1793,14 @@ var MikaelOSPlugin = function() {
         onOpen: props.onOpen,
         stateIndex: props.stateIndex,
         greeting: props.greeting,
-        onGoJarvis: props.onGoJarvis
+        onGoJarvis: props.onGoJarvis,
+        workspace: props.workspace,
+        loadState: props.loadState,
+        cockpit: props.cockpit,
+        cockpitLoad: props.cockpitLoad,
+        onChip: props.onChip,
+        onGoTimeline: props.onGoTimeline,
+        onGoApprovals: props.onGoApprovals
       });
     }
     return h(
@@ -1828,10 +1832,22 @@ var MikaelOSPlugin = function() {
   function SceneSwitcher(props) {
     return h(
       "div",
-      { className: "mos__scenes", role: "group", "aria-label": "Ansicht wechseln" },
-      [{ id: "constellation", icon: "orbit", label: "Konstellation" }, { id: "timeline", icon: "waypoints", label: "Timeline" }].map((s) => h(
+      { className: "mos__scenes", role: "tablist", "aria-label": "Ansicht wechseln" },
+      [
+        { id: "cockpit", icon: "layout-dashboard", label: "Cockpit" },
+        { id: "constellation", icon: "orbit", label: "Konstellation" },
+        { id: "timeline", icon: "waypoints", label: "Timeline" }
+      ].map((s) => h(
         "button",
-        { key: s.id, type: "button", className: "mos__scene-tab", "aria-pressed": props.scene === s.id ? "true" : "false", onClick: () => props.onScene(s.id) },
+        {
+          key: s.id,
+          type: "button",
+          role: "tab",
+          className: "mos__scene-tab",
+          "aria-selected": props.scene === s.id ? "true" : "false",
+          "aria-pressed": props.scene === s.id ? "true" : "false",
+          onClick: () => props.onScene(s.id)
+        },
         h(Icon, { name: s.icon, size: 15 }),
         h("span", null, s.label)
       ))
@@ -2751,42 +2767,617 @@ var MikaelOSPlugin = function() {
       )
     );
   }
+  const KPI_META = {
+    recovery: { icon: "heart-pulse", accent: "emerald" },
+    next_exam: { icon: "graduation-cap", accent: "violet" },
+    open_gates: { icon: "shield-check", accent: "amber" },
+    running_jobs: { icon: "rocket", accent: "cyan" }
+  };
+  const ZONE_TONE = {
+    fresh: "verified",
+    stale: "amber",
+    partial: "blue",
+    empty: "muted",
+    unavailable: "red",
+    error: "red",
+    loading: "muted",
+    gated: "gated"
+  };
+  const WS_TAG = {
+    private: { label: "Privat", tone: "cyan" },
+    company_signal: { label: "Firma", tone: "neutral" },
+    engineering: { label: "Eng", tone: "violet" }
+  };
+  function gateCategory(gc, gr, text) {
+    const s = ((gc || "") + " " + (gr || "") + " " + (text || "")).toLowerCase();
+    if (/personal|personnel|\bhr\b|mitarbeiter|lohn|gehalt/.test(s)) return { label: "Personal", tone: "violet", icon: "user" };
+    if (/money|billing|invoice|sevdesk|payment|rechnung|buchen|zahlung|geld|betrag/.test(s)) return { label: "Geld", tone: "amber", icon: "banknote" };
+    if (/customer|extern|kunde|versand|auftrag|angebot|mail/.test(s)) return { label: "Kunde", tone: "blue", icon: "building-2" };
+    if (/restart|prod-restart|neustart/.test(s)) return { label: "Restart", tone: "red", icon: "server" };
+    if (/destructive|schema|delete|destruktiv|migration|\bdrop\b/.test(s)) return { label: "Daten", tone: "red", icon: "octagon-alert" };
+    return { label: "Gate", tone: "gated", icon: "shield-check" };
+  }
+  function ZonePip(props) {
+    const st = props.state || "loading";
+    if (st === "konzept") {
+      return h(
+        "span",
+        { className: "mos__pip mos__pip--konzept mos__zone-pip", title: props.note || "Konzeptdaten" },
+        h(Icon, { name: "flask-conical", size: 11 }),
+        "Konzept"
+      );
+    }
+    const meta = STATE_META[st] || STATE_META.loading;
+    const tone = ZONE_TONE[st] || "muted";
+    const fresh = props.observedAt ? freshnessLabel(props.observedAt) : null;
+    const tip = [props.source && "Quelle: " + props.source, fresh && "Stand: " + fresh, props.note].filter(Boolean).join(" · ");
+    return h(
+      "span",
+      { className: "mos__pip mos__pip--" + tone + " mos__zone-pip", title: tip || meta.label },
+      st === "loading" ? h(Icon, { name: "loader", size: 11, className: "is-spin" }) : h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+      meta.label,
+      fresh && (st === "fresh" || st === "stale" || st === "partial") ? h("span", { className: "mos__pip-age" }, fresh) : null
+    );
+  }
+  function ZoneEmpty(props) {
+    const st = props.state || "empty";
+    const bad = st === "unavailable" || st === "error";
+    return h(
+      "div",
+      { className: "mos__zone-empty mos--" + (bad ? "red" : "muted") },
+      h(Icon, { name: bad ? "unplug" : props.icon || "inbox", size: 20 }),
+      h("span", { className: "mos__zone-empty-t" }, props.title || (STATE_META[st] || STATE_META.empty).label),
+      props.note ? h("span", { className: "mos__zone-empty-n" }, props.note) : null
+    );
+  }
+  function KpiPill(props) {
+    const k = props.kpi;
+    const meta = KPI_META[k.key] || { icon: "circle", accent: "cyan" };
+    const st = k.state || "loading";
+    const tone = ZONE_TONE[st] || "muted";
+    const spinning = st === "loading";
+    const hasVal = k.value !== null && k.value !== void 0 && k.value !== "";
+    const tip = [k.summary, k.note, k.source && "Quelle: " + k.source].filter(Boolean).join(" · ");
+    return h(
+      "button",
+      {
+        type: "button",
+        className: "mos__kpi mos__kpi--" + tone + " mos--" + meta.accent + (props.onClick ? " is-click" : ""),
+        title: tip || k.label,
+        onClick: props.onClick,
+        "aria-label": k.label + ": " + (hasVal ? k.value + (k.unit ? " " + k.unit : "") : "kein Wert (" + (STATE_META[st] || STATE_META.loading).label + ")")
+      },
+      h("span", { className: "mos__kpi-ico" }, h(Icon, { name: spinning ? "loader" : meta.icon, size: 18, className: spinning ? "is-spin" : "" })),
+      h(
+        "span",
+        { className: "mos__kpi-main" },
+        h("span", { className: "mos__kpi-label" }, k.label),
+        h(
+          "span",
+          { className: "mos__kpi-val" },
+          hasVal ? [String(k.value), k.unit ? h("i", { key: "u", className: "mos__kpi-unit" }, k.unit) : null] : h("span", { className: "mos__kpi-dash", title: k.note || k.summary || "" }, "—")
+        )
+      ),
+      h("span", { className: "mos__kpi-pip mos__pip mos__pip--" + tone }, h("span", { className: "mos__pip-dot", "aria-hidden": "true" }))
+    );
+  }
+  const KPI_FALLBACK = [
+    { key: "recovery", label: "Recovery", unit: "%" },
+    { key: "next_exam", label: "Nächste Klausur", unit: "Tage" },
+    { key: "open_gates", label: "Offene Freigaben", unit: null },
+    { key: "running_jobs", label: "Laufende Jobs", unit: null }
+  ];
+  function KpiBar(props) {
+    const c = props.cockpit || {};
+    const load = props.load;
+    const real = c.kpi && Array.isArray(c.kpi.kpis) && c.kpi.kpis.length;
+    const kpis = real ? c.kpi.kpis : KPI_FALLBACK.map((f) => ({ ...f, value: null, state: load === "loading" ? "loading" : "unavailable" }));
+    return h(
+      "div",
+      { className: "mos__kpibar", role: "group", "aria-label": "Kennzahlen" },
+      kpis.map((k) => h(KpiPill, { key: k.key, kpi: k, onClick: k.key === "open_gates" ? props.onGates : void 0 }))
+    );
+  }
+  function AgendaRow(props) {
+    const r = props.row;
+    const wtag = WS_TAG[r.workspace];
+    return h(
+      "div",
+      { className: "mos__agrow mos--" + (r.accent || "cyan") + (r.readOnly ? " is-ro" : "") },
+      h("span", { className: "mos__agrow-time" }, r.value || "—"),
+      h("span", { className: "mos__agrow-ico" }, h(Icon, { name: r.icon || "calendar-days", size: 15 })),
+      h(
+        "span",
+        { className: "mos__agrow-body" },
+        h("span", { className: "mos__agrow-title" }, r.title),
+        r.sub ? h("span", { className: "mos__agrow-sub" }, r.sub) : null
+      ),
+      wtag ? h("span", { className: "mos__wtag mos__wtag--" + wtag.tone, title: r.workspace }, wtag.label) : null
+    );
+  }
+  const AGENDA_MAX = 4;
+  function AgendaRail(props) {
+    const ws = props.workspace;
+    const eng = ws === "engineering";
+    const src = eng ? props.engineeringModule : props.todayModule;
+    const st = src ? src._state || "loading" : props.load === "loading" ? "loading" : "empty";
+    let rows = src && Array.isArray(src._rows) ? src._rows.slice() : [];
+    if (!eng && ws === "private") rows = rows.filter((r) => (r.workspace || "private") === "private");
+    const head = eng ? "Arbeitsstränge" : "Heute";
+    const headIcon = eng ? "git-branch" : "sun";
+    const shown = rows.slice(0, AGENDA_MAX);
+    const extra = rows.length - shown.length;
+    const demo = src && src._demo;
+    return h(
+      "section",
+      { className: "mos__card mos__agenda" },
+      h(
+        "header",
+        { className: "mos__card-head" },
+        h(Icon, { name: headIcon, size: 16 }),
+        h("span", { className: "mos__card-title" }, head),
+        h(ZonePip, { state: demo ? "konzept" : st, observedAt: src && src._observedAt, source: src && src._source, note: src && src._note })
+      ),
+      h(
+        "div",
+        { className: "mos__agenda-body" },
+        props.load === "loading" && !src ? [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" })) : shown.length ? [
+          ...shown.map((r, i) => h(AgendaRow, { key: i, row: r })),
+          extra > 0 ? h(
+            "button",
+            { key: "more", type: "button", className: "mos__agenda-more", onClick: props.onMore },
+            h(Icon, { name: "ellipsis", size: 14 }),
+            "+" + extra + " weitere"
+          ) : null
+        ] : h(ZoneEmpty, { state: st, icon: "calendar-days", title: eng ? "Keine Arbeitsstränge" : "Keine Termine heute", note: src && src._note })
+      )
+    );
+  }
+  function JarvisBubble(props) {
+    const b = props.bubble;
+    return h(
+      "div",
+      { className: "mos__jbub is-" + (b.tone || "cyan") },
+      h("span", { className: "mos__jbub-ava" }, h(Icon, { name: b.icon || "orbit", size: 14 })),
+      h(
+        "div",
+        { className: "mos__jbub-body" },
+        b.title ? h("span", { className: "mos__jbub-title" }, b.title) : null,
+        h("span", { className: "mos__jbub-text" }, b.text),
+        b.source || b.workspace ? h(
+          "span",
+          { className: "mos__jbub-meta" },
+          b.workspace && WS_TAG[b.workspace] ? h("span", { className: "mos__wtag mos__wtag--" + WS_TAG[b.workspace].tone }, WS_TAG[b.workspace].label) : null,
+          b.source ? h("span", { className: "mos__jbub-src" }, b.source) : null
+        ) : null
+      )
+    );
+  }
+  function SuggestionCard(props) {
+    const hint = props.hint;
+    const obj = hint.propose && hint.propose.objective;
+    return h(
+      "div",
+      { className: "mos__suggest" },
+      h(
+        "div",
+        { className: "mos__suggest-head" },
+        h(Icon, { name: "flask-conical", size: 15 }),
+        h("span", { className: "mos__suggest-kind" }, "Vorschlag · propose-only (Dry-Run)"),
+        h("span", { className: "mos__suggest-tag" }, h(Icon, { name: "shield-check", size: 12 }), "Gate entscheidet")
+      ),
+      h("div", { className: "mos__suggest-title" }, hint.title),
+      hint.detail ? h("div", { className: "mos__suggest-detail" }, hint.detail) : null,
+      h(
+        "div",
+        { className: "mos__suggest-foot" },
+        h(
+          "button",
+          {
+            type: "button",
+            className: "mos__suggest-btn",
+            onClick: () => props.onPropose(obj),
+            title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst."
+          },
+          h(Icon, { name: "git-branch", size: 15 }),
+          "Als Codex-Aufgabe vorschlagen"
+        ),
+        h("span", { className: "mos__suggest-note" }, "Nichts wird ausgeführt.")
+      )
+    );
+  }
+  function JarvisLive(props) {
+    const j = props.jarvis;
+    const load = props.load;
+    const ws = props.workspace;
+    const chat = j && j.chat;
+    const hints = j && Array.isArray(j.hints) ? j.hints.filter((x) => x.id !== "gates_pending") : [];
+    const proposeHint = hints.find((x) => x.propose);
+    const showPropose = proposeHint && ws === "engineering";
+    const bubbles = [];
+    if (chat) {
+      bubbles.push(chat.connected ? { icon: "orbit", tone: "cyan", title: "Coaching-Chat verbunden", text: chat.scope || chat.note || "Brain-Gateway erreichbar." } : { icon: "unplug", tone: "red", title: "Jarvis-Chat nicht verbunden", text: chat.note || "Chat-Backend nicht erreichbar — keine Antwort erfunden." });
+    } else if (load === "offline") {
+      bubbles.push({ icon: "unplug", tone: "red", title: "Jarvis nicht erreichbar", text: "Read-Modelle offline — der Zustand erscheint, sobald die Quelle wieder antwortet." });
+    }
+    hints.forEach((x) => {
+      if (x === proposeHint && showPropose) return;
+      bubbles.push({
+        icon: x.icon || "lightbulb",
+        tone: x.severity === "attention" ? "amber" : "cyan",
+        title: x.title,
+        text: x.detail,
+        source: x.source,
+        workspace: x.workspace
+      });
+    });
+    const empty = !chat && load !== "offline" && load !== "loading" && !hints.length;
+    const chatOk = chat && chat.connected;
+    return h(
+      "section",
+      { className: "mos__card mos__jlive" },
+      h(
+        "header",
+        { className: "mos__jlive-head" },
+        h("span", { className: "mos__jlive-orb" }, h(Orb, { label: false })),
+        h(
+          "span",
+          { className: "mos__jlive-id" },
+          h("b", null, "Jarvis"),
+          h("span", { className: "mos__jlive-sub" }, jarvisStateText(props.stateIndex))
+        ),
+        h("span", { className: "mos__jlive-ws mos__wtag mos__wtag--" + ((WS_TAG[ws] || {}).tone || "cyan") }, (WS_TAG[ws] || {}).label || ws),
+        chat ? h(
+          "span",
+          { className: "mos__pip mos__pip--" + (chatOk ? "verified" : "red"), title: chat.note || "" },
+          h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+          chatOk ? "Chat bereit" : "Chat offline"
+        ) : h("span", { className: "mos__jlive-load" }, h(Icon, { name: load === "loading" ? "loader" : "unplug", size: 14, className: load === "loading" ? "is-spin" : "" })),
+        h("button", { type: "button", className: "mos__jlive-mic", title: NOT_WIRED, "aria-label": "Voice-Memo (folgt)" }, h(Icon, { name: "mic", size: 18 }))
+      ),
+      h(
+        "div",
+        { className: "mos__jlive-stream" },
+        load === "loading" && !j ? [0, 1].map((i) => h("div", { key: i, className: "mos__skbub" })) : empty ? h(
+          "div",
+          { className: "mos__jlive-greet" },
+          h("span", { className: "mos__jlive-greet-t" }, (props.greeting || "Hallo") + ", Mikael."),
+          h("span", { className: "mos__jlive-greet-s" }, "Kein offener Hinweis. Frag mich etwas oder wähle einen Vorschlag."),
+          h(
+            "div",
+            { className: "mos__jlive-chips" },
+            CHIPS.slice(0, 3).map((c) => h(
+              "button",
+              { key: c.label, type: "button", className: "mos__chip", onClick: () => props.onChip(c.label) },
+              h(Icon, { name: c.icon, size: 14 }),
+              c.label
+            ))
+          )
+        ) : [
+          ...bubbles.map((b, i) => h(JarvisBubble, { key: i, bubble: b })),
+          showPropose ? h(SuggestionCard, { key: "sug", hint: proposeHint, onPropose: props.onPropose }) : null
+        ]
+      )
+    );
+  }
+  function FirmaMetric(props) {
+    const r = props.row;
+    return h(
+      "div",
+      { className: "mos__firma-metric mos--" + (r.accent || "cyan") },
+      h("span", { className: "mos__firma-metric-ico" }, h(Icon, { name: r.icon || "activity", size: 15 })),
+      h(
+        "span",
+        { className: "mos__firma-metric-body" },
+        h("span", { className: "mos__firma-metric-title" }, r.title),
+        r.sub ? h("span", { className: "mos__firma-metric-sub" }, r.sub) : null
+      ),
+      r.status ? h("span", { className: "mos__status mos__status--" + r.status }, r.statusLabel) : r.value ? h("span", { className: "mos__firma-metric-val" }, r.value) : null
+    );
+  }
+  function FirmaPanel(props) {
+    const risel = props.risel, company = props.company, load = props.load;
+    const rst = risel ? risel._state || "loading" : load === "loading" ? "loading" : "empty";
+    const rows = risel && Array.isArray(risel._rows) ? risel._rows.slice(0, 3) : [];
+    const demo = risel && risel._demo;
+    return h(
+      "section",
+      { className: "mos__card mos__firma" },
+      h(
+        "header",
+        { className: "mos__card-head" },
+        h(Icon, { name: "server", size: 16 }),
+        h("span", { className: "mos__card-title" }, "Firma / Rise-L"),
+        h(ZonePip, { state: demo ? "konzept" : rst, observedAt: risel && risel._observedAt, source: risel && risel._source, note: risel && risel._note })
+      ),
+      h(
+        "div",
+        { className: "mos__firma-body" },
+        load === "loading" && !risel ? [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" })) : rows.length ? rows.map((r, i) => h(FirmaMetric, { key: i, row: r })) : h(ZoneEmpty, { state: rst, icon: "server", title: "Keine Signale", note: risel && risel._note })
+      ),
+      company ? h(
+        "footer",
+        { className: "mos__firma-foot" },
+        h(Icon, { name: "building-2", size: 13 }),
+        h("span", { className: "mos__firma-foot-t" }, company.meta || "Firma-Signale"),
+        h("span", { className: "mos__firma-foot-ro" }, h(Icon, { name: "lock", size: 11 }), "nur lesen")
+      ) : null
+    );
+  }
+  function ApprovalCard(props) {
+    const c = props.card;
+    const cat = gateCategory(c.gateClass, c.gateReason, c.text);
+    const fresh = freshnessLabel(c.createdUtc);
+    const shortHash = c.intentSha256 ? c.intentSha256.slice(0, 12) : null;
+    const open = props.open;
+    return h(
+      "div",
+      { className: "mos__appc-card mos__appc-card--" + cat.tone + (open ? " is-open" : "") },
+      h(
+        "div",
+        { className: "mos__appc-top" },
+        h("span", { className: "mos__appc-cat mos__appc-cat--" + cat.tone }, h(Icon, { name: cat.icon, size: 12 }), cat.label),
+        h("span", { className: "mos__appc-text" }, c.text),
+        fresh ? h("span", { className: "mos__appc-when" }, fresh) : null
+      ),
+      h(
+        "div",
+        { className: "mos__appc-meta" },
+        c.mandant ? h("span", { className: "mos__appc-tag" }, c.mandant) : null,
+        c.targetSystem ? h("span", { className: "mos__appc-tag" }, c.targetSystem) : null,
+        shortHash ? h("span", { className: "mos__appc-hash", title: "Intent-Hash: " + c.intentSha256 }, h(Icon, { name: "hash", size: 11 }), shortHash) : null,
+        h(
+          "button",
+          {
+            type: "button",
+            className: "mos__appc-details",
+            "aria-expanded": open ? "true" : "false",
+            onClick: () => props.onToggle(c.id),
+            title: "Nur-Lese-Details. Freigabe/Ablehnung ausschließlich im Operator-Approval-Center (Hermes) — nie aus dem Plugin."
+          },
+          h(Icon, { name: "eye", size: 13 }),
+          "Details"
+        )
+      ),
+      open ? h(
+        "dl",
+        { className: "mos__appc-detail" },
+        h("div", null, h("dt", null, "Gate"), h("dd", null, (c.gateClass || "—") + (c.gateReason ? " · " + c.gateReason : ""))),
+        c.intentSha256 ? h("div", null, h("dt", null, "Intent-Hash"), h("dd", { className: "mos__mono" }, c.intentSha256)) : null,
+        c.idempotencyKey ? h("div", null, h("dt", null, "Idempotenz"), h("dd", { className: "mos__mono" }, c.idempotencyKey)) : null,
+        c.payloadSha256 ? h("div", null, h("dt", null, "Payload-Hash"), h("dd", { className: "mos__mono" }, c.payloadSha256)) : null,
+        h(
+          "div",
+          { className: "mos__appc-decidenote" },
+          h(Icon, { name: "shield-check", size: 12 }),
+          "Entscheidung nur im Operator-Approval-Center. Dieses Cockpit liest ausschließlich."
+        )
+      ) : null
+    );
+  }
+  const APPC_MAX = 4;
+  function ApprovalCenter(props) {
+    const a = props.approvals, load = props.load;
+    const [openId, setOpenId] = useState(null);
+    const [showAll, setShowAll] = useState(false);
+    const st = a ? a.state || "empty" : load === "loading" ? "loading" : "unavailable";
+    const cards = a && Array.isArray(a.cards) ? a.cards : [];
+    const pending = a ? a.pending != null ? a.pending : cards.length : 0;
+    const max = props.compact ? 1 : APPC_MAX;
+    const shown = showAll ? cards : cards.slice(0, max);
+    const extra = cards.length - shown.length;
+    const onToggle = useCallback((id) => setOpenId((p) => p === id ? null : id), []);
+    return h(
+      "section",
+      { className: "mos__card mos__appc" + (props.flash ? " is-flash" : ""), ref: props.innerRef, id: "mos-approvals" },
+      h(
+        "header",
+        { className: "mos__card-head" },
+        h(Icon, { name: "shield-check", size: 16 }),
+        h("span", { className: "mos__card-title" }, "Freigaben"),
+        pending > 0 ? h("span", { className: "mos__appc-count" }, pending) : null,
+        h(ZonePip, { state: st, observedAt: a && a.observedAt, source: a && a.source, note: a && a.note })
+      ),
+      h(
+        "div",
+        { className: "mos__appc-body" },
+        load === "loading" && !a ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" })) : cards.length ? [
+          ...shown.map((c) => h(ApprovalCard, { key: c.id, card: c, open: openId === c.id, onToggle })),
+          extra > 0 ? h(
+            "button",
+            { key: "more", type: "button", className: "mos__appc-more", onClick: props.compact ? props.onMore : () => setShowAll(true) },
+            h(Icon, { name: "ellipsis", size: 14 }),
+            "+" + extra + " weitere"
+          ) : null
+        ] : h(ZoneEmpty, {
+          state: st,
+          icon: "inbox",
+          title: st === "unavailable" || st === "error" ? "Approval-Quelle nicht erreichbar" : "Keine offenen Freigaben",
+          note: a && a.note
+        })
+      )
+    );
+  }
+  function CockpitScene(props) {
+    return h(
+      "div",
+      { className: "mos__ckpt" },
+      h(
+        "aside",
+        { className: "mos__ckpt-col mos__ckpt-left" },
+        h(WorkspaceSwitcher, { active: props.workspace, onChange: props.onWorkspace }),
+        h(AgendaRail, {
+          workspace: props.workspace,
+          todayModule: props.byId.today,
+          engineeringModule: props.byId.engineering,
+          load: props.load,
+          onMore: props.onAgendaMore
+        })
+      ),
+      h(
+        "section",
+        { className: "mos__ckpt-col mos__ckpt-center" },
+        h(JarvisLive, {
+          jarvis: props.cockpit.jarvis,
+          load: props.cockpitLoad,
+          workspace: props.workspace,
+          stateIndex: props.stateIndex,
+          greeting: props.greeting,
+          onPropose: props.onPropose,
+          onChip: props.onChip
+        })
+      ),
+      h(
+        "aside",
+        { className: "mos__ckpt-col mos__ckpt-right" },
+        h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load }),
+        h(ApprovalCenter, {
+          approvals: props.cockpit.approvals,
+          load: props.cockpitLoad,
+          flash: props.approvalsFlash,
+          innerRef: props.approvalsRef
+        })
+      )
+    );
+  }
+  function MobileCockpit(props) {
+    const c = props.cockpit || {};
+    const j = c.jarvis;
+    const chat = j && j.chat;
+    const hints = j && Array.isArray(j.hints) ? j.hints.filter((x) => x.id !== "gates_pending") : [];
+    const topHint = hints[0];
+    const chatOk = chat && chat.connected;
+    return h(
+      "div",
+      { className: "mos__mckpt" },
+      // KPI strip — horizontal scroll, 2 visible + fade edge.
+      h(
+        "div",
+        { className: "mos__mckpt-kpis" },
+        h(KpiBar, { cockpit: c, load: props.cockpitLoad, onGates: props.onGoApprovals })
+      ),
+      // Jarvis teaser → opens the full jarvis tab.
+      h(
+        "button",
+        { type: "button", className: "mos__mckpt-jarvis", onClick: props.onGoJarvis, "aria-label": "Jarvis öffnen" },
+        h("span", { className: "mos__mckpt-orb" }, h(Orb, { label: false })),
+        h(
+          "span",
+          { className: "mos__mckpt-jbody" },
+          h(
+            "span",
+            { className: "mos__mckpt-jhead" },
+            h("b", null, "Jarvis"),
+            chat ? h(
+              "span",
+              { className: "mos__pip mos__pip--" + (chatOk ? "verified" : "red") },
+              h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+              chatOk ? "Chat bereit" : "Chat offline"
+            ) : null
+          ),
+          h(
+            "span",
+            { className: "mos__mckpt-jline" },
+            topHint ? topHint.title : props.cockpitLoad === "loading" ? "Lädt Zustand …" : "Kein offener Hinweis."
+          )
+        ),
+        h(Icon, { name: "chevron-right", size: 18 })
+      ),
+      // Agenda (Heute) — max 3.
+      h(AgendaRailMobile, {
+        workspace: props.workspace,
+        todayModule: props.byId.today,
+        engineeringModule: props.byId.engineering,
+        load: props.load,
+        onMore: props.onGoTimeline
+      }),
+      // Firma compact.
+      h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load }),
+      // Approvals — compact (max 1 + counter → deep link).
+      h(ApprovalCenter, { approvals: c.approvals, load: props.cockpitLoad, compact: true, onMore: props.onGoApprovals })
+    );
+  }
+  function AgendaRailMobile(props) {
+    return h("div", { className: "mos__mckpt-agenda" }, h(AgendaRail, { ...props }));
+  }
+  function useIdleTimer(active, ms, onIdle) {
+    const cb = useRef(onIdle);
+    cb.current = onIdle;
+    useEffect(() => {
+      if (!active || prefersReducedMotion() || typeof window === "undefined") return;
+      let t = null;
+      const reset = () => {
+        if (t) window.clearTimeout(t);
+        t = window.setTimeout(() => {
+          if (cb.current) cb.current();
+        }, ms);
+      };
+      const evs = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"];
+      evs.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+      reset();
+      return () => {
+        if (t) window.clearTimeout(t);
+        evs.forEach((e) => window.removeEventListener(e, reset));
+      };
+    }, [active, ms]);
+  }
   function MikaelOS() {
     const [workspace, setWorkspace] = useState("private");
     const [modules, setModules] = useState(MODULES);
     const [focusId, setFocusId] = useState("engineering");
     const [stateIndex, setStateIndex] = useState(0);
     const [command, setCommand] = useState("");
-    const [scene, setScene] = useState("constellation");
+    const [scene, setScene] = useState("cockpit");
     const isMobile = useMediaQuery("(max-width: 430px)");
     const [mobileTab, setMobileTab] = useState("home");
     const [sheetOpen, setSheetOpen] = useState(false);
     const [sheetDetent, setSheetDetent] = useState(1);
     const [live, setLive] = useState(null);
     const [loadState, setLoadState] = useState("loading");
+    const [cockpit, setCockpit] = useState({ kpi: null, jarvis: null, approvals: null });
+    const [cockpitLoad, setCockpitLoad] = useState("loading");
+    const [approvalsFlash, setApprovalsFlash] = useState(false);
+    const approvalsRef = useRef(null);
     const [propose, setPropose] = useState(null);
     const [review, setReview] = useState(null);
     const [coach, setCoach] = useState(null);
-    useEffect(() => {
-      let alive = true;
-      const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
-      const getJSON = sdk.fetchJSON ? (u) => sdk.fetchJSON(u) : typeof fetch === "function" ? (u) => fetch(u).then((r) => r.ok ? r.json() : Promise.reject(r.status)) : null;
-      if (!getJSON) {
-        setLoadState("offline");
-        return;
-      }
-      Promise.resolve().then(() => getJSON(PLUGIN_API + "/overview")).then((data) => {
-        if (alive) {
-          setLive(data);
-          setLoadState("ready");
-        }
+    const loadOverview = useCallback(() => {
+      setLoadState((p) => p === "ready" ? "ready" : "loading");
+      sdkGet(PLUGIN_API + "/overview").then((data) => {
+        setLive(data);
+        setLoadState("ready");
       }).catch(() => {
-        if (alive) setLoadState("offline");
+        setLoadState((p) => p === "ready" ? "ready" : "offline");
       });
-      return () => {
-        alive = false;
-      };
     }, []);
+    const loadCockpit = useCallback(() => {
+      setCockpitLoad((p) => p === "ready" ? "ready" : "loading");
+      Promise.allSettled([sdkGet(KPI_API), sdkGet(JARVIS_STATE_API), sdkGet(APPROVALS_API)]).then(([k, j, a]) => {
+        setCockpit({
+          kpi: k.status === "fulfilled" ? k.value : null,
+          jarvis: j.status === "fulfilled" ? j.value : null,
+          approvals: a.status === "fulfilled" ? a.value : null
+        });
+        setCockpitLoad([k, j, a].some((r) => r.status === "fulfilled") ? "ready" : "offline");
+      });
+    }, []);
+    useEffect(() => {
+      loadOverview();
+      loadCockpit();
+    }, [loadOverview, loadCockpit]);
+    useEffect(() => {
+      if (typeof window === "undefined") return;
+      const reload = () => {
+        loadOverview();
+        loadCockpit();
+      };
+      window.addEventListener("online", reload);
+      window.addEventListener("focus", reload);
+      return () => {
+        window.removeEventListener("online", reload);
+        window.removeEventListener("focus", reload);
+      };
+    }, [loadOverview, loadCockpit]);
     const liveById = useMemo(() => indexLive(live), [live]);
     const loadingModules = loadState === "loading";
     const viewModules = useMemo(
@@ -2857,7 +3448,7 @@ var MikaelOSPlugin = function() {
         setStateIndex(STATES.length - 1);
         return;
       }
-      const steps = [1, 2, 3, 4, 5];
+      const steps = [1, 2, 3, 4, 5, 6];
       steps.forEach((s, i) => {
         timersRef.current.push(window.setTimeout(() => setStateIndex(s), (i + 1) * 750));
       });
@@ -3170,6 +3761,29 @@ var MikaelOSPlugin = function() {
       runStateSequence();
       setCommand("");
     }, [runStateSequence]);
+    useIdleTimer(
+      scene === "cockpit" && stateIndex === 0 && !isMobile,
+      9e4,
+      useCallback(() => setScene("constellation"), [])
+    );
+    const onGates = useCallback(() => {
+      const el = approvalsRef.current;
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
+      setApprovalsFlash(true);
+      window.setTimeout(() => setApprovalsFlash(false), 1400);
+    }, []);
+    const onChip = useCallback((label) => {
+      setCommand(label);
+      if (inputRef.current) inputRef.current.focus();
+    }, []);
+    const onAgendaMore = useCallback(() => setScene("timeline"), []);
+    const onGoTimeline = useCallback(() => {
+      if (isMobile) setMobileTab("timeline");
+      else setScene("timeline");
+    }, [isMobile]);
+    const onGoApprovals = useCallback(() => {
+      setMobileTab("home");
+    }, []);
     if (isMobile) {
       return h(
         "div",
@@ -3202,7 +3816,12 @@ var MikaelOSPlugin = function() {
           onSheetClose: closeSheet,
           onPropose: proposeOpen,
           onReview: reviewOpen,
-          onCoach: coachOpen
+          onCoach: coachOpen,
+          cockpit,
+          cockpitLoad,
+          onChip,
+          onGoTimeline,
+          onGoApprovals
         }),
         h(ProposeFlow, {
           state: propose,
@@ -3230,9 +3849,67 @@ var MikaelOSPlugin = function() {
         })
       );
     }
+    const commandForm = h(
+      "form",
+      { className: "mos__command", onSubmit: submit },
+      h(
+        "div",
+        { className: "mos__command-bar" },
+        h("button", { type: "button", className: "mos__mic", "aria-label": "Sprachbefehl starten" }, h(Icon, { name: "mic", size: 22 })),
+        h("input", {
+          ref: inputRef,
+          className: "mos__command-input",
+          type: "text",
+          "aria-label": "Befehl eingeben",
+          placeholder: "Sage „Jarvis“ oder schreibe einen Befehl …",
+          value: command,
+          onChange: (e) => setCommand(e.target.value)
+        }),
+        h("button", { type: "submit", className: "mos__send", "aria-label": "Senden" }, h(Icon, { name: "send-horizontal", size: 18 }))
+      ),
+      h(
+        "div",
+        { className: "mos__chips" },
+        h("button", {
+          key: "propose",
+          type: "button",
+          className: "mos__chip mos__chip--propose",
+          onClick: () => proposeOpen(command),
+          title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst."
+        }, h(Icon, { name: "git-branch", size: 14 }), "Codex-Aufgabe vorschlagen"),
+        CHIPS.map((c) => h(
+          "button",
+          { key: c.label, type: "button", className: "mos__chip", onClick: () => {
+            setCommand(c.label);
+            if (inputRef.current) inputRef.current.focus();
+          } },
+          h(Icon, { name: c.icon, size: 14 }),
+          c.label
+        ))
+      )
+    );
+    const constFooter = h(
+      "footer",
+      { className: "mos__footer" },
+      h(
+        "button",
+        { type: "button", className: "mos__quick", title: NOT_WIRED },
+        h(Icon, { name: "layout-grid", size: 16 }),
+        "Schnellzugriffe",
+        h(Icon, { name: "chevron-up", size: 14 })
+      ),
+      h(StateRail, { activeIndex: stateIndex }),
+      h(
+        "span",
+        { className: "mos__reorder" },
+        h(Icon, { name: "grip-vertical", size: 14 }),
+        "Ziehen um neu zu ordnen",
+        h("span", { className: "mos__kbd" }, h(Icon, { name: "command", size: 12 }), "K · Kurzbefehle")
+      )
+    );
     return h(
       "div",
-      { className: "mos" + (scene === "timeline" ? " mos--timeline" : "") },
+      { className: "mos" + (scene === "timeline" ? " mos--timeline" : scene === "cockpit" ? " mos--cockpit" : "") },
       h("div", { className: "mos__atmosphere", "aria-hidden": "true" }),
       h("div", { className: "mos__atmosphere-veil", "aria-hidden": "true" }),
       h(LiveAnnouncer, { message: announce }),
@@ -3241,7 +3918,30 @@ var MikaelOSPlugin = function() {
         { className: "mos__shell", role: "main" },
         h("h1", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
         h(TopBar, { loadState, liveCount, total: viewModules.length, scene, onScene: setScene }),
-        scene === "timeline" ? h(
+        scene === "cockpit" ? h(
+          React.Fragment,
+          null,
+          h(KpiBar, { cockpit, load: cockpitLoad, onGates }),
+          h(
+            "div",
+            { className: "mos__stagewrap mos__stagewrap--ckpt" },
+            h(CockpitScene, {
+              byId: enrichedById,
+              workspace,
+              onWorkspace: setWorkspace,
+              cockpit,
+              cockpitLoad,
+              load: loadState,
+              stateIndex,
+              greeting,
+              onPropose: proposeOpen,
+              onChip,
+              onAgendaMore,
+              approvalsFlash,
+              approvalsRef
+            })
+          )
+        ) : scene === "timeline" ? h(
           "div",
           { className: "mos__stagewrap mos__stagewrap--tl" },
           h(TimelineScene, { byId: enrichedById, focusId, onActivate: activate, onClose: closeFocus })
@@ -3323,69 +4023,14 @@ var MikaelOSPlugin = function() {
             )
           )
         ),
-        // command bar + chips
-        h(
-          "form",
-          { className: "mos__command", onSubmit: submit },
-          h(
-            "div",
-            { className: "mos__command-bar" },
-            h("button", { type: "button", className: "mos__mic", "aria-label": "Sprachbefehl starten" }, h(Icon, { name: "mic", size: 22 })),
-            h("input", {
-              ref: inputRef,
-              className: "mos__command-input",
-              type: "text",
-              "aria-label": "Befehl eingeben",
-              placeholder: "Sage „Jarvis“ oder schreibe einen Befehl …",
-              value: command,
-              onChange: (e) => setCommand(e.target.value)
-            }),
-            h("button", { type: "submit", className: "mos__send", "aria-label": "Senden" }, h(Icon, { name: "send-horizontal", size: 18 }))
-          ),
-          h(
-            "div",
-            { className: "mos__chips" },
-            // The propose chip is the entry to the ONE gated action. It opens the
-            // dry-run preview overlay (fires nothing); every other chip just
-            // pre-fills the command box.
-            h("button", {
-              key: "propose",
-              type: "button",
-              className: "mos__chip mos__chip--propose",
-              onClick: () => proposeOpen(command),
-              title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst."
-            }, h(Icon, { name: "git-branch", size: 14 }), "Codex-Aufgabe vorschlagen"),
-            CHIPS.map((c) => h(
-              "button",
-              { key: c.label, type: "button", className: "mos__chip", onClick: () => {
-                setCommand(c.label);
-                if (inputRef.current) inputRef.current.focus();
-              } },
-              h(Icon, { name: c.icon, size: 14 }),
-              c.label
-            ))
-          )
-        ),
-        // footer: quick access · state rail · reorder hint
-        h(
+        // Footer (UI-SPEC §1): in the Cockpit the StateRail sits directly ABOVE the
+        // command bar; Konstellation/Timeline keep the command bar → footer order.
+        scene === "cockpit" ? h(
           "footer",
-          { className: "mos__footer" },
-          h(
-            "button",
-            { type: "button", className: "mos__quick", title: NOT_WIRED },
-            h(Icon, { name: "layout-grid", size: 16 }),
-            "Schnellzugriffe",
-            h(Icon, { name: "chevron-up", size: 14 })
-          ),
+          { className: "mos__ckpt-foot" },
           h(StateRail, { activeIndex: stateIndex }),
-          h(
-            "span",
-            { className: "mos__reorder" },
-            h(Icon, { name: "grip-vertical", size: 14 }),
-            "Ziehen um neu zu ordnen",
-            h("span", { className: "mos__kbd" }, h(Icon, { name: "command", size: 12 }), "K · Kurzbefehle")
-          )
-        )
+          commandForm
+        ) : h(React.Fragment, null, commandForm, constFooter)
       ),
       h(ProposeFlow, {
         state: propose,
