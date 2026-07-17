@@ -131,6 +131,27 @@ ANKI_SOURCE = "anki-sync (collection.anki2 read-only)"
 # "Schema unbekannt" rather than a guess. Table presence is the real guard.
 _ANKI_KNOWN_VERS = {11, 18}
 
+# Lernplan — L-3: Klausur-Countdown/Pacing config + the Jarvis coaching read-path.
+# ``exams.json`` is a small, READ-ONLY study config (one entry per Fach with a
+# date + Themen + optional Anki deck name to link the due-count). It lives in the
+# established study data dir NEXT TO the collection — never inside the plugin
+# code tree, and the plugin only ever reads it (no write, no schema owned here).
+EXAMS_PATH = Path(os.environ.get(
+    "MIKAELOS_EXAMS", "/srv/delta/data/study/exams.json"))
+# The Feynman coaching evaluation is genuinely LLM-graded — never faked. The only
+# honest way to grade a free explanation is to ask Jarvis. We route to the Hermes
+# **Brain Gateway** (OpenAI-compatible ``/v1/chat/completions``, the abo-first
+# Brain chain, loopback :18084). This is a READ/coaching call — no business write,
+# no mission, no gate. It needs the gateway Bearer token; following the WHOOP
+# pattern the token is resolved at call time (env first, then the sanctioned SOPS
+# ``secret get`` path) and NEVER logged/persisted. Absent token/gateway -> the
+# surface is HONEST that the Jarvis grade is pending; it never invents feedback.
+BRAIN_GATEWAY_BASE = os.environ.get("MIKAELOS_BRAIN_GATEWAY", "http://127.0.0.1:18084")
+BRAIN_MODEL = os.environ.get("MIKAELOS_BRAIN_MODEL", "jarvis")
+BRAIN_TIMEOUT = float(os.environ.get("MIKAELOS_BRAIN_TIMEOUT", "45"))
+_BRAIN_TOKEN_REF = os.environ.get("MIKAELOS_BRAIN_TOKEN_REF", "hermes/GATEWAY_TOKEN")
+_BRAIN_TOKEN_CACHE: Optional[str] = None
+
 # Kalender/Heute — calendar-evidence projection (read-only SQLite; built every
 # 30 min by calendar-evidence-index.timer via a real Google-Calendar-API
 # read-only OAuth read, atomic replace, authority DERIVED_EVIDENCE_ONLY).
@@ -199,6 +220,7 @@ STALE = {
     "company": 24 * 3600,   # approval cards linger until decided
     "calendar": 2 * 3600,   # 30-min mirror timer + generous slack
     "learning": 14 * 24 * 3600,  # Anki-Sync ist gelegentlich (Gerät-getrieben) — großzügig
+    "study": 24 * 3600,          # exams.json wird selten editiert — großzügig
 }
 
 # ---------------------------------------------------------------------------
@@ -456,14 +478,18 @@ def _http_get_json(url: str, *, token: str = "") -> Tuple[Optional[int], Optiona
         return None, None
 
 
-def _http_post_json(url: str, body: Dict[str, Any]) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
-    """POST a JSON body to a fixed loopback URL. Read-side helper for the ONE
-    gated propose seam (never used during dry-run). Returns (status, json)."""
+def _http_post_json(url: str, body: Dict[str, Any], *, token: str = "",
+                    timeout: Optional[float] = None) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
+    """POST a JSON body to a fixed loopback URL. Used by the ONE gated propose seam
+    (no token) and the Brain-Gateway coaching call (Bearer token, longer timeout —
+    an LLM round is slower than a control-plane read). Returns (status, json)."""
     data = json.dumps(body, ensure_ascii=False).encode("utf-8")
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     try:
         req = Request(url, data=data, headers=headers, method="POST")
-        with urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 - fixed loopback base
+        with urlopen(req, timeout=(timeout or HTTP_TIMEOUT)) as resp:  # noqa: S310 - fixed loopback base
             raw = resp.read().decode("utf-8")
             return resp.status, (json.loads(raw) if raw.strip() else {})
     except HTTPError as exc:
@@ -1117,7 +1143,9 @@ def module_learning() -> Dict[str, Any]:
     path = _find_anki_collection()
     if path is None:
         # Honest current state: sync server is up but no device has synced yet, so
-        # no per-user collection file exists. Never a fake "3 fällig".
+        # no per-user collection file exists. Never a fake "3 fällig". The Klausur-
+        # countdown is date-only, so it still shows here (honest before any sync).
+        exam_row, next_exam = _nearest_exam_bits()
         return _prov(
             state="empty", source=ANKI_SOURCE, source_kind="file",
             workspace="private", permission=_ANKI_PERM,
@@ -1126,8 +1154,10 @@ def module_learning() -> Dict[str, Any]:
             note=("Anki-Collection noch nicht synchronisiert. Der Anki-Sync-Server "
                   "ist bereit — sobald das erste Gerät synchronisiert, erscheinen "
                   "hier fällige Karten, Retention und Streak (read-only, Anki bleibt "
-                  "das Lern-Wahrheitssystem)."),
-            extra={"anki": {"collection": None, "syncReady": True}},
+                  "das Lern-Wahrheitssystem). Klausur-Countdown läuft unabhängig davon."),
+            rows=([exam_row] if exam_row else []),
+            extra={"anki": {"collection": None, "syncReady": True},
+                   "nextExam": next_exam, "hasCoach": True},
         )
 
     try:
@@ -1195,6 +1225,11 @@ def module_learning() -> Dict[str, Any]:
             "sub": "Deck", "value": (f"{d['due']} fällig" if d["due"] else "—"),
         })
 
+    # L-3: surface the nearest Klausur countdown right in the Lernplan lens (violet).
+    exam_row, next_exam = _nearest_exam_bits()
+    if exam_row:
+        rows.insert(0, exam_row)
+
     summary = f"{due} fällig · {ret_pct} Retention · {streak} T Streak"
     state = _freshness_state(observed, STALE["learning"])
     return _prov(
@@ -1215,8 +1250,869 @@ def module_learning() -> Dict[str, Any]:
             "learnedToday": data["learned_today"],
             "totalCards": data["total_cards"],
             "decks": data["decks"],
+            "nextExam": next_exam,
+            "hasCoach": True,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Lernplan (L-2) — READ-ONLY Review/Drill session projection.
+#
+# A drill/preview surface over the SAME Anki-Sync collection module_learning
+# reads. It NEVER writes and NEVER opens AnkiConnect: the actual review grading
+# + persistence happens in Anki / AnkiDroid, not here. This endpoint only
+#   (1) reads the due queue (learning + review-due + a little new) read-only,
+#   (2) reads each card's note text (front/back) for the drill, and
+#   (3) computes an FSRS interval PREVIEW for the four ratings, honestly graded:
+#         * py-fsrs importable       -> authoritative preview  ("py-fsrs")
+#         * else read cards.data      -> current interval only  ("anki-cards.data")
+#         * else                      -> no preview             ("unavailable")
+# Nothing is ever fabricated: a state we cannot read is reported as such.
+# ---------------------------------------------------------------------------
+_REVIEW_LIMIT_DEFAULT = int(os.environ.get("MIKAELOS_REVIEW_LIMIT", "20"))
+_REVIEW_LIMIT_MAX = 50
+# The four Anki/FSRS ratings, in button order, with UI accent + German label.
+_REVIEW_RATINGS = [
+    ("again", 1, "Nochmal", "red", "rotate-ccw"),
+    ("hard", 2, "Schwer", "amber", "hourglass"),
+    ("good", 3, "Gut", "emerald", "circle-check-big"),
+    ("easy", 4, "Einfach", "cyan", "fast-forward"),
+]
+
+
+def _fsrs_importable() -> bool:
+    """True iff py-fsrs is available in THIS process' venv. Cheap, cached-ish."""
+    try:
+        import fsrs  # noqa: F401
+        from fsrs import Scheduler, Card, Rating  # noqa: F401
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _fmt_interval_seconds(sec: float) -> str:
+    """Compact German interval label from a seconds delta (Berliner Kürzel)."""
+    sec = max(0.0, float(sec))
+    if sec < 3600:
+        return f"{max(1, round(sec / 60))} min"
+    if sec < 86400:
+        return f"{round(sec / 3600)} Std"
+    days = sec / 86400
+    if days < 45:
+        return f"{max(1, round(days))} T"
+    if days < 365:
+        return f"{max(1, round(days / 30))} Mon"
+    return f"{days / 365:.1f} J".replace(".0", "")
+
+
+def _fmt_ivl_days(ivl: Any) -> Optional[str]:
+    """Anki ``cards.ivl``: positive = days, negative = seconds (learning). None if 0/unknown."""
+    try:
+        n = int(ivl)
+    except (TypeError, ValueError):
+        return None
+    if n == 0:
+        return None
+    if n < 0:
+        return _fmt_interval_seconds(-n)
+    return _fmt_interval_seconds(n * 86400)
+
+
+def _card_memory(data_json: Any) -> Tuple[Optional[float], Optional[float]]:
+    """FSRS (stability, difficulty) from ``cards.data`` JSON, if present. Anki
+    stores the memory state under short keys ``s``/``d`` (also seen as
+    ``stability``/``difficulty``). Returns (None, None) for SM-2 / new cards."""
+    if not data_json:
+        return None, None
+    try:
+        obj = json.loads(data_json) if isinstance(data_json, str) else data_json
+    except (ValueError, TypeError):
+        return None, None
+    if not isinstance(obj, dict):
+        return None, None
+
+    def _num(*keys: str) -> Optional[float]:
+        for k in keys:
+            v = obj.get(k)
+            if isinstance(v, (int, float)):
+                return float(v)
+        return None
+
+    return _num("s", "stability"), _num("d", "difficulty")
+
+
+def _fsrs_preview(stability: Optional[float], difficulty: Optional[float],
+                  is_review: bool, now: datetime) -> Optional[Dict[str, str]]:
+    """Authoritative next-interval preview for the four ratings via py-fsrs.
+
+    Reconstructs a fresh card each rating (so nothing is mutated/persisted),
+    applies the rating and reads the resulting due delta. Returns None on ANY
+    incompatibility so the caller degrades honestly — never a guessed number."""
+    try:
+        from fsrs import Scheduler, Card, Rating
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        sched = Scheduler()
+    except Exception:  # noqa: BLE001
+        return None
+    ratings = {"again": Rating.Again, "hard": Rating.Hard,
+               "good": Rating.Good, "easy": Rating.Easy}
+    out: Dict[str, str] = {}
+    for name, rating in ratings.items():
+        try:
+            card = Card()
+            if is_review and stability and difficulty:
+                try:
+                    card.stability = float(stability)
+                    card.difficulty = float(difficulty)
+                    from fsrs import State  # optional across versions
+                    card.state = State.Review
+                except Exception:  # noqa: BLE001
+                    pass
+            try:
+                res = sched.review_card(card, rating, review_datetime=now)
+            except TypeError:
+                res = sched.review_card(card, rating)
+            c2 = res[0] if isinstance(res, tuple) else res
+            due = getattr(c2, "due", None)
+            if due is None:
+                return None
+            if due.tzinfo is None:
+                due = due.replace(tzinfo=timezone.utc)
+            out[name] = _fmt_interval_seconds((due - now).total_seconds())
+        except Exception:  # noqa: BLE001
+            return None
+    return out
+
+
+def _split_note(flds: Any) -> Tuple[str, str]:
+    """Anki note fields → (front, back). Fields are 0x1f-separated; field[0] is
+    the front, the rest joined the back. HTML/media are stripped to plain text."""
+    text = str(flds or "")
+    parts = text.split("\x1f") if text else [""]
+    front = _strip_html(parts[0]) if parts else ""
+    back = _strip_html(" · ".join(p for p in parts[1:] if p.strip())) if len(parts) > 1 else ""
+    return front, back
+
+
+_TAG_RE = None
+
+
+def _strip_html(s: str) -> str:
+    """Very small HTML→text: drop tags, unescape a few entities, collapse space.
+    Read-only cosmetic normalisation for the drill card; never alters source."""
+    import re
+    import html as _html
+    global _TAG_RE
+    if _TAG_RE is None:
+        _TAG_RE = re.compile(r"<[^>]+>")
+    txt = _TAG_RE.sub(" ", str(s or ""))
+    txt = _html.unescape(txt)
+    return " ".join(txt.split())
+
+
+def _review_deck_name(decks_json: Any, did: int) -> str:
+    """Best-effort deck name for a card's ``did`` from the col.decks blob."""
+    if not decks_json:
+        return "Deck"
+    try:
+        obj = json.loads(decks_json)
+        meta = obj.get(str(did)) if isinstance(obj, dict) else None
+        name = str(meta.get("name")).strip() if isinstance(meta, dict) else ""
+        return name or "Deck"
+    except (ValueError, TypeError, AttributeError):
+        return "Deck"
+
+
+def _read_review_session(path: Path, limit: int) -> Dict[str, Any]:
+    """Read due cards + note text + FSRS interval preview, all read-only (mode=ro).
+
+    Returns ``{ok, reason, cards, previewSource, fsrsAvailable, ...}``. ``ok`` is
+    False with a ``reason`` (``open`` | ``schema`` | ``read``) on failure. Never
+    writes; on any doubt the preview degrades rather than inventing a number."""
+    out: Dict[str, Any] = {
+        "ok": False, "reason": None, "error": None, "cards": [],
+        "previewSource": "unavailable", "fsrsAvailable": _fsrs_importable(),
+        "totalDue": 0,
+    }
+    try:
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1.5)
+    except sqlite3.Error as exc:
+        out["reason"], out["error"] = "open", type(exc).__name__
+        return out
+    try:
+        tables = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if not {"col", "cards", "revlog", "notes"} <= tables:
+            out["reason"] = "schema"
+            out["error"] = "col/cards/revlog/notes fehlt"
+            return out
+        col_row = con.execute("SELECT crt, ver, decks FROM col LIMIT 1").fetchone()
+        if not col_row:
+            out["reason"], out["error"] = "schema", "col-Tabelle leer"
+            return out
+        crt = int(col_row[0] or 0)
+        ver = int(col_row[1] or 0)
+        decks_json = col_row[2]
+        if ver not in _ANKI_KNOWN_VERS:
+            out["reason"], out["error"] = "schema", f"ver={ver} unbekannt"
+            return out
+        today = _anki_today_number(crt)
+        now = _now()
+        # Due queue: learning (queue 1/3) first, then review-due (queue 2, due<=today)
+        # by due ascending, then a little new (queue 0) to round out a short drill.
+        rows = con.execute(
+            "SELECT c.id, c.nid, c.did, c.queue, c.due, c.ivl, c.reps, c.lapses, "
+            "c.data, n.flds FROM cards c JOIN notes n ON n.id = c.nid "
+            "WHERE (c.queue IN (1, 3)) "
+            "   OR (c.queue = 2 AND c.due <= ?) "
+            "   OR (c.queue = 0) "
+            "ORDER BY CASE c.queue WHEN 1 THEN 0 WHEN 3 THEN 0 WHEN 2 THEN 1 ELSE 2 END, "
+            "c.due ASC LIMIT ?",
+            (today, max(1, min(limit, _REVIEW_LIMIT_MAX))),
+        ).fetchall()
+        total_due = int(con.execute(
+            "SELECT COUNT(*) FROM cards WHERE (queue = 2 AND due <= ?) OR queue IN (1, 3)",
+            (today,),
+        ).fetchone()[0] or 0)
+        out["totalDue"] = total_due
+
+        source = "unavailable"
+        cards: List[Dict[str, Any]] = []
+        for (cid, _nid, did, queue, _due, ivl, reps, lapses, data_json, flds) in rows:
+            front, back = _split_note(flds)
+            stability, difficulty = _card_memory(data_json)
+            is_review = int(queue) == 2
+            preview = _fsrs_preview(stability, difficulty, is_review, now) if out["fsrsAvailable"] else None
+            if preview:
+                source = "py-fsrs"
+            elif source != "py-fsrs":
+                # Tier-2: read the stored interval from cards.data / ivl column.
+                source = "anki-cards.data" if (_fmt_ivl_days(ivl) or stability) else source
+            cards.append({
+                "id": int(cid),
+                "deck": _review_deck_name(decks_json, int(did or 0)),
+                "front": front or "(kein Fragetext)",
+                "back": back or "(kein Antworttext)",
+                "reps": int(reps or 0),
+                "lapses": int(lapses or 0),
+                "intervalCurrent": _fmt_ivl_days(ivl),
+                "isNew": int(queue) == 0,
+                "preview": preview,  # dict of four intervals, or None
+            })
+        out["cards"] = cards
+        out["previewSource"] = "py-fsrs" if source == "py-fsrs" else (
+            "anki-cards.data" if source == "anki-cards.data" else "unavailable")
+    except sqlite3.Error as exc:
+        out["reason"], out["error"] = "read", type(exc).__name__
+        return out
+    finally:
+        con.close()
+    out["ok"] = True
+    return out
+
+
+def review_session(limit: int = _REVIEW_LIMIT_DEFAULT) -> Dict[str, Any]:
+    """READ-ONLY drill/preview session over the Anki-Sync collection.
+
+    Honest in every state — empty (not synced / no due), unavailable (schema),
+    or ready with cards + an FSRS interval preview whose authority is declared
+    (previewSource). The grade + persistence NEVER happen here; Anki/AnkiDroid
+    stay the single spaced-repetition truth. This function never writes."""
+    ratings_meta = [
+        {"key": k, "value": v, "label": lab, "accent": ac, "icon": ic}
+        for (k, v, lab, ac, ic) in _REVIEW_RATINGS
+    ]
+    honest = ("Vorschau/Drill — Bewertung & Speicherung passieren in Anki / "
+              "AnkiDroid, nicht hier. MIKAEL OS liest die Collection nur (mode=ro).")
+    path = _find_anki_collection()
+    if path is None:
+        return _prov(
+            state="empty", source=ANKI_SOURCE, source_kind="file",
+            workspace="private", permission=_ANKI_PERM,
+            summary="Noch nicht synchronisiert — Anki-Sync bereit",
+            stale_after=STALE["learning"],
+            note=("Anki-Collection noch nicht synchronisiert. Sobald das erste "
+                  "Gerät synchronisiert, erscheinen hier fällige Karten für den "
+                  "Drill. " + honest),
+            extra={"reason": "no_collection", "cards": [], "ratings": ratings_meta,
+                   "previewSource": "unavailable", "fsrsAvailable": _fsrs_importable(),
+                   "honest": honest, "due": 0, "totalDue": 0},
+        )
+    try:
+        observed = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        observed = None
+
+    sess = _read_review_session(path, limit)
+    if not sess["ok"]:
+        summary = ("Anki-Schema unbekannt" if sess["reason"] == "schema"
+                   else "Anki-Collection nicht lesbar")
+        return _prov(
+            state="unavailable", source=ANKI_SOURCE, source_kind="file",
+            workspace="private", permission=_ANKI_PERM,
+            summary=summary, observed_at=observed, stale_after=STALE["learning"],
+            note=(f"{summary} ({sess['reason']}: {sess['error']}). Read-only — "
+                  "nichts wird verändert. " + honest),
+            extra={"reason": sess["reason"], "cards": [], "ratings": ratings_meta,
+                   "previewSource": "unavailable",
+                   "fsrsAvailable": sess["fsrsAvailable"], "honest": honest},
+        )
+
+    # Reuse the L-1 counts for the retention/streak rail (real numbers or None).
+    stats = _read_anki(path)
+    ret = stats.get("retention") if stats.get("ok") else None
+    ret_pct = f"{round(ret * 100)} %" if isinstance(ret, (int, float)) else None
+    streak = int(stats.get("streak") or 0) if stats.get("ok") else 0
+    learned = int(stats.get("learned_today") or 0) if stats.get("ok") else 0
+
+    cards = sess["cards"]
+    if not cards:
+        reason = "no_cards" if (stats.get("ok") and stats.get("total_cards", 0) == 0) else "no_due"
+        summary = ("Collection synchronisiert — noch keine Karten"
+                   if reason == "no_cards" else "Keine fälligen Karten — alles gelernt")
+        return _prov(
+            state="empty", source=ANKI_SOURCE, source_kind="file",
+            workspace="private", permission=_ANKI_PERM,
+            summary=summary, observed_at=observed, stale_after=STALE["learning"],
+            note=("Nichts zu üben gerade. " + honest),
+            extra={"reason": reason, "cards": [], "ratings": ratings_meta,
+                   "previewSource": sess["previewSource"],
+                   "fsrsAvailable": sess["fsrsAvailable"], "honest": honest,
+                   "due": 0, "totalDue": sess["totalDue"],
+                   "retention": ret, "retentionPct": ret_pct,
+                   "streak": streak, "learnedToday": learned},
+        )
+
+    preview_src = sess["previewSource"]
+    preview_note = {
+        "py-fsrs": "Intervall-Vorschau via py-fsrs (Standardparameter). Anki bleibt maßgeblich.",
+        "anki-cards.data": ("Kein py-fsrs im Plugin-Kontext — nur das gespeicherte "
+                            "Intervall aus cards.data wird gezeigt, keine Rating-Vorschau."),
+        "unavailable": "Intervall-Vorschau nicht verfügbar (weder py-fsrs noch cards.data lesbar).",
+    }.get(preview_src, "")
+    state = _freshness_state(observed, STALE["learning"])
+    return _prov(
+        state=state, source=ANKI_SOURCE, source_kind="file",
+        workspace="private", permission=_ANKI_PERM,
+        summary=f"{len(cards)} Karten im Drill · {sess['totalDue']} fällig",
+        observed_at=observed, stale_after=STALE["learning"],
+        note=(honest + " " + preview_note),
+        extra={
+            "reason": "ready", "cards": cards, "ratings": ratings_meta,
+            "previewSource": preview_src, "previewNote": preview_note,
+            "fsrsAvailable": sess["fsrsAvailable"], "honest": honest,
+            "due": len(cards), "totalDue": sess["totalDue"],
+            "retention": ret, "retentionPct": ret_pct,
+            "streak": streak, "learnedToday": learned,
+            "anki": {"collection": str(path), "schemaOk": True},
+        },
+    )
+
+
+# ===========================================================================
+# L-3 — Lern-Coach. Three read/propose-only building blocks over the SAME Anki
+# collection + a small read-only exams.json, plus a genuine Jarvis coaching call:
+#   (1) Klausur-Countdown + Pacing  — exams.json × Anki-Fälligkeiten, honest when
+#       the collection is empty (no faked "Tagesziel"); READ-ONLY.
+#   (2) Feynman-Flow                — pick a concept, the user explains, the
+#       explanation is graded BY JARVIS (Brain-Gateway :18084, READ/coaching).
+#       Never faked: no token/gateway -> honest "Bewertung ausstehend".
+#   (3) Prüfungsplan als Mission    — a study plan proposal through the EXACT
+#       Phase-3 propose-only /actions seam (dry-run default), workspace=studium,
+#       never money/customer/personnel. Never /approvals/decide.
+# The methodology of the seven lern-* skills (Priming, Active-Recall, Feynman,
+# Elaboration, Prüfungssim, Spaced-Repetition, Coach) is mirrored in the coach's
+# own prompt/copy — see LERN_METHODS + FEYNMAN_SYSTEM. Nothing here writes Anki
+# or business truth; the Anki collection stays the single SR-truth.
+# ===========================================================================
+STUDY_SOURCE = "exams.json × anki-sync (read-only)"
+_STUDY_PERM = "Nur lesen (exams.json + Anki collection.anki2, mode=ro)"
+
+# The seven lern-* methods distilled into the coach's own words. Mirrors
+# /srv/delta/claude-harness/ki03-claude/skills/lern-{priming,active-recall,
+# feynman,elaboration,pruefungssim,spaced-repetition,coach}. Shown as the coach's
+# "Methodik"-Leiste so the surface teaches the method, not just the numbers.
+LERN_METHODS = [
+    {"key": "priming", "icon": "lightbulb", "title": "Priming",
+     "line": "Erst aus dem Kopf: Was weißt du schon, was vermutest du? Öffnet Neugier-Lücken vor dem Stoff."},
+    {"key": "active-recall", "icon": "brain", "title": "Active Recall",
+     "line": "Closed-Book abrufen statt wiederlesen (Testing-Effekt). Unsicheres wird zur Karte."},
+    {"key": "feynman", "icon": "message-square", "title": "Feynman",
+     "line": "Erklär es einfach, ohne Fachvokabular. Wo du stockst, sitzt die echte Lücke."},
+    {"key": "elaboration", "icon": "waypoints", "title": "Elaboration",
+     "line": "Warum/Wie bis zum Grund, mit Vorwissen verknüpfen, Kontrastpaare bilden (Interleaving)."},
+    {"key": "spaced", "icon": "clock", "title": "Spaced Repetition",
+     "line": "Wachsende Intervalle, ≥3 Abrufe pro Thema vor der Klausur — Anki bleibt die Wahrheit."},
+]
+
+# The Feynman coach prompt — mirrors lern-feynman: the student explains freely,
+# the coach probes gaps (no fachvokabular escape), then gives structured feedback
+# with an honest Prüfungsreife estimate. Grading is Jarvis' job, never the plugin's.
+FEYNMAN_SYSTEM = (
+    "Du bist Jarvis, ein strenger, wohlwollender Lern-Coach nach der Feynman-Methode. "
+    "Der Lernende erklärt dir ein Konzept in eigenen Worten. Deine Aufgabe: "
+    "(1) prüfe die Erklärung fachlich; (2) benenne konkret die Lücken/Fehler — vor allem, "
+    "wo auf Fachvokabular ausgewichen wird oder die Kausalkette abreißt; "
+    "(3) stelle GENAU EINE gezielte Nachfrage, die die größte Lücke schließt; "
+    "(4) gib eine ehrliche Prüfungsreife-Einschätzung in Prozent mit einem Satz Begründung. "
+    "Antworte kurz und strukturiert auf Deutsch mit den Abschnitten "
+    "„Verstanden“, „Lücken“, „Nachfrage“ und „Prüfungsreife“. "
+    "Erfinde nichts. Ist die Erklärung zu dünn, sag das offen."
+)
+
+
+def _read_exams() -> Dict[str, Any]:
+    """Read exams.json read-only. Returns ``{ok, reason, exams, observed}``. Each
+    exam: ``{fach, datum(YYYY-MM-DD), themen[], deck?}``. Never writes; on any
+    problem it degrades honestly (missing/malformed/empty) rather than inventing."""
+    out: Dict[str, Any] = {"ok": False, "reason": None, "error": None,
+                           "exams": [], "observed": None, "path": str(EXAMS_PATH)}
+    try:
+        raw = EXAMS_PATH.read_bytes()
+    except FileNotFoundError:
+        out["reason"] = "missing"
+        return out
+    except OSError as exc:
+        out["reason"], out["error"] = "read", type(exc).__name__
+        return out
+    try:
+        out["observed"] = datetime.fromtimestamp(EXAMS_PATH.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        out["observed"] = None
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        out["reason"] = "malformed"
+        return out
+    items = data.get("exams") if isinstance(data, dict) else data
+    if not isinstance(items, list):
+        out["reason"] = "malformed"
+        return out
+    exams: List[Dict[str, Any]] = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        fach = str(it.get("fach") or it.get("subject") or "").strip()
+        datum = str(it.get("datum") or it.get("date") or "").strip()
+        if not fach or not datum:
+            continue
+        raw_themen = it.get("themen") or it.get("topics") or []
+        themen = ([str(t).strip() for t in raw_themen if str(t).strip()]
+                  if isinstance(raw_themen, list) else [])
+        deck = str(it.get("deck") or "").strip() or None
+        exams.append({"fach": fach, "datum": datum, "themen": themen, "deck": deck})
+    out["exams"] = exams
+    out["ok"] = True
+    if not exams:
+        out["reason"] = "empty"
+    return out
+
+
+def _berlin_today():
+    """Today's date in Berlin (CLAUDE.md: immer Berliner Zeit) for day-count math."""
+    now = _now()
+    if _BERLIN is not None:
+        now = now.astimezone(_BERLIN)
+    return now.date()
+
+
+def _days_human(days: int) -> str:
+    if days > 1:
+        return f"in {days} Tagen"
+    if days == 1:
+        return "morgen"
+    if days == 0:
+        return "heute"
+    if days == -1:
+        return "gestern"
+    return f"vor {abs(days)} Tagen"
+
+
+def _match_deck_due(deck_name: Optional[str], anki_decks: List[Dict[str, Any]]) -> Optional[int]:
+    """Best-effort due count for an exam's linked Anki deck (case-insensitive
+    exact/prefix/substring). None = not linked or not found in the collection."""
+    if not deck_name or not anki_decks:
+        return None
+    low = deck_name.lower()
+    for d in anki_decks:
+        nm = str(d.get("name") or "").lower()
+        if nm == low or nm.startswith(low) or low in nm:
+            return int(d.get("due") or 0)
+    return None
+
+
+def _pace_exam(exam: Dict[str, Any], anki_ok: bool,
+               anki_decks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """One exam -> countdown + honest pacing. Tagesziel = offene Karten ÷ Tage bis
+    Klausur, but ONLY when the deck is linked and the collection is readable;
+    otherwise the goal text says exactly why it can't be computed (never a fake)."""
+    from datetime import date
+    try:
+        ed = date.fromisoformat(exam["datum"])
+    except (ValueError, TypeError):
+        return {"fach": exam["fach"], "datum": exam.get("datum"), "valid": False,
+                "note": "Datum nicht lesbar (erwartet JJJJ-MM-TT)."}
+    days = (ed - _berlin_today()).days
+    themen = exam.get("themen") or []
+    deck = exam.get("deck")
+    deck_due = _match_deck_due(deck, anki_decks) if anki_ok else None
+    daily: Optional[int] = None
+    if deck_due is not None and days > 0:
+        daily = max(1, -(-deck_due // days))  # ceil division
+    if days < 0:
+        tier, tlabel = "past", "vorbei"
+    elif days == 0:
+        tier, tlabel = "today", "heute"
+    elif days <= 7:
+        tier, tlabel = "critical", "kritisch"
+    elif days <= 14:
+        tier, tlabel = "tight", "eng"
+    else:
+        tier, tlabel = "ok", "geplant"
+    # Honest Tagesziel text — names the exact reason when a number isn't possible.
+    if not anki_ok:
+        goal_text = "Anki noch nicht synchronisiert — Tagesziel folgt"
+    elif deck is None:
+        goal_text = "Kein Deck verknüpft (setze „deck“ in exams.json)"
+    elif deck_due is None:
+        goal_text = f"Deck „{deck}“ nicht in der Collection gefunden"
+    elif days < 0:
+        goal_text = f"{deck_due} Karten offen · Klausur vorbei"
+    elif days == 0:
+        goal_text = f"{deck_due} Karten offen — heute Klausur"
+    elif daily:
+        goal_text = f"{daily} Karten/Tag ({deck_due} offen ÷ {days} T)"
+    else:
+        goal_text = "Alles gelernt"
+    feynman_hint = None
+    if themen and days > 0 and tier in ("critical", "tight"):
+        feynman_hint = f"{len(themen)} Themen · Feynman-Runden jetzt einplanen (≥3 Abrufe/Thema)"
+    return {
+        "fach": exam["fach"], "datum": exam["datum"], "valid": True,
+        "daysLeft": days, "daysHuman": _days_human(days), "tier": tier, "tierLabel": tlabel,
+        "themen": themen, "themenCount": len(themen),
+        "deck": deck, "deckDue": deck_due, "dailyGoal": daily, "goalText": goal_text,
+        "feynmanHint": feynman_hint,
+    }
+
+
+def _nearest_exam_bits() -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """A compact 'nächste Klausur' lens row + a nextExam dict, or (None, None).
+    Read-only and independent of Anki, so the Lernplan lens shows the countdown
+    even before the first Anki sync (honest date math, no due numbers needed)."""
+    ex = _read_exams()
+    if not ex.get("ok") or not ex.get("exams"):
+        return None, None
+    paced = [_pace_exam(e, False, []) for e in ex["exams"]]
+    up = sorted([p for p in paced if p.get("valid") and p.get("daysLeft", -1) >= 0],
+                key=lambda p: p["daysLeft"])
+    if not up:
+        return None, None
+    p = up[0]
+    acc = {"today": "red", "critical": "red", "tight": "amber"}.get(p["tier"], "violet")
+    row = {"icon": "calendar-clock", "accent": acc,
+           "title": "Nächste Klausur · " + p["fach"],
+           "sub": p["daysHuman"] + " · " + str(p["themenCount"]) + " Themen",
+           "value": ("heute" if p["daysLeft"] == 0 else str(p["daysLeft"]) + " T")}
+    return row, {"fach": p["fach"], "daysLeft": p["daysLeft"], "datum": p["datum"], "tier": p["tier"]}
+
+
+def study_plan() -> Dict[str, Any]:
+    """READ-ONLY Klausur-Countdown + Pacing over exams.json × Anki-Fälligkeiten.
+    Honest in every state (missing/malformed/empty config, empty collection).
+    Also carries the LERN_METHODS strip + live Jarvis-coaching reachability so the
+    coach surface can be honest about what is Jarvis-dependent."""
+    ex = _read_exams()
+    path = _find_anki_collection()
+    anki = _read_anki(path) if path is not None else {"ok": False, "decks": [], "due_today": 0}
+    anki_ok = bool(anki.get("ok"))
+    anki_decks = anki.get("decks") or []
+    due_total = int(anki.get("due_today") or 0) if anki_ok else 0
+    base_extra = {"methods": LERN_METHODS, "ankiOk": anki_ok, "dueTotal": due_total,
+                  "jarvis": _brain_status()}
+
+    if ex["reason"] == "missing":
+        return _prov(
+            state="empty", source=STUDY_SOURCE, source_kind="file",
+            workspace="private", permission=_STUDY_PERM,
+            summary="Keine Klausurtermine hinterlegt", stale_after=STALE["study"],
+            note=("Noch keine exams.json — lege Klausurtermine unter "
+                  f"{EXAMS_PATH} an (je Fach: Datum · Themen · optional Anki-Deck). "
+                  "Read-only: das Plugin schreibt diese Datei nie."),
+            extra={"exams": [], "reason": "missing", **base_extra})
+    if not ex["ok"] or ex["reason"] == "malformed":
+        return _prov(
+            state="unavailable", source=STUDY_SOURCE, source_kind="file",
+            workspace="private", permission=_STUDY_PERM,
+            summary="exams.json nicht lesbar", observed_at=ex.get("observed"),
+            stale_after=STALE["study"],
+            note=(f"exams.json vorhanden, aber nicht verwertbar ({ex.get('reason')}). "
+                  "Read-only — nichts wird verändert."),
+            extra={"exams": [], "reason": ex.get("reason") or "malformed", **base_extra})
+    if ex["reason"] == "empty":
+        return _prov(
+            state="empty", source=STUDY_SOURCE, source_kind="file",
+            workspace="private", permission=_STUDY_PERM,
+            summary="exams.json leer — noch keine Fächer", observed_at=ex.get("observed"),
+            stale_after=STALE["study"],
+            note="exams.json ist da, enthält aber keine gültigen Fach-Einträge.",
+            extra={"exams": [], "reason": "empty", **base_extra})
+
+    paced = [_pace_exam(e, anki_ok, anki_decks) for e in ex["exams"]]
+    upcoming = sorted([p for p in paced if p.get("valid") and p.get("daysLeft", -1) >= 0],
+                      key=lambda p: p["daysLeft"])
+    rows: List[Dict[str, Any]] = []
+    for p in (upcoming or paced):
+        if not p.get("valid"):
+            rows.append({"icon": "triangle-alert", "accent": "amber", "title": p["fach"],
+                         "sub": p.get("note", "Datum ungültig"), "value": "—"})
+            continue
+        acc = {"today": "red", "critical": "red", "tight": "amber",
+               "ok": "violet", "past": "neutral"}.get(p["tier"], "violet")
+        rows.append({
+            "icon": "calendar-clock", "accent": acc, "title": p["fach"],
+            "sub": p["daysHuman"] + " · " + p["goalText"],
+            "status": ("running" if p["tier"] in ("today", "critical") else None),
+            "statusLabel": (p["tierLabel"] if p["tier"] in ("today", "critical", "tight") else None),
+            "value": ("heute" if p["daysLeft"] == 0 else str(p["daysLeft"]) + " T"),
+        })
+    observed = ex.get("observed")
+    nearest = upcoming[0] if upcoming else None
+    n_up = len(upcoming)
+    summary = (f"{n_up} Klausur{'en' if n_up != 1 else ''} · nächste: "
+               f"{nearest['fach']} {nearest['daysHuman']}") if nearest else (
+        f"{len(paced)} Termine (alle vorbei)")
+    return _prov(
+        state=(_freshness_state(observed, STALE["study"]) if observed else "fresh"),
+        source=STUDY_SOURCE, source_kind="file", workspace="private", permission=_STUDY_PERM,
+        summary=summary, observed_at=observed, stale_after=STALE["study"], rows=rows,
+        note=("Klausur-Countdown + Pacing aus exams.json (read-only) × Anki-Fälligkeiten "
+              "(mode=ro). Tagesziel = offene Karten ÷ Tage bis Klausur; ehrlich als "
+              "„folgt/nicht verknüpft“, wenn die Collection leer oder das Deck nicht "
+              "gebunden ist. Anki bleibt das Spaced-Repetition-Wahrheitssystem — hier "
+              "wird nichts geschrieben."),
+        extra={"exams": paced, "reason": "ready", "count": n_up,
+                "nextExam": ({"fach": nearest["fach"], "daysLeft": nearest["daysLeft"],
+                              "datum": nearest["datum"]} if nearest else None),
+                **base_extra})
+
+
+# --- Jarvis coaching read-path (Brain-Gateway) ------------------------------
+def _brain_token() -> str:
+    """Resolve the Brain-Gateway Bearer token: env first, then the sanctioned SOPS
+    ``secret get`` render (cached in-process). NEVER logged or written to disk.
+    Empty string = no token available -> the caller reports an honest pending."""
+    global _BRAIN_TOKEN_CACHE
+    if _BRAIN_TOKEN_CACHE:
+        return _BRAIN_TOKEN_CACHE
+    tok = (os.environ.get("MIKAELOS_BRAIN_TOKEN")
+           or os.environ.get("HERMES_GATEWAY_TOKEN") or "").strip()
+    if not tok and os.environ.get("MIKAELOS_BRAIN_SECRET", "1") != "0":
+        try:
+            proc = subprocess.run(
+                ["secret", "get", _BRAIN_TOKEN_REF],
+                capture_output=True, text=True, timeout=6)
+            if proc.returncode == 0:
+                tok = (proc.stdout or "").strip()
+        except (OSError, subprocess.SubprocessError):
+            tok = tok
+    if tok:
+        _BRAIN_TOKEN_CACHE = tok
+    return tok
+
+
+def _brain_status() -> Dict[str, Any]:
+    """Honest reachability of the Jarvis coaching path. ``ready`` iff the gateway
+    answers AND a token is resolvable — only then can a Feynman answer be graded."""
+    code, _ = _http_get_json(f"{BRAIN_GATEWAY_BASE}/healthz")
+    reachable = code == 200
+    has_token = bool(_brain_token())
+    if reachable and has_token:
+        note = "Jarvis-Coaching bereit (Brain-Gateway erreichbar · Token vorhanden)."
+    elif not reachable:
+        note = "Brain-Gateway :18084 nicht erreichbar — Jarvis-Bewertung ausstehend."
+    else:
+        note = ("Kein Gateway-Token im Dashboard-Prozess — Jarvis-Bewertung ausstehend "
+                "(Operator: HERMES_GATEWAY_TOKEN env oder SOPS hermes/GATEWAY_TOKEN, "
+                "siehe docs/RUNBOOK-jarvis-coaching.md).")
+    return {"base": BRAIN_GATEWAY_BASE, "reachable": bool(reachable),
+            "hasToken": has_token, "ready": bool(reachable and has_token), "note": note}
+
+
+def _feynman_pick(concept: str, subject: str) -> Dict[str, Any]:
+    """Choose a concept to explain: explicit wins; else the front of a due Anki
+    card (read-only); else a Thema from exams.json; else none (user must type)."""
+    concept = (concept or "").strip()
+    subject = (subject or "").strip()
+    if concept:
+        return {"concept": concept, "subject": subject, "conceptSource": "eigenes"}
+    path = _find_anki_collection()
+    if path is not None:
+        sess = _read_review_session(path, 1)
+        cards = sess.get("cards") or []
+        if cards and cards[0].get("front"):
+            return {"concept": cards[0]["front"], "subject": cards[0].get("deck") or subject,
+                    "conceptSource": "anki-karte"}
+    ex = _read_exams()
+    for e in ex.get("exams", []):
+        if subject and e["fach"].lower() != subject.lower():
+            continue
+        if e.get("themen"):
+            return {"concept": e["themen"][0], "subject": e["fach"], "conceptSource": "exams.json"}
+    # No subject match with themen — fall back to the first exam theme if any.
+    for e in ex.get("exams", []):
+        if e.get("themen"):
+            return {"concept": e["themen"][0], "subject": e["fach"], "conceptSource": "exams.json"}
+    return {"concept": "", "subject": subject, "conceptSource": "none"}
+
+
+def feynman_setup(concept: str = "", subject: str = "") -> Dict[str, Any]:
+    """Prepare a Feynman round (concept + prompt + Jarvis reachability). No LLM
+    call yet — this only stages the round and is honest about Jarvis readiness."""
+    pick = _feynman_pick(concept, subject)
+    status = _brain_status()
+    return {
+        "ok": bool(pick["concept"]),
+        "concept": pick["concept"], "subject": pick["subject"],
+        "conceptSource": pick["conceptSource"], "jarvis": status,
+        "prompt": (("Erklär mir „" + pick["concept"] + "“ — einfach, ohne Fachvokabular, "
+                    "als würdest du es einer interessierten Laiin erklären.")
+                   if pick["concept"] else ""),
+        "method": {"key": "feynman",
+                   "hint": ("Frei erklären, ohne Fachjargon; wo du stockst, sitzt die Lücke. "
+                            "Danach bewertet Jarvis — nicht das Plugin.")},
+        "priming": "Priming: Was weißt du schon über dieses Konzept, bevor du erklärst?",
+        "note": ("Konzept aus Anki-Karte / exams.json (read-only)."
+                 if pick["conceptSource"] != "none"
+                 else "Kein Konzept gefunden — gib selbst eines ein."),
+    }
+
+
+def feynman_evaluate(concept: str = "", explanation: str = "") -> Dict[str, Any]:
+    """Grade a free explanation BY JARVIS (Brain-Gateway). READ/coaching only —
+    no business write, no Anki write, nothing persisted. Never fakes a grade: if
+    the gateway is unreachable or no token is present, it says so honestly."""
+    concept = (concept or "").strip()
+    explanation = (explanation or "").strip()
+    if not explanation:
+        return {"ok": False, "reason": "no_explanation", "jarvisDependent": True,
+                "note": "Keine Erklärung eingegeben."}
+    if len(explanation) > 6000:
+        explanation = explanation[:6000]
+    status = _brain_status()
+    if not status["reachable"]:
+        return {"ok": False, "reason": "gateway_unreachable", "jarvisDependent": True,
+                "jarvis": status, "note": status["note"]}
+    token = _brain_token()
+    if not token:
+        return {"ok": False, "reason": "auth_pending", "jarvisDependent": True, "jarvis": status,
+                "note": ("Jarvis-Bewertung ausstehend — kein Brain-Gateway-Token im "
+                         "Dashboard-Prozess. Deine Erklärung wird NICHT bewertet und nichts "
+                         "gespeichert. (Operator: HERMES_GATEWAY_TOKEN env oder SOPS "
+                         "hermes/GATEWAY_TOKEN, siehe docs/RUNBOOK-jarvis-coaching.md.)")}
+    user = ((f"Konzept: {concept}\n\n" if concept else "") + "Meine Erklärung:\n" + explanation)
+    payload = {"model": BRAIN_MODEL, "temperature": 0.3, "max_tokens": 700,
+               "messages": [{"role": "system", "content": FEYNMAN_SYSTEM},
+                            {"role": "user", "content": user}]}
+    code, resp = _http_post_json(f"{BRAIN_GATEWAY_BASE}/v1/chat/completions",
+                                 payload, token=token, timeout=BRAIN_TIMEOUT)
+    if code != 200 or not isinstance(resp, dict):
+        return {"ok": False, "reason": "gateway_error", "jarvisDependent": True,
+                "jarvis": status, "code": code,
+                "note": "Brain-Gateway-Antwort nicht lesbar — es wurde keine Bewertung erfunden."}
+    try:
+        content = str(resp["choices"][0]["message"]["content"] or "").strip()
+    except (KeyError, IndexError, TypeError):
+        content = ""
+    hermes = resp.get("hermes") if isinstance(resp.get("hermes"), dict) else {}
+    return {
+        "ok": bool(content), "jarvisDependent": True,
+        "source": "hermes-brain-gateway (/v1/chat/completions)",
+        "model": resp.get("model") or BRAIN_MODEL,
+        "routeClass": hermes.get("route_class"),
+        "feedback": content or "(leere Antwort von Jarvis)",
+        "concept": concept, "jarvis": status,
+        "note": ("Bewertung von Jarvis (Brain-Kette, abo-first). READ/Coaching — kein "
+                 "Business-Write, keine Anki-Änderung, nichts gespeichert."),
+    }
+
+
+# --- Prüfungsplan als Mission (studium workspace, gated propose-only) --------
+# Uses the SAME /actions seam Phase 3 uses, but workspace=studium (privat/Lernen).
+# Never money/customer/personnel (the same out-of-scope guard applies), never
+# /approvals/decide. dry_run=True is the safe default preview (fires nothing).
+STUDY_PROPOSE_WORKSPACE = "studium"
+STUDY_PROPOSE_JOB_TYPE = "study_plan"
+STUDY_PROPOSE_CAPS = ["notes_write", "propose_only"]
+
+
+def build_study_intent(objective: str) -> Dict[str, Any]:
+    """The exact study-plan intent this surface would propose. Pure/deterministic."""
+    objective = objective.strip()
+    return {
+        "objective": objective,
+        "mandant": None,                       # private study — no company mandant
+        "workspace": STUDY_PROPOSE_WORKSPACE,
+        "workspaceType": STUDY_PROPOSE_WORKSPACE,
+        "jobType": STUDY_PROPOSE_JOB_TYPE,
+        "requiredCapabilities": list(STUDY_PROPOSE_CAPS),
+        "requiredGate": "studium_propose",
+        "idempotencyKey": _idempotency_key(objective, STUDY_PROPOSE_WORKSPACE, STUDY_PROPOSE_JOB_TYPE),
+        "provenance": {"plugin": "mikael-os", "surface": "lernplan-coach",
+                       "proposeOnly": True, "createdUtc": _iso(_now())},
+    }
+
+
+def propose_study_plan(objective: str, dry_run: bool = True) -> Dict[str, Any]:
+    """Propose a study/exam plan through the gated /actions seam. dry_run=True
+    (default) previews WITHOUT any network call. dry_run=False hands the intent to
+    :18083/actions (gated); it never self-approves and never touches money/firma."""
+    objective = (objective or "").strip()
+    if not objective:
+        return {"ok": False, "status": "invalid", "note": "Kein Ziel angegeben."}
+    if len(objective) > 600:
+        return {"ok": False, "status": "invalid", "note": "Ziel zu lang (max. 600 Zeichen)."}
+    scope = _scope_reason(objective)  # blocks money/customer/personnel terms
+    if scope:
+        return {"ok": False, "status": "out_of_scope", "note": scope}
+    intent = build_study_intent(objective)
+    gate = {"gateClass": "studium_propose", "expectedOutcome": "require_approval",
+            "human": "Voraussichtlich: Freigabe nötig · Studium/Privat-Lernplan (propose-only).",
+            "note": "Das Plugin führt nichts aus — dein Gate entscheidet."}
+    plan = {"objective": objective, "workspaceLabel": "Studium (privat)",
+            "jobType": intent["jobType"], "capabilities": intent["requiredCapabilities"],
+            "requiredGate": intent["requiredGate"], "gateHuman": gate["human"]}
+    if dry_run:
+        return {"ok": True, "mode": "dry_run", "status": "vorschau", "willFire": False,
+                "proposeOnly": True, "intent": intent, "plan": plan, "predictedGate": gate,
+                "controlPlane": control_plane_status(),
+                "note": ("Nur Vorschau — es wurde NICHTS an das Gate gesendet. Privates "
+                         "Studium/Lernen, kein Geld/Firma. Dein Gate entscheidet.")}
+    cp = control_plane_status()
+    if not cp["reachable"]:
+        return {"ok": False, "mode": "live", "status": "auth_pending", "lifecycle": "auth_pending",
+                "intent": intent, "controlPlane": cp, "note": cp["authNote"]}
+    packet = {"text": objective, "source": "mikael-os",
+              "idempotency_key": intent["idempotencyKey"],
+              "workspace_type": STUDY_PROPOSE_WORKSPACE, "provenance": intent["provenance"]}
+    code, resp = _http_post_json(f"{CONTROL_PLANE_BASE}/actions", packet)
+    if code is None or not isinstance(resp, dict):
+        return {"ok": False, "mode": "live", "status": "error", "lifecycle": "error",
+                "intent": intent, "controlPlane": cp,
+                "note": "Antwort der Control-Plane nicht lesbar."}
+    action_status = str(resp.get("status") or "error")
+    lifecycle = _ACTION_STATUS_LIFECYCLE.get(action_status, "error")
+    card = resp.get("card") if isinstance(resp.get("card"), dict) else None
+    card_id = str(card.get("id")) if card and card.get("id") else None
+    return {"ok": lifecycle not in {"error"}, "mode": "live", "status": action_status,
+            "lifecycle": lifecycle, "intent": intent, "cardId": card_id, "gate": resp.get("gate"),
+            "controlPlane": cp,
+            "note": ("An das Gate übergeben — wartet auf deine Freigabe."
+                     if lifecycle == "waiting_approval" else
+                     (resp.get("summary") or "Ergebnis von der Control-Plane."))}
 
 
 def module_travel() -> Dict[str, Any]:
@@ -1567,6 +2463,55 @@ def actions_receipt(cardId: str = "", key: str = "", objective: str = "") -> Dic
     return receipt_status(card_id=cardId, key=key, objective=objective)
 
 
+@router.get("/review/session")
+def review_session_route(limit: int = _REVIEW_LIMIT_DEFAULT) -> Dict[str, Any]:
+    """READ-ONLY Anki drill/preview session (L-2). No writes, no AnkiConnect —
+    grading + persistence stay in Anki/AnkiDroid. Returns due cards + FSRS
+    interval preview (authority declared via ``previewSource``)."""
+    try:
+        n = int(limit)
+    except (TypeError, ValueError):
+        n = _REVIEW_LIMIT_DEFAULT
+    return review_session(max(1, min(n, _REVIEW_LIMIT_MAX)))
+
+
+@router.get("/study/plan")
+def study_plan_route() -> Dict[str, Any]:
+    """READ-ONLY Klausur-Countdown + Pacing (exams.json × Anki). No writes."""
+    return study_plan()
+
+
+@router.get("/study/feynman")
+def study_feynman_route(concept: str = "", subject: str = "") -> Dict[str, Any]:
+    """Stage a Feynman round (concept + prompt + Jarvis reachability). No LLM call,
+    no write — just picks a concept read-only and reports if Jarvis can grade."""
+    return feynman_setup(concept=concept, subject=subject)
+
+
+@router.post("/study/feynman/evaluate")
+def study_feynman_eval_route(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Grade a Feynman explanation BY JARVIS (Brain-Gateway, READ/coaching). Body:
+    ``{concept, explanation}``. Never fakes a grade; honest pending if Jarvis is
+    unreachable / no token. Writes nothing (no Anki, no business)."""
+    if not isinstance(payload, dict):
+        payload = {}
+    return feynman_evaluate(concept=str(payload.get("concept") or ""),
+                            explanation=str(payload.get("explanation") or ""))
+
+
+@router.post("/study/plan/propose")
+def study_plan_propose_route(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Propose a study plan as a mission. Body: ``{objective, dryRun}``. ``dryRun``
+    defaults to **True** (safe preview, fires nothing). Only an explicit
+    ``dryRun:false`` hands it to the gated :18083/actions seam (workspace=studium,
+    never money/customer/personnel). The gate decides; the plugin never executes."""
+    if not isinstance(payload, dict):
+        payload = {}
+    objective = str(payload.get("objective") or "").strip()
+    dry_run = payload.get("dryRun", payload.get("dry_run", True))
+    return propose_study_plan(objective, dry_run=bool(dry_run))
+
+
 @router.get("/health")
 def health() -> Dict[str, Any]:
     """Liveness + which read paths resolved right now (diagnostic)."""
@@ -1585,6 +2530,16 @@ def health() -> Dict[str, Any]:
             "whoop_token_present": bool(_whoop_token()),
             "calendar_db": str(CALENDAR_DB),
             "calendar_db_readable": CALENDAR_DB.exists(),
+            "exams_json": str(EXAMS_PATH),
+            "exams_readable": EXAMS_PATH.exists(),
+            "brain_gateway": BRAIN_GATEWAY_BASE,
+        },
+        "coach": {
+            "countdown": "GET /study/plan (exams.json × Anki, read-only)",
+            "feynman": "POST /study/feynman/evaluate (graded by Jarvis Brain-Gateway; never faked)",
+            "planPropose": "POST /study/plan/propose (studium workspace, dry-run default, gated)",
+            "ankiWrites": False,
+            "jarvis": _brain_status(),
         },
         "propose": {
             "capability": "engineering_task (propose-only)",

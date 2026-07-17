@@ -119,4 +119,29 @@ if (svgCount < 20) {
   process.exit(1);
 }
 
-console.log(`PASS: registered 'mikael-os', rendered ${html.length} chars, ${svgCount} lucide icons, all ${mustContain.length} key strings present.`);
+// --- L-3 Lern-Coach shipped in the bundle ---------------------------------
+// The coach overlay is closed in a static render (coach state = null), so we
+// assert on the shipped bundle source that the L-3 building blocks exist AND
+// stay propose/read-only + honest (no /approvals/decide, no Anki write).
+const l3Must = [
+  "/study/plan", "/study/feynman/evaluate", "/study/plan/propose",
+  "Lern-Coach", "An Jarvis senden", "studyObjective",
+  "CoachSurface", "Klausur-Countdown", "Bewertung kommt von Jarvis",
+];
+const l3Missing = l3Must.filter((s) => !code.includes(s));
+if (l3Missing.length) {
+  console.error("FAIL: L-3 coach markers missing from bundle:", l3Missing);
+  process.exit(1);
+}
+// Guardrail: the coach's live steps only ever address the plugin's OWN routes.
+// The bundle must not build a direct control-plane URL or an /approvals/decide
+// fetch target (those strings only ever appear inside honest // comments, never
+// as a string literal the code fetches). Assert no decide/18083 STRING LITERAL.
+const l3ForbiddenLiterals = ['"/approvals/decide"', "'/approvals/decide'", ":18083", "127.0.0.1:18084"];
+const l3Leak = l3ForbiddenLiterals.filter((s) => code.includes(s));
+if (l3Leak.length) {
+  console.error("FAIL: bundle contains a forbidden endpoint literal:", l3Leak);
+  process.exit(1);
+}
+
+console.log(`PASS: registered 'mikael-os', rendered ${html.length} chars, ${svgCount} lucide icons, all ${mustContain.length} key strings + ${l3Must.length} L-3 markers present, no forbidden endpoint literals.`);

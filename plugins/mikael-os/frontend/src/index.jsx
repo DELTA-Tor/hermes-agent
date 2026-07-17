@@ -334,6 +334,21 @@ const PLUGIN_API = "/api/plugins/mikael-os";
 // frontend NEVER addresses :18083 directly and NEVER calls /approvals/decide.
 const PROPOSE_API = PLUGIN_API + "/actions/propose";
 const RECEIPT_API = PLUGIN_API + "/actions/receipt";
+// L-2 — the read-only Anki drill/preview session. GET only; the plugin NEVER
+// writes the collection and NEVER opens AnkiConnect. Real grading + persistence
+// happen in Anki / AnkiDroid — this surface is a preview/drill, nothing more.
+const REVIEW_API = PLUGIN_API + "/review/session";
+// L-3 — the Lern-Coach read/propose routes (same-origin plugin routes only).
+//   /study/plan            GET  — Klausur-Countdown + Pacing (exams.json × Anki, read-only)
+//   /study/feynman         GET  — stage a Feynman round (pick concept; is Jarvis reachable?)
+//   /study/feynman/evaluate POST — grade the explanation BY JARVIS (Brain-Gateway).
+//        This is the ONE Jarvis-dependent call; the plugin never fakes a grade.
+//   /study/plan/propose    POST — study-plan MISSION via the gated /actions seam
+//        (dry-run default; workspace=studium; never money/firma; never /approvals/decide).
+const STUDY_PLAN_API = PLUGIN_API + "/study/plan";
+const FEYNMAN_API = PLUGIN_API + "/study/feynman";
+const FEYNMAN_EVAL_API = PLUGIN_API + "/study/feynman/evaluate";
+const STUDY_PROPOSE_API = PLUGIN_API + "/study/plan/propose";
 const POS = MODULES.reduce((acc, m) => { acc[m.id] = m.pos; return acc; }, {});
 
 // SDK-aware POST/GET. Prefer the host's authed transport; fall back to window
@@ -376,6 +391,31 @@ const PROPOSE_META = {
   auth_pending:     { tone: "gated",    icon: "triangle-alert",    label: "Freigabe-Anbindung: Auth ausstehend" },
 };
 const PROPOSE_TERMINAL = { approved: 1, executed: 1, verified: 1, denied: 1, error: 1, auth_pending: 1 };
+
+// The propose lifecycle is generic; two profiles reuse the SAME overlay + gate
+// flow. `engineering` = Codex task (repo/code). `study` = a Studium/privat
+// Lernplan (L-3), routed to /study/plan/propose (workspace=studium) — never
+// money/customer/personnel, never /approvals/decide. Only the copy + endpoint
+// differ; the propose-only, gate-decides contract is identical.
+const PROPOSE_PROFILES = {
+  engineering: {
+    api: PROPOSE_API, icon: "git-branch",
+    title: "Codex-Aufgabe vorschlagen", subKind: "Engineering",
+    fieldLabel: "Was soll Codex / Engineering tun?",
+    placeholder: "z. B. Refactor: Deploy-Check als eigenes Modul extrahieren …",
+    scopeHint: "Nur Engineering · kein Geld / Kunde / Personal",
+  },
+  study: {
+    api: STUDY_PROPOSE_API, icon: "graduation-cap",
+    title: "Lernplan vorschlagen", subKind: "Studium · privat",
+    fieldLabel: "Welchen Lernplan soll Jarvis bis zur Klausur bauen?",
+    placeholder: "z. B. Lernplan bis Thermodynamik-Klausur — Spaced Repetition, ≥3 Abrufe/Thema …",
+    scopeHint: "Nur Studium / privat · kein Geld / Kunde / Personal",
+  },
+};
+function proposeProfile(st) {
+  return PROPOSE_PROFILES[(st && st.profile) || "engineering"] || PROPOSE_PROFILES.engineering;
+}
 
 // Honest per-module state vocabulary → tone (colours the node dot / lens badge)
 // and a German label. `loading` is the pre-fetch state; fixtures report `fresh`
@@ -968,6 +1008,24 @@ function FocusLens(props) {
             onClick: () => props.onPropose(),
             title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst.",
           }, h(Icon, { name: "git-branch", size: 15 }), "Codex-Aufgabe vorschlagen")
+        : null,
+      // Lernplan: the wired read-only drill. Opens a preview session (Frage →
+      // Antwort → Bewertung-Vorschau); grades/persistence stay in Anki/AnkiDroid.
+      props.onReview && props.focusId === "learning"
+        ? h("button", {
+            key: "review", type: "button", className: "mos__tool mos__tool--review",
+            onClick: () => props.onReview(),
+            title: "Karten üben (Vorschau) — Bewertung & Speicherung in Anki/AnkiDroid.",
+          }, h(Icon, { name: "play", size: 15 }), "Lernen · Drill")
+        : null,
+      // L-3: the Lern-Coach — Klausur-Countdown, Feynman (Jarvis-graded) und
+      // Prüfungsplan-Vorschlag (gated). Read + propose-only; kein Anki-Write.
+      props.onCoach && props.focusId === "learning"
+        ? h("button", {
+            key: "coach", type: "button", className: "mos__tool mos__tool--coach",
+            onClick: () => props.onCoach(),
+            title: "Countdown, Feynman (von Jarvis bewertet) und Lernplan-Vorschlag (gated).",
+          }, h(Icon, { name: "graduation-cap", size: 15 }), "Lern-Coach")
         : null,
       LENS_TOOLS.map((tl) =>
         h("button", { key: tl.label, type: "button", className: "mos__tool", title: NOT_WIRED }, h(Icon, { name: tl.icon, size: 15 }), tl.label)),
@@ -1736,6 +1794,28 @@ function MobileSheet(props) {
             h(Icon, { name: "git-branch", size: 15 }), "Als Codex-Task",
             h("span", { className: "mos__sheet-act-gate mos__sheet-act-gate--live" }, h(Icon, { name: "shield-check", size: 10 }), "propose"),
           ),
+          // Lernplan gets the wired read-only drill (Vorschau, nichts gespeichert).
+          props.onReview && props.focusId === "learning"
+            ? h(
+                "button",
+                { key: "review", type: "button", className: "mos__sheet-act mos__sheet-act--review",
+                  onClick: () => props.onReview(),
+                  title: "Karten üben (Vorschau) — Bewertung & Speicherung in Anki/AnkiDroid." },
+                h(Icon, { name: "play", size: 15 }), "Lernen · Drill",
+                h("span", { className: "mos__sheet-act-gate mos__sheet-act-gate--live" }, h(Icon, { name: "eye", size: 10 }), "read-only"),
+              )
+            : null,
+          // L-3: Lern-Coach (Countdown · Feynman via Jarvis · Lernplan-Vorschlag).
+          props.onCoach && props.focusId === "learning"
+            ? h(
+                "button",
+                { key: "coach", type: "button", className: "mos__sheet-act mos__sheet-act--coach",
+                  onClick: () => props.onCoach(),
+                  title: "Countdown, Feynman (von Jarvis bewertet) und Lernplan-Vorschlag (gated)." },
+                h(Icon, { name: "graduation-cap", size: 15 }), "Lern-Coach",
+                h("span", { className: "mos__sheet-act-gate mos__sheet-act-gate--live" }, h(Icon, { name: "sparkles", size: 10 }), "Jarvis"),
+              )
+            : null,
           h(
             "button",
             { key: "cal", type: "button", className: "mos__sheet-act", disabled: true, "aria-disabled": "true",
@@ -1812,6 +1892,8 @@ function MobileShell(props) {
       focusId: props.focusId,
       liveModule: props.byId[props.focusId],
       onPropose: props.onPropose,
+      onReview: props.onReview,
+      onCoach: props.onCoach,
     }),
   );
 }
@@ -1956,6 +2038,7 @@ function ProposeFlow(props) {
   const st = props.state;
   if (!st) return null;
   const phase = st.phase;
+  const prof = proposeProfile(st);
   const meta = PROPOSE_META[phase] || PROPOSE_META.error;
   const cp = st.controlPlane || (st.preview && st.preview.controlPlane);
   const reachable = cp ? cp.reachable : null;
@@ -1984,18 +2067,18 @@ function ProposeFlow(props) {
     body.push(h(
       "label",
       { key: "compose", className: "mos__pp-field" },
-      h("span", { className: "mos__pp-field-k" }, "Was soll Codex / Engineering tun?"),
+      h("span", { className: "mos__pp-field-k" }, prof.fieldLabel),
       h("textarea", {
         className: "mos__pp-textarea",
         rows: 3,
-        placeholder: "z. B. Refactor: Deploy-Check als eigenes Modul extrahieren …",
+        placeholder: prof.placeholder,
         value: st.objective || "",
         disabled: phase === "loading",
         onChange: (e) => props.onObjective(e.target.value),
         autoFocus: true,
       }),
       h("span", { className: "mos__pp-scope" }, h(Icon, { name: "lock", size: 11 }),
-        "Nur Engineering · kein Geld / Kunde / Personal"),
+        prof.scopeHint),
     ));
   }
 
@@ -2088,7 +2171,7 @@ function ProposeFlow(props) {
         // real phase (Entwurf / Wartet auf Freigabe / Freigegeben / Abgelehnt …),
         // not a frozen "…vorschlagen" (WCAG 4.1.2 Name/Role/Value, 2.4.6).
         role: "dialog", "aria-modal": "true",
-        "aria-label": "Codex-Aufgabe vorschlagen · " + meta.label,
+        "aria-label": prof.title + " · " + meta.label,
         onClick: (e) => e.stopPropagation(),
       },
       h(
@@ -2099,13 +2182,539 @@ function ProposeFlow(props) {
         h(
           "span",
           { className: "mos__pp-titles" },
-          h("span", { className: "mos__pp-title" }, "Codex-Aufgabe vorschlagen"),
-          h("span", { className: "mos__pp-sub" }, "Engineering · " + meta.label),
+          h("span", { className: "mos__pp-title" }, prof.title),
+          h("span", { className: "mos__pp-sub" }, prof.subKind + " · " + meta.label),
         ),
         h("button", { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Schließen", onClick: props.onClose }, h(Icon, { name: "x", size: 18 })),
       ),
       h("div", { className: "mos__pp-body" }, body),
       h("footer", { className: "mos__pp-foot" }, actions),
+    ),
+  );
+}
+
+// ===========================================================================
+// L-2 · REVIEW / DRILL surface — a read-only spaced-repetition drill over the
+// Anki-Sync collection. Card Frage → umdrehen → Antwort; four rating buttons
+// (Nochmal / Schwer / Gut / Einfach) carry an FSRS interval PREVIEW. It is
+// HONEST about what it is: a preview/drill. The grade + persistence happen in
+// Anki / AnkiDroid, never here — the plugin only reads (mode=ro). Keyboard:
+// Space/Enter = umdrehen, 1–4 = bewerten, Esc = schließen.
+// ===========================================================================
+const REVIEW_RATING_FALLBACK = [
+  { key: "again", label: "Nochmal", accent: "red", icon: "rotate-ccw" },
+  { key: "hard", label: "Schwer", accent: "amber", icon: "hourglass" },
+  { key: "good", label: "Gut", accent: "emerald", icon: "circle-check-big" },
+  { key: "easy", label: "Einfach", accent: "cyan", icon: "fast-forward" },
+];
+
+// The honest "not persisted" banner — one source of truth for desktop + mobile.
+const REVIEW_HONEST = "Vorschau/Drill — Bewertung & Speicherung in Anki / AnkiDroid. Hier wird nichts gespeichert.";
+
+function ReviewRail(props) {
+  const d = props.data || {};
+  const retention = d.retentionPct || (d.retention != null ? Math.round(d.retention * 100) + " %" : "—");
+  const streak = d.streak != null ? d.streak : null;
+  const learned = d.learnedToday != null ? d.learnedToday : null;
+  const items = [
+    { icon: "target", accent: "violet", k: "Retention", v: retention, sub: "30 T" },
+    { icon: "flame", accent: "amber", k: "Streak", v: streak != null ? streak + " T" : "—", sub: "in Folge" },
+    { icon: "clock", accent: "cyan", k: "Heute gelernt", v: learned != null ? String(learned) : "—", sub: "Reviews" },
+  ];
+  return h(
+    "aside",
+    { className: "mos__rv-rail", "aria-label": "Lern-Kennzahlen" },
+    items.map((it) =>
+      h(
+        "div",
+        { key: it.k, className: "mos__rv-stat mos--" + it.accent },
+        h("span", { className: "mos__rv-stat-icon" }, h(Icon, { name: it.icon, size: 18 })),
+        h("span", { className: "mos__rv-stat-v" }, it.v),
+        h("span", { className: "mos__rv-stat-k" }, it.k),
+        h("span", { className: "mos__rv-stat-sub" }, it.sub),
+      )),
+  );
+}
+
+function ReviewRatingRow(props) {
+  const ratings = (props.data && props.data.ratings && props.data.ratings.length)
+    ? props.data.ratings : REVIEW_RATING_FALLBACK;
+  const card = props.card || {};
+  const previews = card.preview || null;
+  return h(
+    "div",
+    { className: "mos__rv-ratings", role: "group", "aria-label": "Bewertung (Vorschau, nicht gespeichert)" },
+    ratings.map((r, i) => {
+      const iv = previews && previews[r.key] ? previews[r.key] : null;
+      return h(
+        "button",
+        {
+          key: r.key, type: "button",
+          className: "mos__rv-rate mos--" + r.accent,
+          onClick: () => props.onRate(r.key),
+          "aria-label": r.label + (iv ? " · Vorschau " + iv : "") + " (Taste " + (i + 1) + ")",
+        },
+        h(
+          "span",
+          { className: "mos__rv-rate-top" },
+          h("span", { className: "mos__rv-rate-icon" }, h(Icon, { name: r.icon, size: 16 })),
+          h("span", { className: "mos__rv-rate-label" }, r.label),
+          h("span", { className: "mos__rv-rate-key", "aria-hidden": "true" }, String(i + 1)),
+        ),
+        h(
+          "span",
+          { className: "mos__rv-rate-iv" },
+          h("span", { className: "mos__rv-rate-iv-k" }, "Vorschau"),
+          h("span", { className: "mos__rv-rate-iv-v" }, iv || "—"),
+        ),
+      );
+    }),
+  );
+}
+
+function ReviewCard(props) {
+  const card = props.card;
+  const flipped = props.flipped;
+  const reduce = prefersReducedMotion();
+  return h(
+    "div",
+    { className: "mos__rv-card mos--violet" + (flipped ? " is-flipped" : "") + (reduce ? " is-static" : "") },
+    h(
+      "div",
+      { className: "mos__rv-card-head" },
+      h("span", { className: "mos__rv-card-deck" }, h(Icon, { name: "graduation-cap", size: 16 }), card.deck || "Deck"),
+      h(
+        "span",
+        { className: "mos__rv-card-face" + (flipped ? " is-back" : "") },
+        flipped ? "Antwort" : "Frage",
+      ),
+    ),
+    h("div", { className: "mos__rv-card-q" }, card.front),
+    flipped
+      ? h(
+          "div",
+          { className: "mos__rv-card-a" },
+          h("span", { className: "mos__rv-card-a-k" }, "Antwort"),
+          h("p", { className: "mos__rv-card-a-text" }, card.back),
+        )
+      : null,
+    card.intervalCurrent
+      ? h("div", { className: "mos__rv-card-ivl" },
+          h(Icon, { name: "clock", size: 12 }), "Aktuelles Intervall: ", h("b", null, card.intervalCurrent))
+      : null,
+    flipped
+      ? h(ReviewRatingRow, { data: props.data, card: card, onRate: props.onRate })
+      : h(
+          "button",
+          { type: "button", className: "mos__rv-flip", onClick: props.onFlip, autoFocus: true },
+          h(Icon, { name: "eye", size: 18 }), "Antwort zeigen",
+          h("span", { className: "mos__rv-flip-key", "aria-hidden": "true" }, "Leertaste"),
+        ),
+  );
+}
+
+function ReviewBodyReady(props) {
+  const st = props.state;
+  const d = st.data || {};
+  const cards = d.cards || [];
+  const card = cards[st.index] || cards[0];
+  const total = cards.length;
+  const pct = total ? Math.round((st.index / total) * 100) : 0;
+  return h(
+    "div",
+    { className: "mos__rv-stage" },
+    h(
+      "div",
+      { className: "mos__rv-main" },
+      // progress
+      h(
+        "div",
+        { className: "mos__rv-progress" },
+        h("span", { className: "mos__rv-progress-idx" }, h(Icon, { name: "list", size: 15 }),
+          (st.index + 1) + " / " + total),
+        h("span", { className: "mos__rv-progress-bar" },
+          h("span", { className: "mos__rv-progress-fill", style: { width: pct + "%" } })),
+        h("span", { className: "mos__rv-progress-done" }, st.reviewed + " geübt"),
+      ),
+      h(ReviewCard, { card: card, flipped: st.flipped, data: d, onFlip: props.onFlip, onRate: props.onRate }),
+      // honest, always-on: nothing is persisted here
+      h(
+        "div",
+        { className: "mos__rv-honest" },
+        h(Icon, { name: "flask-conical", size: 13 }),
+        h("span", null, d.honest || REVIEW_HONEST,
+          d.previewNote ? h("span", { className: "mos__rv-honest-src" }, " · " + d.previewNote) : null),
+      ),
+    ),
+    h(ReviewRail, { data: d }),
+  );
+}
+
+function ReviewBodyState(props) {
+  // loading / empty / unavailable / error / done
+  const st = props.state;
+  const d = st.data || {};
+  const map = {
+    loading: { icon: "loader", tone: "muted", title: "Lädt Drill …", note: "Lese die Anki-Collection (read-only) …", spin: true },
+    empty: { icon: "graduation-cap", tone: "muted",
+      title: (d.reason === "no_due" ? "Keine fälligen Karten" : "Noch nicht synchronisiert"),
+      note: d.note || "Sobald das erste Gerät synchronisiert, erscheinen hier fällige Karten." },
+    unavailable: { icon: "unplug", tone: "red", title: d.summary || "Nicht lesbar",
+      note: d.note || "Anki-Collection nicht lesbar. Read-only — nichts wird verändert." },
+    error: { icon: "triangle-alert", tone: "red", title: "Drill nicht erreichbar",
+      note: "Die Lern-Session konnte nicht geladen werden. Es wurde nichts verändert." },
+    done: { icon: "party-popper", tone: "verified", title: "Drill beendet",
+      note: "Nichts wurde gespeichert — die echte Bewertung machst du in Anki / AnkiDroid." },
+  };
+  const m = map[st.phase] || map.loading;
+  return h(
+    "div",
+    { className: "mos__rv-panel mos--" + m.tone },
+    h("span", { className: "mos__rv-panel-icon" + (m.spin ? " is-spin" : "") }, h(Icon, { name: m.icon, size: 30 })),
+    h("span", { className: "mos__rv-panel-title" }, st.phase === "done"
+      ? "Drill beendet · " + st.reviewed + " Karten durchgesehen" : m.title),
+    h("span", { className: "mos__rv-panel-note" }, m.note),
+    st.phase === "done"
+      ? h("span", { className: "mos__rv-panel-honest" }, h(Icon, { name: "flask-conical", size: 12 }), REVIEW_HONEST)
+      : null,
+    st.phase === "done"
+      ? h(
+          "div",
+          { className: "mos__rv-panel-actions" },
+          h("button", { type: "button", className: "mos__rv-btn mos__rv-btn--primary", onClick: props.onRestart },
+            h(Icon, { name: "rotate-ccw", size: 15 }), "Nochmal drillen"),
+          h("button", { type: "button", className: "mos__rv-btn", onClick: props.onClose }, "Schließen"),
+        )
+      : (st.phase === "empty" || st.phase === "unavailable" || st.phase === "error")
+        ? h("div", { className: "mos__rv-panel-actions" },
+            h("button", { type: "button", className: "mos__rv-btn", onClick: props.onClose }, "Schließen"))
+        : null,
+  );
+}
+
+function ReviewSurface(props) {
+  const st = props.state;
+  // Keyboard: Space/Enter flip · 1–4 rate · Esc close. Registered only while
+  // open; re-subscribes on phase/flip change (low frequency, not per-frame).
+  useEffect(() => {
+    if (!st) return undefined;
+    function onKey(e) {
+      const k = e.key;
+      if (k === "Escape") { e.preventDefault(); props.onClose(); return; }
+      if (st.phase !== "ready") return;
+      const tag = e.target && e.target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (!st.flipped) {
+        if (k === " " || k === "Spacebar" || k === "Enter") { e.preventDefault(); props.onFlip(); }
+        return;
+      }
+      if (k >= "1" && k <= "4") {
+        e.preventDefault();
+        props.onRate(["again", "hard", "good", "easy"][parseInt(k, 10) - 1]);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [st, props.onFlip, props.onRate, props.onClose]);
+
+  if (!st) return null;
+  const d = st.data || {};
+  const previewSrc = d.previewSource || "unavailable";
+  const srcLabel = { "py-fsrs": "py-fsrs · Vorschau", "anki-cards.data": "cards.data · Intervall", "unavailable": "Vorschau n/a" }[previewSrc] || previewSrc;
+  return h(
+    "div",
+    { className: "mos__rv-scrim", onClick: props.onClose },
+    h(
+      "section",
+      {
+        className: "mos__rv",
+        role: "dialog", "aria-modal": "true",
+        "aria-label": "Lernen · Drill (Vorschau, keine Speicherung)",
+        onClick: (e) => e.stopPropagation(),
+      },
+      h(
+        "header",
+        { className: "mos__rv-head" },
+        h("span", { className: "mos__rv-head-badge" }, h(Icon, { name: "graduation-cap", size: 18 })),
+        h(
+          "span",
+          { className: "mos__rv-head-titles" },
+          h("span", { className: "mos__rv-head-title" }, "Lernen · Drill"),
+          h("span", { className: "mos__rv-head-sub" }, "Spaced Repetition · Anki (read-only)"),
+        ),
+        h("span", { className: "mos__pip mos__pip--konzept mos__rv-head-pip", title: d.note || srcLabel },
+          h(Icon, { name: previewSrc === "py-fsrs" ? "flask-conical" : "shield-check", size: 11 }), srcLabel),
+        h("button", { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Drill schließen", onClick: props.onClose },
+          h(Icon, { name: "x", size: 18 })),
+      ),
+      st.phase === "ready"
+        ? h(ReviewBodyReady, { state: st, onFlip: props.onFlip, onRate: props.onRate })
+        : h(ReviewBodyState, { state: st, onRestart: props.onRestart, onClose: props.onClose }),
+    ),
+  );
+}
+
+// ===========================================================================
+// L-3 · LERN-COACH surface — a violet, read/propose-only coaching modal over the
+// SAME Anki collection + a read-only exams.json. Three tabs:
+//   1) Countdown  — Klausur-Countdown + Pacing (honest when the collection is
+//      empty: no faked Tagesziel).
+//   2) Feynman    — pick a concept, explain it; the explanation is graded BY
+//      JARVIS (Brain-Gateway). Never faked — if Jarvis is unreachable / no token,
+//      the surface says the grade is pending (jarvisDependent), and nothing is
+//      persisted (grading lives with Jarvis; SR-truth stays in Anki).
+//   3) Lernplan   — a Prüfungsplan MISSION via the SAME gated propose lifecycle
+//      (dry-run preview → „An Gate senden“ → Mission), workspace=studium/privat.
+// The seven lern-* methods (Priming/Active-Recall/Feynman/Elaboration/Spaced …)
+// are mirrored in the copy so the surface teaches the method, not just numbers.
+// ===========================================================================
+const COACH_TABS = [
+  { id: "countdown", icon: "calendar-clock", label: "Countdown" },
+  { id: "feynman", icon: "message-square", label: "Feynman" },
+  { id: "plan", icon: "list-todo", label: "Lernplan" },
+];
+const COACH_METHODS_FALLBACK = [
+  { key: "priming", icon: "lightbulb", title: "Priming", line: "Erst aus dem Kopf: Was weißt du schon?" },
+  { key: "active-recall", icon: "brain", title: "Active Recall", line: "Abrufen statt wiederlesen (Testing-Effekt)." },
+  { key: "spaced", icon: "clock", title: "Spaced Repetition", line: "≥3 Abrufe pro Thema vor der Klausur." },
+];
+const COACH_JARVIS_NOTE = "Bewertung kommt von Jarvis (Brain-Kette) — nicht vom Plugin, nichts wird gespeichert.";
+
+// The objective the Prüfungsplan proposes for one exam — deterministic, honest,
+// and explicitly study-only. Mirrors lern-spaced-repetition (rückwärts vom Datum,
+// ≥3 Abrufe/Thema) + Active-Recall/Feynman as the drill methods.
+function studyObjective(ex) {
+  if (!ex) return "";
+  const themen = (ex.themen && ex.themen.length) ? " Themen: " + ex.themen.join(", ") + "." : "";
+  const inN = (ex.daysLeft != null && ex.daysLeft >= 0) ? " (in " + ex.daysLeft + " Tagen)" : "";
+  return ("Erstelle einen Spaced-Repetition-Lernplan bis zur Klausur " + ex.fach +
+    " am " + ex.datum + inN + "." + themen +
+    " Plane rückwärts vom Klausurdatum, mindestens 3 Abrufe pro Thema, mit Active-Recall- " +
+    "und Feynman-Runden und täglichen Kartenzielen aus den Anki-Fälligkeiten. Nur Studium/privat.");
+}
+
+function CoachMethods(props) {
+  const methods = (props.methods && props.methods.length) ? props.methods : COACH_METHODS_FALLBACK;
+  return h(
+    "div",
+    { className: "mos__co-methods", "aria-label": "Lernmethoden" },
+    h("span", { className: "mos__co-methods-k" }, h(Icon, { name: "sparkles", size: 12 }), "Methodik"),
+    methods.map((m) =>
+      h("span", { key: m.key, className: "mos__co-method", title: m.line },
+        h(Icon, { name: m.icon, size: 12 }), m.title)),
+  );
+}
+
+function CoachJarvisPip(props) {
+  const j = props.jarvis || {};
+  const ready = !!j.ready;
+  return h(
+    "span",
+    { className: "mos__co-jpip mos--" + (ready ? "verified" : "amber"), title: j.note || "" },
+    h(Icon, { name: ready ? "sparkles" : "triangle-alert", size: 11 }),
+    ready ? "Jarvis bereit" : "Jarvis-Bewertung ausstehend",
+  );
+}
+
+function CoachCountdown(props) {
+  const st = props.state;
+  const plan = st.plan || {};
+  const exams = (plan.exams || []).filter((e) => e && e.valid !== false);
+  if (st.planState === "loading") {
+    return h("div", { className: "mos__co-panel mos--muted" },
+      h("span", { className: "mos__co-panel-icon is-spin" }, h(Icon, { name: "loader", size: 28 })),
+      h("span", { className: "mos__co-panel-title" }, "Lade Countdown …"),
+      h("span", { className: "mos__co-panel-note" }, "exams.json × Anki (read-only)"));
+  }
+  if (!exams.length) {
+    return h("div", { className: "mos__co-panel mos--muted" },
+      h("span", { className: "mos__co-panel-icon" }, h(Icon, { name: "calendar-clock", size: 28 })),
+      h("span", { className: "mos__co-panel-title" }, plan.summary || "Keine Klausurtermine"),
+      h("span", { className: "mos__co-panel-note" }, plan.note ||
+        "Lege Klausurtermine in exams.json an (Fach · Datum · Themen · optional Anki-Deck)."));
+  }
+  return h(
+    "div",
+    { className: "mos__co-scroll" },
+    h("div", { className: "mos__co-exams" },
+      exams.map((e) => {
+        const tone = { today: "red", critical: "red", tight: "amber", ok: "violet", past: "muted" }[e.tier] || "violet";
+        return h(
+          "div",
+          { key: e.fach + e.datum, className: "mos__co-exam mos--" + tone },
+          h("div", { className: "mos__co-exam-top" },
+            h("span", { className: "mos__co-exam-fach" }, e.fach),
+            h("span", { className: "mos__co-exam-tier mos--" + tone }, e.tierLabel)),
+          h("div", { className: "mos__co-exam-days" },
+            h("span", { className: "mos__co-exam-n" }, e.daysLeft === 0 ? "heute" : (e.daysLeft < 0 ? "vorbei" : e.daysLeft)),
+            e.daysLeft > 0 ? h("span", { className: "mos__co-exam-unit" }, "Tage") : null),
+          h("div", { className: "mos__co-exam-meta" },
+            h("span", { className: "mos__co-exam-date" }, h(Icon, { name: "calendar-days", size: 12 }), e.datum),
+            h("span", { className: "mos__co-exam-goal" }, h(Icon, { name: "target", size: 12 }), e.goalText)),
+          e.feynmanHint
+            ? h("div", { className: "mos__co-exam-hint" }, h(Icon, { name: "message-square", size: 12 }), e.feynmanHint)
+            : (e.themenCount ? h("div", { className: "mos__co-exam-hint mos--soft" },
+                h(Icon, { name: "book-open", size: 12 }), e.themenCount + " Themen") : null),
+        );
+      })),
+    h(CoachMethods, { methods: plan.methods }),
+    h("div", { className: "mos__co-honest" },
+      h(Icon, { name: "eye", size: 13 }),
+      h("span", null, plan.note ||
+        "Countdown aus exams.json (read-only) × Anki-Fälligkeiten. Tagesziel ehrlich „folgt“, wenn die Collection leer ist. Anki bleibt die SR-Wahrheit — hier wird nichts geschrieben.")),
+  );
+}
+
+function CoachFeynman(props) {
+  const st = props.state;
+  const fey = st.fey || {};
+  const setup = fey.setup || {};
+  const result = fey.result || null;
+  const jarvis = (result && result.jarvis) || setup.jarvis || {};
+  const concept = setup.concept || "";
+  const busy = fey.phase === "evaluating";
+  return h(
+    "div",
+    { className: "mos__co-scroll" },
+    // method + priming line (mirrors lern-priming / lern-feynman)
+    h("div", { className: "mos__co-fey-method" },
+      h(Icon, { name: "message-square", size: 14 }),
+      h("span", null, (setup.method && setup.method.hint) ||
+        "Erklär frei, ohne Fachjargon; wo du stockst, sitzt die Lücke. Danach bewertet Jarvis.")),
+    setup.priming
+      ? h("div", { className: "mos__co-fey-prime" }, h(Icon, { name: "lightbulb", size: 12 }), setup.priming)
+      : null,
+    // concept card
+    h("div", { className: "mos__co-fey-concept" },
+      h("div", { className: "mos__co-fey-concept-head" },
+        h("span", { className: "mos__co-fey-concept-k" }, "Erklär mir"),
+        setup.conceptSource && setup.conceptSource !== "none"
+          ? h("span", { className: "mos__co-fey-src" }, h(Icon, { name: "book-open", size: 10 }),
+              { "anki-karte": "aus Anki-Karte", "exams.json": "aus exams.json", "eigenes": "eigenes" }[setup.conceptSource] || setup.conceptSource)
+          : null,
+        h("button", { type: "button", className: "mos__co-fey-next", onClick: props.onNextConcept,
+            title: "Anderes Konzept" }, h(Icon, { name: "rotate-ccw", size: 12 }), "anderes")),
+      h("div", { className: "mos__co-fey-concept-v" }, concept || "(kein Konzept — gib selbst eines ein)")),
+    // explanation textarea
+    h("label", { className: "mos__co-fey-field" },
+      h("span", { className: "mos__co-fey-field-k" }, "Deine Erklärung (frei, in eigenen Worten)"),
+      h("textarea", {
+        className: "mos__co-fey-textarea", rows: 5,
+        placeholder: "Erklär das Konzept so, als würdest du es einer interessierten Laiin erklären …",
+        value: fey.explanation || "", disabled: busy,
+        onChange: (e) => props.onExplain(e.target.value),
+      })),
+    // Jarvis dependency banner — honest about what grades this.
+    h("div", { className: "mos__co-jbanner mos--" + (jarvis.ready ? "verified" : "amber") },
+      h(Icon, { name: jarvis.ready ? "sparkles" : "triangle-alert", size: 13 }),
+      h("span", null, jarvis.ready
+        ? COACH_JARVIS_NOTE
+        : (jarvis.note || "Jarvis-Bewertung ausstehend — die Erklärung wird nicht bewertet, nichts gespeichert."))),
+    // result (real Jarvis feedback) or evaluating/pending states
+    busy
+      ? h("div", { className: "mos__co-panel mos--muted" },
+          h("span", { className: "mos__co-panel-icon is-spin" }, h(Icon, { name: "loader", size: 24 })),
+          h("span", { className: "mos__co-panel-title" }, "Jarvis bewertet …"),
+          h("span", { className: "mos__co-panel-note" }, "Brain-Kette (abo-first) · READ/Coaching"))
+      : (result
+          ? (result.ok
+              ? h("div", { className: "mos__co-fey-result" },
+                  h("div", { className: "mos__co-fey-result-head" },
+                    h(Icon, { name: "sparkles", size: 14 }), "Jarvis-Feedback",
+                    result.model ? h("span", { className: "mos__co-fey-model" }, result.model + (result.routeClass ? " · " + result.routeClass : "")) : null),
+                  h("div", { className: "mos__co-fey-feedback" }, result.feedback),
+                  h("div", { className: "mos__co-honest" }, h(Icon, { name: "eye", size: 12 }),
+                    h("span", null, result.note || COACH_JARVIS_NOTE)))
+              : h("div", { className: "mos__co-panel mos--amber" },
+                  h("span", { className: "mos__co-panel-icon" }, h(Icon, { name: "triangle-alert", size: 24 })),
+                  h("span", { className: "mos__co-panel-title" }, "Bewertung ausstehend"),
+                  h("span", { className: "mos__co-panel-note" }, result.note ||
+                    "Jarvis-Bewertung nicht möglich — nichts wurde erfunden, nichts gespeichert.")))
+          : null),
+    // send button
+    h("div", { className: "mos__co-fey-actions" },
+      h("button", {
+        type: "button", className: "mos__co-btn mos__co-btn--primary",
+        disabled: busy || !(fey.explanation || "").trim(),
+        onClick: props.onEvaluate,
+        title: jarvis.ready ? "Erklärung an Jarvis zur Bewertung senden."
+          : "Sendet an Jarvis — ist die Anbindung aus, bleibt die Bewertung ehrlich ausstehend.",
+      }, h(Icon, { name: "send-horizontal", size: 15 }), "An Jarvis senden")),
+  );
+}
+
+function CoachPlan(props) {
+  const st = props.state;
+  const plan = st.plan || {};
+  const exams = (plan.exams || []).filter((e) => e && e.valid !== false && (e.daysLeft == null || e.daysLeft >= 0));
+  return h(
+    "div",
+    { className: "mos__co-scroll" },
+    h("div", { className: "mos__co-plan-intro" },
+      h(Icon, { name: "shield-check", size: 13 }),
+      h("span", null, "Ein Lernplan wird als Mission VORGESCHLAGEN: Dry-Run-Vorschau → „An Gate senden“ → Freigabe. ",
+        h("b", null, "Studium/privat"), " — kein Geld, keine Firma. Das Plugin führt nichts aus; dein Gate entscheidet.")),
+    exams.length
+      ? h("div", { className: "mos__co-plan-list" },
+          exams.map((e) =>
+            h("button", {
+              key: e.fach + e.datum, type: "button", className: "mos__co-plan-item",
+              onClick: () => props.onPropose(studyObjective(e), "study"),
+              title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst.",
+            },
+              h("span", { className: "mos__co-plan-item-l" },
+                h(Icon, { name: "list-todo", size: 15 }),
+                h("span", { className: "mos__co-plan-item-fach" }, "Lernplan bis " + e.fach),
+                h("span", { className: "mos__co-plan-item-sub" }, (e.daysHuman || ("in " + e.daysLeft + " Tagen")) + " · " + e.themenCount + " Themen")),
+              h("span", { className: "mos__co-plan-item-cta" }, h(Icon, { name: "flask-conical", size: 12 }), "Vorschau"))))
+      : h("div", { className: "mos__co-panel mos--muted" },
+          h("span", { className: "mos__co-panel-icon" }, h(Icon, { name: "list-todo", size: 26 })),
+          h("span", { className: "mos__co-panel-title" }, "Keine anstehende Klausur"),
+          h("span", { className: "mos__co-panel-note" }, "Lege Termine in exams.json an — dann kannst du je Fach einen Lernplan vorschlagen.")),
+    h("div", { className: "mos__co-honest" }, h(Icon, { name: "lock", size: 12 }),
+      h("span", null, "Propose-only über den gegateten /actions-Weg (workspace=studium). Nie /approvals/decide, nie Anki-Schreibzugriff.")),
+  );
+}
+
+function CoachSurface(props) {
+  const st = props.state;
+  useEffect(() => {
+    if (!st) return undefined;
+    function onKey(e) { if (e.key === "Escape") { e.preventDefault(); props.onClose(); } }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [st, props.onClose]);
+  if (!st) return null;
+  const tab = st.tab || "countdown";
+  const jarvis = (st.plan && st.plan.jarvis) || (st.fey && st.fey.setup && st.fey.setup.jarvis) || {};
+  let body;
+  if (tab === "feynman") body = h(CoachFeynman, { state: st, onExplain: props.onExplain, onEvaluate: props.onEvaluate, onNextConcept: props.onNextConcept });
+  else if (tab === "plan") body = h(CoachPlan, { state: st, onPropose: props.onPropose });
+  else body = h(CoachCountdown, { state: st });
+  return h(
+    "div",
+    { className: "mos__co-scrim", onClick: props.onClose },
+    h(
+      "section",
+      { className: "mos__co", role: "dialog", "aria-modal": "true",
+        "aria-label": "Lern-Coach", onClick: (e) => e.stopPropagation() },
+      h("header", { className: "mos__co-head" },
+        h("span", { className: "mos__co-head-badge" }, h(Icon, { name: "graduation-cap", size: 18 })),
+        h("span", { className: "mos__co-head-titles" },
+          h("span", { className: "mos__co-head-title" }, "Lern-Coach"),
+          h("span", { className: "mos__co-head-sub" }, "Klausur-Countdown · Feynman · Lernplan")),
+        h(CoachJarvisPip, { jarvis: jarvis }),
+        h("button", { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Coach schließen", onClick: props.onClose },
+          h(Icon, { name: "x", size: 18 }))),
+      h("div", { className: "mos__co-tabs", role: "tablist" },
+        COACH_TABS.map((t) =>
+          h("button", {
+            key: t.id, type: "button", role: "tab",
+            "aria-selected": tab === t.id ? "true" : "false",
+            className: "mos__co-tab" + (tab === t.id ? " is-active" : ""),
+            onClick: () => props.onTab(t.id),
+          }, h(Icon, { name: t.icon, size: 15 }), t.label))),
+      h("div", { className: "mos__co-body" }, body),
     ),
   );
 }
@@ -2134,6 +2743,12 @@ function MikaelOS() {
   // Phase 3 — the propose lifecycle overlay state (null = closed). Shape:
   // { phase, objective, preview, gate, cardId, controlPlane, note, error }.
   const [propose, setPropose] = useState(null);
+  // L-2 — the read-only review/drill overlay (null = closed). Shape:
+  // { phase: loading|ready|empty|unavailable|error|done, data, index, flipped, reviewed }.
+  const [review, setReview] = useState(null);
+  // L-3 — the Lern-Coach overlay (null = closed). Shape:
+  // { tab, planState, plan, fey: { phase, setup, explanation, result } }.
+  const [coach, setCoach] = useState(null);
 
   // Fetch the read-only projection once on mount, via the host SDK's authed
   // fetchJSON (falls back to window.fetch for the screenshot harness). Any error
@@ -2213,6 +2828,13 @@ function MikaelOS() {
   const focusIdRef = useRef(focusId); focusIdRef.current = focusId;
   const sheetOpenRef = useRef(sheetOpen); sheetOpenRef.current = sheetOpen;
   const isMobileRef = useRef(isMobile); isMobileRef.current = isMobile;
+  // While the review/drill overlay is open it owns the keyboard (Space/1–4/Esc);
+  // the global shell handler defers to it so digits don't also focus ring nodes.
+  const reviewOpenRef = useRef(false); reviewOpenRef.current = !!review;
+  // The Lern-Coach overlay likewise owns the keyboard (Esc/typing) while open.
+  const coachOpenRef = useRef(false); coachOpenRef.current = !!coach;
+  // Current propose state, so the profile survives into preview/send callbacks.
+  const proposeRef = useRef(null); proposeRef.current = propose;
 
   const clearTimers = useCallback(() => {
     timersRef.current.forEach((t) => window.clearTimeout(t));
@@ -2245,37 +2867,43 @@ function MikaelOS() {
   // --- Phase 3: propose lifecycle handlers (propose-only, gate-led) ---------
   // Open the overlay. With an objective -> straight to the Dry-Run preview;
   // empty -> a compose step so the user names the task first.
-  const proposeOpen = useCallback((objective) => {
+  const proposeOpen = useCallback((objective, profile) => {
     const obj = (objective || "").trim();
-    if (!obj) { setPropose({ phase: "compose", objective: "" }); return; }
-    setPropose({ phase: "loading", objective: obj });
-    sdkPost(PROPOSE_API, { objective: obj, dryRun: true })
+    const prof = profile || "engineering";
+    const api = (PROPOSE_PROFILES[prof] || PROPOSE_PROFILES.engineering).api;
+    if (!obj) { setPropose({ phase: "compose", objective: "", profile: prof }); return; }
+    setPropose({ phase: "loading", objective: obj, profile: prof });
+    sdkPost(api, { objective: obj, dryRun: true })
       .then((r) => {
         if (!r || r.ok === false) {
-          setPropose({ phase: "compose", objective: obj,
+          setPropose({ phase: "compose", objective: obj, profile: prof,
             error: (r && r.note) || "Vorschau nicht möglich." });
           return;
         }
-        setPropose({ phase: "preview", objective: r.plan.objective, preview: r,
+        setPropose({ phase: "preview", objective: r.plan.objective, preview: r, profile: prof,
           gate: r.predictedGate, controlPlane: r.controlPlane, note: null });
       })
-      .catch(() => setPropose({ phase: "compose", objective: obj, error: "Vorschau nicht erreichbar." }));
+      .catch(() => setPropose({ phase: "compose", objective: obj, profile: prof, error: "Vorschau nicht erreichbar." }));
   }, []);
   const proposeObjective = useCallback((v) => {
     setPropose((prev) => (prev ? { ...prev, objective: v, error: null } : prev));
   }, []);
-  // Build/refresh the dry-run preview (NO gate fired). `back=true` returns to compose.
+  // Build/refresh the dry-run preview (NO gate fired). `back=true` returns to
+  // compose. The active profile is read off the ref (kept current on render).
   const proposePreview = useCallback((objective, back) => {
-    if (back) { setPropose((prev) => ({ phase: "compose", objective: (prev && prev.objective) || "" })); return; }
-    proposeOpen(objective);
+    const prof = (proposeRef.current && proposeRef.current.profile) || "engineering";
+    if (back) { setPropose({ phase: "compose", objective: (proposeRef.current && proposeRef.current.objective) || "", profile: prof }); return; }
+    proposeOpen(objective, prof);
   }, [proposeOpen]);
   // The ONLY live step — an explicit user click. Fires the plugin's gated propose
   // route with dryRun:false; the backend hands it to :18083/actions (gated).
   const proposeSend = useCallback((objective) => {
     const obj = (objective || "").trim();
     if (!obj) return;
+    const prof = (proposeRef.current && proposeRef.current.profile) || "engineering";
+    const api = (PROPOSE_PROFILES[prof] || PROPOSE_PROFILES.engineering).api;
     setPropose((prev) => ({ ...(prev || {}), phase: "submitting", objective: obj }));
-    sdkPost(PROPOSE_API, { objective: obj, dryRun: false })
+    sdkPost(api, { objective: obj, dryRun: false })
       .then((r) => {
         if (!r || (r.ok === false && r.status !== "auth_pending")) {
           setPropose((prev) => ({ ...(prev || {}), phase: "error", objective: obj,
@@ -2304,6 +2932,90 @@ function MikaelOS() {
       .catch(() => { /* keep waiting; a failed read never fakes a receipt */ });
   }, []);
   const proposeClose = useCallback(() => { setPropose(null); }, []);
+
+  // --- L-2: review/drill handlers (READ-ONLY, nothing persisted) ------------
+  // Open the overlay and fetch the read-only session. The plugin never grades
+  // and never writes the collection — real grading happens in Anki/AnkiDroid.
+  const reviewOpen = useCallback(() => {
+    setReview({ phase: "loading", data: null, index: 0, flipped: false, reviewed: 0 });
+    sdkGet(REVIEW_API + "?limit=20")
+      .then((d) => {
+        const cards = (d && Array.isArray(d.cards)) ? d.cards : [];
+        let phase;
+        if (!d) phase = "error";
+        else if (cards.length) phase = "ready";
+        else if (d.state === "unavailable" || d.state === "error") phase = "unavailable";
+        else phase = "empty";
+        setReview({ phase, data: d || null, index: 0, flipped: false, reviewed: 0 });
+      })
+      .catch(() => setReview({ phase: "error", data: null, index: 0, flipped: false, reviewed: 0 }));
+  }, []);
+  const reviewFlip = useCallback(() => {
+    setReview((p) => (p && p.phase === "ready" && !p.flipped ? { ...p, flipped: true } : p));
+  }, []);
+  // Rate = advance the drill locally (NO persist). At the end of the deck the
+  // surface moves to the honest "done" summary; it never writes a grade.
+  const reviewRate = useCallback(() => {
+    setReview((p) => {
+      if (!p || p.phase !== "ready" || !p.flipped) return p;
+      const cards = (p.data && p.data.cards) || [];
+      const nextIdx = p.index + 1;
+      const reviewed = p.reviewed + 1;
+      if (nextIdx >= cards.length) return { ...p, phase: "done", reviewed };
+      return { ...p, index: nextIdx, flipped: false, reviewed };
+    });
+  }, []);
+  const reviewRestart = useCallback(() => {
+    setReview((p) => {
+      if (!p) return p;
+      const hasCards = p.data && Array.isArray(p.data.cards) && p.data.cards.length;
+      return { ...p, phase: hasCards ? "ready" : p.phase, index: 0, flipped: false, reviewed: 0 };
+    });
+  }, []);
+  const reviewClose = useCallback(() => { setReview(null); }, []);
+
+  // --- L-3: Lern-Coach handlers (READ + gated-propose only) -----------------
+  // Open the coach: fetch the read-only Countdown/Pacing plan + stage a Feynman
+  // round. Neither call writes; the Feynman grade (later) comes from Jarvis.
+  const coachLoadFeynman = useCallback((concept) => {
+    const q = concept ? ("?concept=" + encodeURIComponent(concept)) : "";
+    setCoach((p) => (p ? { ...p, fey: { ...(p.fey || {}), phase: "loading" } } : p));
+    sdkGet(FEYNMAN_API + q)
+      .then((d) => setCoach((p) => (p ? { ...p, fey: { phase: "ready", setup: d || {}, explanation: "", result: null } } : p)))
+      .catch(() => setCoach((p) => (p ? { ...p, fey: { phase: "ready", setup: {}, explanation: "", result: null } } : p)));
+  }, []);
+  const coachOpen = useCallback(() => {
+    setCoach({ tab: "countdown", planState: "loading", plan: null,
+      fey: { phase: "loading", setup: {}, explanation: "", result: null } });
+    sdkGet(STUDY_PLAN_API)
+      .then((d) => setCoach((p) => (p ? { ...p, planState: (d ? "ready" : "error"), plan: d || null } : p)))
+      .catch(() => setCoach((p) => (p ? { ...p, planState: "error" } : p)));
+    coachLoadFeynman("");
+  }, [coachLoadFeynman]);
+  const coachTab = useCallback((t) => { setCoach((p) => (p ? { ...p, tab: t } : p)); }, []);
+  const coachExplain = useCallback((v) => {
+    setCoach((p) => (p ? { ...p, fey: { ...(p.fey || {}), explanation: v } } : p));
+  }, []);
+  const coachNextConcept = useCallback(() => { coachLoadFeynman(""); }, [coachLoadFeynman]);
+  // Send the explanation to Jarvis for grading. The plugin NEVER fakes a grade:
+  // an honest pending/error result is shown if Jarvis is unreachable / no token.
+  const coachEvaluate = useCallback(() => {
+    const cur = coach && coach.fey;
+    const expl = (cur && cur.explanation || "").trim();
+    if (!expl) return;
+    const concept = (cur && cur.setup && cur.setup.concept) || "";
+    setCoach((p) => (p ? { ...p, fey: { ...(p.fey || {}), phase: "evaluating" } } : p));
+    sdkPost(FEYNMAN_EVAL_API, { concept: concept, explanation: expl })
+      .then((r) => setCoach((p) => (p ? { ...p, fey: { ...(p.fey || {}), phase: "done", result: r || { ok: false, note: "Keine Antwort." } } } : p)))
+      .catch(() => setCoach((p) => (p ? { ...p, fey: { ...(p.fey || {}), phase: "done", result: { ok: false, note: "Jarvis nicht erreichbar — nichts bewertet, nichts gespeichert.", jarvisDependent: true } } } : p)));
+  }, [coach]);
+  const coachClose = useCallback(() => { setCoach(null); }, []);
+  // Launching a Prüfungsplan-Vorschlag leaves the coach and opens the gated
+  // propose overlay (so it's never stacked behind the coach modal).
+  const coachPropose = useCallback((objective, profile) => {
+    setCoach(null);
+    proposeOpen(objective, profile);
+  }, [proposeOpen]);
 
   // Pointer drag to reorder nodes; distinguishes a click (focus) from a drag by
   // a small movement threshold so both gestures share the same target.
@@ -2360,6 +3072,8 @@ function MikaelOS() {
   useEffect(() => {
     function onKey(e) {
       const k = e.key;
+      // The review/drill + coach overlays are modal and own the keyboard while open.
+      if (reviewOpenRef.current || coachOpenRef.current) return;
       if ((e.metaKey || e.ctrlKey) && (k === "k" || k === "K")) {
         e.preventDefault();
         if (inputRef.current) inputRef.current.focus();
@@ -2433,11 +3147,20 @@ function MikaelOS() {
         greeting: greeting, onGoJarvis: goJarvis, announce: announce,
         sheetOpen: sheetOpen, sheetDetent: sheetDetent,
         onSheetDetent: setSheetDetent, onSheetClose: closeSheet,
-        onPropose: proposeOpen,
+        onPropose: proposeOpen, onReview: reviewOpen, onCoach: coachOpen,
       }),
       h(ProposeFlow, {
         state: propose, onObjective: proposeObjective, onPreview: proposePreview,
         onSend: proposeSend, onPoll: proposePoll, onClose: proposeClose,
+      }),
+      h(ReviewSurface, {
+        state: review, onFlip: reviewFlip, onRate: reviewRate,
+        onRestart: reviewRestart, onClose: reviewClose,
+      }),
+      h(CoachSurface, {
+        state: coach, onTab: coachTab, onExplain: coachExplain,
+        onEvaluate: coachEvaluate, onNextConcept: coachNextConcept,
+        onPropose: coachPropose, onClose: coachClose,
       }),
     );
   }
@@ -2520,6 +3243,8 @@ function MikaelOS() {
               liveModule: enrichedById[focusId],
               onClose: closeFocus,
               onPropose: () => proposeOpen(command),
+              onReview: reviewOpen,
+              onCoach: coachOpen,
             }),
           ),
           // add-module affordance (bottom-left of stage)
@@ -2588,6 +3313,15 @@ function MikaelOS() {
     h(ProposeFlow, {
       state: propose, onObjective: proposeObjective, onPreview: proposePreview,
       onSend: proposeSend, onPoll: proposePoll, onClose: proposeClose,
+    }),
+    h(ReviewSurface, {
+      state: review, onFlip: reviewFlip, onRate: reviewRate,
+      onRestart: reviewRestart, onClose: reviewClose,
+    }),
+    h(CoachSurface, {
+      state: coach, onTab: coachTab, onExplain: coachExplain,
+      onEvaluate: coachEvaluate, onNextConcept: coachNextConcept,
+      onPropose: coachPropose, onClose: coachClose,
     }),
   );
 }

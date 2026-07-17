@@ -14,6 +14,7 @@ var MikaelOSPlugin = function() {
     "radio-tower": '<path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9" /> <path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5" /> <circle cx="12" cy="9" r="2" /> <path d="M16.2 4.8c2 2 2.26 5.11.8 7.47" /> <path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1" /> <path d="M9.5 18h5" /> <path d="m8 22 4-11 4 11" />',
     "lock": '<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" />',
     "calendar-plus": '<path d="M8 2v4" /> <path d="M16 2v4" /> <path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8" /> <path d="M3 10h18" /> <path d="M16 19h6" /> <path d="M19 16v6" />',
+    "calendar-clock": '<path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5" /> <path d="M16 2v4" /> <path d="M8 2v4" /> <path d="M3 10h5" /> <path d="M17.5 17.5 16 16.25V14" /> <circle cx="16" cy="16" r="6" />',
     "mic": '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /> <path d="M19 10v2a7 7 0 0 1-14 0v-2" /> <line x1="12" x2="12" y1="19" y2="22" />',
     "circle-plus": '<circle cx="12" cy="12" r="10" /> <path d="M8 12h8" /> <path d="M12 8v8" />',
     "grip-vertical": '<circle cx="9" cy="12" r="1" /> <circle cx="9" cy="5" r="1" /> <circle cx="9" cy="19" r="1" /> <circle cx="15" cy="12" r="1" /> <circle cx="15" cy="5" r="1" /> <circle cx="15" cy="19" r="1" />',
@@ -71,7 +72,13 @@ var MikaelOSPlugin = function() {
     "list-todo": '<rect x="3" y="5" width="6" height="6" rx="1" /> <path d="m3 17 2 2 4-4" /> <path d="M13 6h8" /> <path d="M13 12h8" /> <path d="M13 18h8" />',
     "chevron-left": '<path d="m15 18-6-6 6-6" />',
     "ban": '<circle cx="12" cy="12" r="10" /> <path d="m4.9 4.9 14.2 14.2" />',
-    "triangle-alert": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" />'
+    "triangle-alert": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" />',
+    "rotate-ccw": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" />',
+    "hourglass": '<path d="M5 22h14" /> <path d="M5 2h14" /> <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" /> <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" />',
+    "fast-forward": '<polygon points="13 19 22 12 13 5 13 19" /> <polygon points="2 19 11 12 2 5 2 19" />',
+    "eye": '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" />',
+    "play": '<polygon points="6 3 20 12 6 21 6 3" />',
+    "party-popper": '<path d="M5.8 11.3 2 22l10.7-3.79" /> <path d="M4 3h.01" /> <path d="M22 8h.01" /> <path d="M15 2h.01" /> <path d="M22 20h.01" /> <path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10" /> <path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17" /> <path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7" /> <path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z" />'
   };
   const SDK = typeof window !== "undefined" ? window.__HERMES_PLUGIN_SDK__ : void 0;
   const React = SDK && SDK.React;
@@ -355,6 +362,11 @@ var MikaelOSPlugin = function() {
   const PLUGIN_API = "/api/plugins/mikael-os";
   const PROPOSE_API = PLUGIN_API + "/actions/propose";
   const RECEIPT_API = PLUGIN_API + "/actions/receipt";
+  const REVIEW_API = PLUGIN_API + "/review/session";
+  const STUDY_PLAN_API = PLUGIN_API + "/study/plan";
+  const FEYNMAN_API = PLUGIN_API + "/study/feynman";
+  const FEYNMAN_EVAL_API = PLUGIN_API + "/study/feynman/evaluate";
+  const STUDY_PROPOSE_API = PLUGIN_API + "/study/plan/propose";
   MODULES.reduce((acc, m) => {
     acc[m.id] = m.pos;
     return acc;
@@ -394,6 +406,29 @@ var MikaelOSPlugin = function() {
     auth_pending: { tone: "gated", icon: "triangle-alert", label: "Freigabe-Anbindung: Auth ausstehend" }
   };
   const PROPOSE_TERMINAL = { approved: 1, executed: 1, verified: 1, denied: 1, error: 1, auth_pending: 1 };
+  const PROPOSE_PROFILES = {
+    engineering: {
+      api: PROPOSE_API,
+      icon: "git-branch",
+      title: "Codex-Aufgabe vorschlagen",
+      subKind: "Engineering",
+      fieldLabel: "Was soll Codex / Engineering tun?",
+      placeholder: "z. B. Refactor: Deploy-Check als eigenes Modul extrahieren …",
+      scopeHint: "Nur Engineering · kein Geld / Kunde / Personal"
+    },
+    study: {
+      api: STUDY_PROPOSE_API,
+      icon: "graduation-cap",
+      title: "Lernplan vorschlagen",
+      subKind: "Studium · privat",
+      fieldLabel: "Welchen Lernplan soll Jarvis bis zur Klausur bauen?",
+      placeholder: "z. B. Lernplan bis Thermodynamik-Klausur — Spaced Repetition, ≥3 Abrufe/Thema …",
+      scopeHint: "Nur Studium / privat · kein Geld / Kunde / Personal"
+    }
+  };
+  function proposeProfile(st) {
+    return PROPOSE_PROFILES[st && st.profile || "engineering"] || PROPOSE_PROFILES.engineering;
+  }
   const STATE_META = {
     loading: { tone: "muted", label: "Lädt …" },
     fresh: { tone: "verified", label: "Live" },
@@ -933,6 +968,24 @@ var MikaelOSPlugin = function() {
           onClick: () => props.onPropose(),
           title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst."
         }, h(Icon, { name: "git-branch", size: 15 }), "Codex-Aufgabe vorschlagen") : null,
+        // Lernplan: the wired read-only drill. Opens a preview session (Frage →
+        // Antwort → Bewertung-Vorschau); grades/persistence stay in Anki/AnkiDroid.
+        props.onReview && props.focusId === "learning" ? h("button", {
+          key: "review",
+          type: "button",
+          className: "mos__tool mos__tool--review",
+          onClick: () => props.onReview(),
+          title: "Karten üben (Vorschau) — Bewertung & Speicherung in Anki/AnkiDroid."
+        }, h(Icon, { name: "play", size: 15 }), "Lernen · Drill") : null,
+        // L-3: the Lern-Coach — Klausur-Countdown, Feynman (Jarvis-graded) und
+        // Prüfungsplan-Vorschlag (gated). Read + propose-only; kein Anki-Write.
+        props.onCoach && props.focusId === "learning" ? h("button", {
+          key: "coach",
+          type: "button",
+          className: "mos__tool mos__tool--coach",
+          onClick: () => props.onCoach(),
+          title: "Countdown, Feynman (von Jarvis bewertet) und Lernplan-Vorschlag (gated)."
+        }, h(Icon, { name: "graduation-cap", size: 15 }), "Lern-Coach") : null,
         LENS_TOOLS.map((tl) => h("button", { key: tl.label, type: "button", className: "mos__tool", title: NOT_WIRED }, h(Icon, { name: tl.icon, size: 15 }), tl.label))
       )
     );
@@ -1650,6 +1703,34 @@ var MikaelOSPlugin = function() {
               "Als Codex-Task",
               h("span", { className: "mos__sheet-act-gate mos__sheet-act-gate--live" }, h(Icon, { name: "shield-check", size: 10 }), "propose")
             ),
+            // Lernplan gets the wired read-only drill (Vorschau, nichts gespeichert).
+            props.onReview && props.focusId === "learning" ? h(
+              "button",
+              {
+                key: "review",
+                type: "button",
+                className: "mos__sheet-act mos__sheet-act--review",
+                onClick: () => props.onReview(),
+                title: "Karten üben (Vorschau) — Bewertung & Speicherung in Anki/AnkiDroid."
+              },
+              h(Icon, { name: "play", size: 15 }),
+              "Lernen · Drill",
+              h("span", { className: "mos__sheet-act-gate mos__sheet-act-gate--live" }, h(Icon, { name: "eye", size: 10 }), "read-only")
+            ) : null,
+            // L-3: Lern-Coach (Countdown · Feynman via Jarvis · Lernplan-Vorschlag).
+            props.onCoach && props.focusId === "learning" ? h(
+              "button",
+              {
+                key: "coach",
+                type: "button",
+                className: "mos__sheet-act mos__sheet-act--coach",
+                onClick: () => props.onCoach(),
+                title: "Countdown, Feynman (von Jarvis bewertet) und Lernplan-Vorschlag (gated)."
+              },
+              h(Icon, { name: "graduation-cap", size: 15 }),
+              "Lern-Coach",
+              h("span", { className: "mos__sheet-act-gate mos__sheet-act-gate--live" }, h(Icon, { name: "sparkles", size: 10 }), "Jarvis")
+            ) : null,
             h(
               "button",
               {
@@ -1738,7 +1819,9 @@ var MikaelOSPlugin = function() {
         onClose: props.onSheetClose,
         focusId: props.focusId,
         liveModule: props.byId[props.focusId],
-        onPropose: props.onPropose
+        onPropose: props.onPropose,
+        onReview: props.onReview,
+        onCoach: props.onCoach
       })
     );
   }
@@ -1874,6 +1957,7 @@ var MikaelOSPlugin = function() {
     const st = props.state;
     if (!st) return null;
     const phase = st.phase;
+    const prof = proposeProfile(st);
     const meta = PROPOSE_META[phase] || PROPOSE_META.error;
     const cp = st.controlPlane || st.preview && st.preview.controlPlane;
     const reachable = cp ? cp.reachable : null;
@@ -1893,11 +1977,11 @@ var MikaelOSPlugin = function() {
       body.push(h(
         "label",
         { key: "compose", className: "mos__pp-field" },
-        h("span", { className: "mos__pp-field-k" }, "Was soll Codex / Engineering tun?"),
+        h("span", { className: "mos__pp-field-k" }, prof.fieldLabel),
         h("textarea", {
           className: "mos__pp-textarea",
           rows: 3,
-          placeholder: "z. B. Refactor: Deploy-Check als eigenes Modul extrahieren …",
+          placeholder: prof.placeholder,
           value: st.objective || "",
           disabled: phase === "loading",
           onChange: (e) => props.onObjective(e.target.value),
@@ -1907,7 +1991,7 @@ var MikaelOSPlugin = function() {
           "span",
           { className: "mos__pp-scope" },
           h(Icon, { name: "lock", size: 11 }),
-          "Nur Engineering · kein Geld / Kunde / Personal"
+          prof.scopeHint
         )
       ));
     }
@@ -2030,7 +2114,7 @@ var MikaelOSPlugin = function() {
           // not a frozen "…vorschlagen" (WCAG 4.1.2 Name/Role/Value, 2.4.6).
           role: "dialog",
           "aria-modal": "true",
-          "aria-label": "Codex-Aufgabe vorschlagen · " + meta.label,
+          "aria-label": prof.title + " · " + meta.label,
           onClick: (e) => e.stopPropagation()
         },
         h(
@@ -2041,13 +2125,629 @@ var MikaelOSPlugin = function() {
           h(
             "span",
             { className: "mos__pp-titles" },
-            h("span", { className: "mos__pp-title" }, "Codex-Aufgabe vorschlagen"),
-            h("span", { className: "mos__pp-sub" }, "Engineering · " + meta.label)
+            h("span", { className: "mos__pp-title" }, prof.title),
+            h("span", { className: "mos__pp-sub" }, prof.subKind + " · " + meta.label)
           ),
           h("button", { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Schließen", onClick: props.onClose }, h(Icon, { name: "x", size: 18 }))
         ),
         h("div", { className: "mos__pp-body" }, body),
         h("footer", { className: "mos__pp-foot" }, actions)
+      )
+    );
+  }
+  const REVIEW_RATING_FALLBACK = [
+    { key: "again", label: "Nochmal", accent: "red", icon: "rotate-ccw" },
+    { key: "hard", label: "Schwer", accent: "amber", icon: "hourglass" },
+    { key: "good", label: "Gut", accent: "emerald", icon: "circle-check-big" },
+    { key: "easy", label: "Einfach", accent: "cyan", icon: "fast-forward" }
+  ];
+  const REVIEW_HONEST = "Vorschau/Drill — Bewertung & Speicherung in Anki / AnkiDroid. Hier wird nichts gespeichert.";
+  function ReviewRail(props) {
+    const d = props.data || {};
+    const retention = d.retentionPct || (d.retention != null ? Math.round(d.retention * 100) + " %" : "—");
+    const streak = d.streak != null ? d.streak : null;
+    const learned = d.learnedToday != null ? d.learnedToday : null;
+    const items = [
+      { icon: "target", accent: "violet", k: "Retention", v: retention, sub: "30 T" },
+      { icon: "flame", accent: "amber", k: "Streak", v: streak != null ? streak + " T" : "—", sub: "in Folge" },
+      { icon: "clock", accent: "cyan", k: "Heute gelernt", v: learned != null ? String(learned) : "—", sub: "Reviews" }
+    ];
+    return h(
+      "aside",
+      { className: "mos__rv-rail", "aria-label": "Lern-Kennzahlen" },
+      items.map((it) => h(
+        "div",
+        { key: it.k, className: "mos__rv-stat mos--" + it.accent },
+        h("span", { className: "mos__rv-stat-icon" }, h(Icon, { name: it.icon, size: 18 })),
+        h("span", { className: "mos__rv-stat-v" }, it.v),
+        h("span", { className: "mos__rv-stat-k" }, it.k),
+        h("span", { className: "mos__rv-stat-sub" }, it.sub)
+      ))
+    );
+  }
+  function ReviewRatingRow(props) {
+    const ratings = props.data && props.data.ratings && props.data.ratings.length ? props.data.ratings : REVIEW_RATING_FALLBACK;
+    const card = props.card || {};
+    const previews = card.preview || null;
+    return h(
+      "div",
+      { className: "mos__rv-ratings", role: "group", "aria-label": "Bewertung (Vorschau, nicht gespeichert)" },
+      ratings.map((r, i) => {
+        const iv = previews && previews[r.key] ? previews[r.key] : null;
+        return h(
+          "button",
+          {
+            key: r.key,
+            type: "button",
+            className: "mos__rv-rate mos--" + r.accent,
+            onClick: () => props.onRate(r.key),
+            "aria-label": r.label + (iv ? " · Vorschau " + iv : "") + " (Taste " + (i + 1) + ")"
+          },
+          h(
+            "span",
+            { className: "mos__rv-rate-top" },
+            h("span", { className: "mos__rv-rate-icon" }, h(Icon, { name: r.icon, size: 16 })),
+            h("span", { className: "mos__rv-rate-label" }, r.label),
+            h("span", { className: "mos__rv-rate-key", "aria-hidden": "true" }, String(i + 1))
+          ),
+          h(
+            "span",
+            { className: "mos__rv-rate-iv" },
+            h("span", { className: "mos__rv-rate-iv-k" }, "Vorschau"),
+            h("span", { className: "mos__rv-rate-iv-v" }, iv || "—")
+          )
+        );
+      })
+    );
+  }
+  function ReviewCard(props) {
+    const card = props.card;
+    const flipped = props.flipped;
+    const reduce = prefersReducedMotion();
+    return h(
+      "div",
+      { className: "mos__rv-card mos--violet" + (flipped ? " is-flipped" : "") + (reduce ? " is-static" : "") },
+      h(
+        "div",
+        { className: "mos__rv-card-head" },
+        h("span", { className: "mos__rv-card-deck" }, h(Icon, { name: "graduation-cap", size: 16 }), card.deck || "Deck"),
+        h(
+          "span",
+          { className: "mos__rv-card-face" + (flipped ? " is-back" : "") },
+          flipped ? "Antwort" : "Frage"
+        )
+      ),
+      h("div", { className: "mos__rv-card-q" }, card.front),
+      flipped ? h(
+        "div",
+        { className: "mos__rv-card-a" },
+        h("span", { className: "mos__rv-card-a-k" }, "Antwort"),
+        h("p", { className: "mos__rv-card-a-text" }, card.back)
+      ) : null,
+      card.intervalCurrent ? h(
+        "div",
+        { className: "mos__rv-card-ivl" },
+        h(Icon, { name: "clock", size: 12 }),
+        "Aktuelles Intervall: ",
+        h("b", null, card.intervalCurrent)
+      ) : null,
+      flipped ? h(ReviewRatingRow, { data: props.data, card, onRate: props.onRate }) : h(
+        "button",
+        { type: "button", className: "mos__rv-flip", onClick: props.onFlip, autoFocus: true },
+        h(Icon, { name: "eye", size: 18 }),
+        "Antwort zeigen",
+        h("span", { className: "mos__rv-flip-key", "aria-hidden": "true" }, "Leertaste")
+      )
+    );
+  }
+  function ReviewBodyReady(props) {
+    const st = props.state;
+    const d = st.data || {};
+    const cards = d.cards || [];
+    const card = cards[st.index] || cards[0];
+    const total = cards.length;
+    const pct = total ? Math.round(st.index / total * 100) : 0;
+    return h(
+      "div",
+      { className: "mos__rv-stage" },
+      h(
+        "div",
+        { className: "mos__rv-main" },
+        // progress
+        h(
+          "div",
+          { className: "mos__rv-progress" },
+          h(
+            "span",
+            { className: "mos__rv-progress-idx" },
+            h(Icon, { name: "list", size: 15 }),
+            st.index + 1 + " / " + total
+          ),
+          h(
+            "span",
+            { className: "mos__rv-progress-bar" },
+            h("span", { className: "mos__rv-progress-fill", style: { width: pct + "%" } })
+          ),
+          h("span", { className: "mos__rv-progress-done" }, st.reviewed + " geübt")
+        ),
+        h(ReviewCard, { card, flipped: st.flipped, data: d, onFlip: props.onFlip, onRate: props.onRate }),
+        // honest, always-on: nothing is persisted here
+        h(
+          "div",
+          { className: "mos__rv-honest" },
+          h(Icon, { name: "flask-conical", size: 13 }),
+          h(
+            "span",
+            null,
+            d.honest || REVIEW_HONEST,
+            d.previewNote ? h("span", { className: "mos__rv-honest-src" }, " · " + d.previewNote) : null
+          )
+        )
+      ),
+      h(ReviewRail, { data: d })
+    );
+  }
+  function ReviewBodyState(props) {
+    const st = props.state;
+    const d = st.data || {};
+    const map = {
+      loading: { icon: "loader", tone: "muted", title: "Lädt Drill …", note: "Lese die Anki-Collection (read-only) …", spin: true },
+      empty: {
+        icon: "graduation-cap",
+        tone: "muted",
+        title: d.reason === "no_due" ? "Keine fälligen Karten" : "Noch nicht synchronisiert",
+        note: d.note || "Sobald das erste Gerät synchronisiert, erscheinen hier fällige Karten."
+      },
+      unavailable: {
+        icon: "unplug",
+        tone: "red",
+        title: d.summary || "Nicht lesbar",
+        note: d.note || "Anki-Collection nicht lesbar. Read-only — nichts wird verändert."
+      },
+      error: {
+        icon: "triangle-alert",
+        tone: "red",
+        title: "Drill nicht erreichbar",
+        note: "Die Lern-Session konnte nicht geladen werden. Es wurde nichts verändert."
+      },
+      done: {
+        icon: "party-popper",
+        tone: "verified",
+        title: "Drill beendet",
+        note: "Nichts wurde gespeichert — die echte Bewertung machst du in Anki / AnkiDroid."
+      }
+    };
+    const m = map[st.phase] || map.loading;
+    return h(
+      "div",
+      { className: "mos__rv-panel mos--" + m.tone },
+      h("span", { className: "mos__rv-panel-icon" + (m.spin ? " is-spin" : "") }, h(Icon, { name: m.icon, size: 30 })),
+      h("span", { className: "mos__rv-panel-title" }, st.phase === "done" ? "Drill beendet · " + st.reviewed + " Karten durchgesehen" : m.title),
+      h("span", { className: "mos__rv-panel-note" }, m.note),
+      st.phase === "done" ? h("span", { className: "mos__rv-panel-honest" }, h(Icon, { name: "flask-conical", size: 12 }), REVIEW_HONEST) : null,
+      st.phase === "done" ? h(
+        "div",
+        { className: "mos__rv-panel-actions" },
+        h(
+          "button",
+          { type: "button", className: "mos__rv-btn mos__rv-btn--primary", onClick: props.onRestart },
+          h(Icon, { name: "rotate-ccw", size: 15 }),
+          "Nochmal drillen"
+        ),
+        h("button", { type: "button", className: "mos__rv-btn", onClick: props.onClose }, "Schließen")
+      ) : st.phase === "empty" || st.phase === "unavailable" || st.phase === "error" ? h(
+        "div",
+        { className: "mos__rv-panel-actions" },
+        h("button", { type: "button", className: "mos__rv-btn", onClick: props.onClose }, "Schließen")
+      ) : null
+    );
+  }
+  function ReviewSurface(props) {
+    const st = props.state;
+    useEffect(() => {
+      if (!st) return void 0;
+      function onKey(e) {
+        const k = e.key;
+        if (k === "Escape") {
+          e.preventDefault();
+          props.onClose();
+          return;
+        }
+        if (st.phase !== "ready") return;
+        const tag = e.target && e.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (!st.flipped) {
+          if (k === " " || k === "Spacebar" || k === "Enter") {
+            e.preventDefault();
+            props.onFlip();
+          }
+          return;
+        }
+        if (k >= "1" && k <= "4") {
+          e.preventDefault();
+          props.onRate(["again", "hard", "good", "easy"][parseInt(k, 10) - 1]);
+        }
+      }
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [st, props.onFlip, props.onRate, props.onClose]);
+    if (!st) return null;
+    const d = st.data || {};
+    const previewSrc = d.previewSource || "unavailable";
+    const srcLabel = { "py-fsrs": "py-fsrs · Vorschau", "anki-cards.data": "cards.data · Intervall", "unavailable": "Vorschau n/a" }[previewSrc] || previewSrc;
+    return h(
+      "div",
+      { className: "mos__rv-scrim", onClick: props.onClose },
+      h(
+        "section",
+        {
+          className: "mos__rv",
+          role: "dialog",
+          "aria-modal": "true",
+          "aria-label": "Lernen · Drill (Vorschau, keine Speicherung)",
+          onClick: (e) => e.stopPropagation()
+        },
+        h(
+          "header",
+          { className: "mos__rv-head" },
+          h("span", { className: "mos__rv-head-badge" }, h(Icon, { name: "graduation-cap", size: 18 })),
+          h(
+            "span",
+            { className: "mos__rv-head-titles" },
+            h("span", { className: "mos__rv-head-title" }, "Lernen · Drill"),
+            h("span", { className: "mos__rv-head-sub" }, "Spaced Repetition · Anki (read-only)")
+          ),
+          h(
+            "span",
+            { className: "mos__pip mos__pip--konzept mos__rv-head-pip", title: d.note || srcLabel },
+            h(Icon, { name: previewSrc === "py-fsrs" ? "flask-conical" : "shield-check", size: 11 }),
+            srcLabel
+          ),
+          h(
+            "button",
+            { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Drill schließen", onClick: props.onClose },
+            h(Icon, { name: "x", size: 18 })
+          )
+        ),
+        st.phase === "ready" ? h(ReviewBodyReady, { state: st, onFlip: props.onFlip, onRate: props.onRate }) : h(ReviewBodyState, { state: st, onRestart: props.onRestart, onClose: props.onClose })
+      )
+    );
+  }
+  const COACH_TABS = [
+    { id: "countdown", icon: "calendar-clock", label: "Countdown" },
+    { id: "feynman", icon: "message-square", label: "Feynman" },
+    { id: "plan", icon: "list-todo", label: "Lernplan" }
+  ];
+  const COACH_METHODS_FALLBACK = [
+    { key: "priming", icon: "lightbulb", title: "Priming", line: "Erst aus dem Kopf: Was weißt du schon?" },
+    { key: "active-recall", icon: "brain", title: "Active Recall", line: "Abrufen statt wiederlesen (Testing-Effekt)." },
+    { key: "spaced", icon: "clock", title: "Spaced Repetition", line: "≥3 Abrufe pro Thema vor der Klausur." }
+  ];
+  const COACH_JARVIS_NOTE = "Bewertung kommt von Jarvis (Brain-Kette) — nicht vom Plugin, nichts wird gespeichert.";
+  function studyObjective(ex) {
+    if (!ex) return "";
+    const themen = ex.themen && ex.themen.length ? " Themen: " + ex.themen.join(", ") + "." : "";
+    const inN = ex.daysLeft != null && ex.daysLeft >= 0 ? " (in " + ex.daysLeft + " Tagen)" : "";
+    return "Erstelle einen Spaced-Repetition-Lernplan bis zur Klausur " + ex.fach + " am " + ex.datum + inN + "." + themen + " Plane rückwärts vom Klausurdatum, mindestens 3 Abrufe pro Thema, mit Active-Recall- und Feynman-Runden und täglichen Kartenzielen aus den Anki-Fälligkeiten. Nur Studium/privat.";
+  }
+  function CoachMethods(props) {
+    const methods = props.methods && props.methods.length ? props.methods : COACH_METHODS_FALLBACK;
+    return h(
+      "div",
+      { className: "mos__co-methods", "aria-label": "Lernmethoden" },
+      h("span", { className: "mos__co-methods-k" }, h(Icon, { name: "sparkles", size: 12 }), "Methodik"),
+      methods.map((m) => h(
+        "span",
+        { key: m.key, className: "mos__co-method", title: m.line },
+        h(Icon, { name: m.icon, size: 12 }),
+        m.title
+      ))
+    );
+  }
+  function CoachJarvisPip(props) {
+    const j = props.jarvis || {};
+    const ready = !!j.ready;
+    return h(
+      "span",
+      { className: "mos__co-jpip mos--" + (ready ? "verified" : "amber"), title: j.note || "" },
+      h(Icon, { name: ready ? "sparkles" : "triangle-alert", size: 11 }),
+      ready ? "Jarvis bereit" : "Jarvis-Bewertung ausstehend"
+    );
+  }
+  function CoachCountdown(props) {
+    const st = props.state;
+    const plan = st.plan || {};
+    const exams = (plan.exams || []).filter((e) => e && e.valid !== false);
+    if (st.planState === "loading") {
+      return h(
+        "div",
+        { className: "mos__co-panel mos--muted" },
+        h("span", { className: "mos__co-panel-icon is-spin" }, h(Icon, { name: "loader", size: 28 })),
+        h("span", { className: "mos__co-panel-title" }, "Lade Countdown …"),
+        h("span", { className: "mos__co-panel-note" }, "exams.json × Anki (read-only)")
+      );
+    }
+    if (!exams.length) {
+      return h(
+        "div",
+        { className: "mos__co-panel mos--muted" },
+        h("span", { className: "mos__co-panel-icon" }, h(Icon, { name: "calendar-clock", size: 28 })),
+        h("span", { className: "mos__co-panel-title" }, plan.summary || "Keine Klausurtermine"),
+        h("span", { className: "mos__co-panel-note" }, plan.note || "Lege Klausurtermine in exams.json an (Fach · Datum · Themen · optional Anki-Deck).")
+      );
+    }
+    return h(
+      "div",
+      { className: "mos__co-scroll" },
+      h(
+        "div",
+        { className: "mos__co-exams" },
+        exams.map((e) => {
+          const tone = { today: "red", critical: "red", tight: "amber", ok: "violet", past: "muted" }[e.tier] || "violet";
+          return h(
+            "div",
+            { key: e.fach + e.datum, className: "mos__co-exam mos--" + tone },
+            h(
+              "div",
+              { className: "mos__co-exam-top" },
+              h("span", { className: "mos__co-exam-fach" }, e.fach),
+              h("span", { className: "mos__co-exam-tier mos--" + tone }, e.tierLabel)
+            ),
+            h(
+              "div",
+              { className: "mos__co-exam-days" },
+              h("span", { className: "mos__co-exam-n" }, e.daysLeft === 0 ? "heute" : e.daysLeft < 0 ? "vorbei" : e.daysLeft),
+              e.daysLeft > 0 ? h("span", { className: "mos__co-exam-unit" }, "Tage") : null
+            ),
+            h(
+              "div",
+              { className: "mos__co-exam-meta" },
+              h("span", { className: "mos__co-exam-date" }, h(Icon, { name: "calendar-days", size: 12 }), e.datum),
+              h("span", { className: "mos__co-exam-goal" }, h(Icon, { name: "target", size: 12 }), e.goalText)
+            ),
+            e.feynmanHint ? h("div", { className: "mos__co-exam-hint" }, h(Icon, { name: "message-square", size: 12 }), e.feynmanHint) : e.themenCount ? h(
+              "div",
+              { className: "mos__co-exam-hint mos--soft" },
+              h(Icon, { name: "book-open", size: 12 }),
+              e.themenCount + " Themen"
+            ) : null
+          );
+        })
+      ),
+      h(CoachMethods, { methods: plan.methods }),
+      h(
+        "div",
+        { className: "mos__co-honest" },
+        h(Icon, { name: "eye", size: 13 }),
+        h("span", null, plan.note || "Countdown aus exams.json (read-only) × Anki-Fälligkeiten. Tagesziel ehrlich „folgt“, wenn die Collection leer ist. Anki bleibt die SR-Wahrheit — hier wird nichts geschrieben.")
+      )
+    );
+  }
+  function CoachFeynman(props) {
+    const st = props.state;
+    const fey = st.fey || {};
+    const setup = fey.setup || {};
+    const result = fey.result || null;
+    const jarvis = result && result.jarvis || setup.jarvis || {};
+    const concept = setup.concept || "";
+    const busy = fey.phase === "evaluating";
+    return h(
+      "div",
+      { className: "mos__co-scroll" },
+      // method + priming line (mirrors lern-priming / lern-feynman)
+      h(
+        "div",
+        { className: "mos__co-fey-method" },
+        h(Icon, { name: "message-square", size: 14 }),
+        h("span", null, setup.method && setup.method.hint || "Erklär frei, ohne Fachjargon; wo du stockst, sitzt die Lücke. Danach bewertet Jarvis.")
+      ),
+      setup.priming ? h("div", { className: "mos__co-fey-prime" }, h(Icon, { name: "lightbulb", size: 12 }), setup.priming) : null,
+      // concept card
+      h(
+        "div",
+        { className: "mos__co-fey-concept" },
+        h(
+          "div",
+          { className: "mos__co-fey-concept-head" },
+          h("span", { className: "mos__co-fey-concept-k" }, "Erklär mir"),
+          setup.conceptSource && setup.conceptSource !== "none" ? h(
+            "span",
+            { className: "mos__co-fey-src" },
+            h(Icon, { name: "book-open", size: 10 }),
+            { "anki-karte": "aus Anki-Karte", "exams.json": "aus exams.json", "eigenes": "eigenes" }[setup.conceptSource] || setup.conceptSource
+          ) : null,
+          h("button", {
+            type: "button",
+            className: "mos__co-fey-next",
+            onClick: props.onNextConcept,
+            title: "Anderes Konzept"
+          }, h(Icon, { name: "rotate-ccw", size: 12 }), "anderes")
+        ),
+        h("div", { className: "mos__co-fey-concept-v" }, concept || "(kein Konzept — gib selbst eines ein)")
+      ),
+      // explanation textarea
+      h(
+        "label",
+        { className: "mos__co-fey-field" },
+        h("span", { className: "mos__co-fey-field-k" }, "Deine Erklärung (frei, in eigenen Worten)"),
+        h("textarea", {
+          className: "mos__co-fey-textarea",
+          rows: 5,
+          placeholder: "Erklär das Konzept so, als würdest du es einer interessierten Laiin erklären …",
+          value: fey.explanation || "",
+          disabled: busy,
+          onChange: (e) => props.onExplain(e.target.value)
+        })
+      ),
+      // Jarvis dependency banner — honest about what grades this.
+      h(
+        "div",
+        { className: "mos__co-jbanner mos--" + (jarvis.ready ? "verified" : "amber") },
+        h(Icon, { name: jarvis.ready ? "sparkles" : "triangle-alert", size: 13 }),
+        h("span", null, jarvis.ready ? COACH_JARVIS_NOTE : jarvis.note || "Jarvis-Bewertung ausstehend — die Erklärung wird nicht bewertet, nichts gespeichert.")
+      ),
+      // result (real Jarvis feedback) or evaluating/pending states
+      busy ? h(
+        "div",
+        { className: "mos__co-panel mos--muted" },
+        h("span", { className: "mos__co-panel-icon is-spin" }, h(Icon, { name: "loader", size: 24 })),
+        h("span", { className: "mos__co-panel-title" }, "Jarvis bewertet …"),
+        h("span", { className: "mos__co-panel-note" }, "Brain-Kette (abo-first) · READ/Coaching")
+      ) : result ? result.ok ? h(
+        "div",
+        { className: "mos__co-fey-result" },
+        h(
+          "div",
+          { className: "mos__co-fey-result-head" },
+          h(Icon, { name: "sparkles", size: 14 }),
+          "Jarvis-Feedback",
+          result.model ? h("span", { className: "mos__co-fey-model" }, result.model + (result.routeClass ? " · " + result.routeClass : "")) : null
+        ),
+        h("div", { className: "mos__co-fey-feedback" }, result.feedback),
+        h(
+          "div",
+          { className: "mos__co-honest" },
+          h(Icon, { name: "eye", size: 12 }),
+          h("span", null, result.note || COACH_JARVIS_NOTE)
+        )
+      ) : h(
+        "div",
+        { className: "mos__co-panel mos--amber" },
+        h("span", { className: "mos__co-panel-icon" }, h(Icon, { name: "triangle-alert", size: 24 })),
+        h("span", { className: "mos__co-panel-title" }, "Bewertung ausstehend"),
+        h("span", { className: "mos__co-panel-note" }, result.note || "Jarvis-Bewertung nicht möglich — nichts wurde erfunden, nichts gespeichert.")
+      ) : null,
+      // send button
+      h(
+        "div",
+        { className: "mos__co-fey-actions" },
+        h("button", {
+          type: "button",
+          className: "mos__co-btn mos__co-btn--primary",
+          disabled: busy || !(fey.explanation || "").trim(),
+          onClick: props.onEvaluate,
+          title: jarvis.ready ? "Erklärung an Jarvis zur Bewertung senden." : "Sendet an Jarvis — ist die Anbindung aus, bleibt die Bewertung ehrlich ausstehend."
+        }, h(Icon, { name: "send-horizontal", size: 15 }), "An Jarvis senden")
+      )
+    );
+  }
+  function CoachPlan(props) {
+    const st = props.state;
+    const plan = st.plan || {};
+    const exams = (plan.exams || []).filter((e) => e && e.valid !== false && (e.daysLeft == null || e.daysLeft >= 0));
+    return h(
+      "div",
+      { className: "mos__co-scroll" },
+      h(
+        "div",
+        { className: "mos__co-plan-intro" },
+        h(Icon, { name: "shield-check", size: 13 }),
+        h(
+          "span",
+          null,
+          "Ein Lernplan wird als Mission VORGESCHLAGEN: Dry-Run-Vorschau → „An Gate senden“ → Freigabe. ",
+          h("b", null, "Studium/privat"),
+          " — kein Geld, keine Firma. Das Plugin führt nichts aus; dein Gate entscheidet."
+        )
+      ),
+      exams.length ? h(
+        "div",
+        { className: "mos__co-plan-list" },
+        exams.map((e) => h(
+          "button",
+          {
+            key: e.fach + e.datum,
+            type: "button",
+            className: "mos__co-plan-item",
+            onClick: () => props.onPropose(studyObjective(e), "study"),
+            title: "Baut eine Dry-Run-Vorschau — sendet nichts, bis du klickst."
+          },
+          h(
+            "span",
+            { className: "mos__co-plan-item-l" },
+            h(Icon, { name: "list-todo", size: 15 }),
+            h("span", { className: "mos__co-plan-item-fach" }, "Lernplan bis " + e.fach),
+            h("span", { className: "mos__co-plan-item-sub" }, (e.daysHuman || "in " + e.daysLeft + " Tagen") + " · " + e.themenCount + " Themen")
+          ),
+          h("span", { className: "mos__co-plan-item-cta" }, h(Icon, { name: "flask-conical", size: 12 }), "Vorschau")
+        ))
+      ) : h(
+        "div",
+        { className: "mos__co-panel mos--muted" },
+        h("span", { className: "mos__co-panel-icon" }, h(Icon, { name: "list-todo", size: 26 })),
+        h("span", { className: "mos__co-panel-title" }, "Keine anstehende Klausur"),
+        h("span", { className: "mos__co-panel-note" }, "Lege Termine in exams.json an — dann kannst du je Fach einen Lernplan vorschlagen.")
+      ),
+      h(
+        "div",
+        { className: "mos__co-honest" },
+        h(Icon, { name: "lock", size: 12 }),
+        h("span", null, "Propose-only über den gegateten /actions-Weg (workspace=studium). Nie /approvals/decide, nie Anki-Schreibzugriff.")
+      )
+    );
+  }
+  function CoachSurface(props) {
+    const st = props.state;
+    useEffect(() => {
+      if (!st) return void 0;
+      function onKey(e) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          props.onClose();
+        }
+      }
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [st, props.onClose]);
+    if (!st) return null;
+    const tab = st.tab || "countdown";
+    const jarvis = st.plan && st.plan.jarvis || st.fey && st.fey.setup && st.fey.setup.jarvis || {};
+    let body;
+    if (tab === "feynman") body = h(CoachFeynman, { state: st, onExplain: props.onExplain, onEvaluate: props.onEvaluate, onNextConcept: props.onNextConcept });
+    else if (tab === "plan") body = h(CoachPlan, { state: st, onPropose: props.onPropose });
+    else body = h(CoachCountdown, { state: st });
+    return h(
+      "div",
+      { className: "mos__co-scrim", onClick: props.onClose },
+      h(
+        "section",
+        {
+          className: "mos__co",
+          role: "dialog",
+          "aria-modal": "true",
+          "aria-label": "Lern-Coach",
+          onClick: (e) => e.stopPropagation()
+        },
+        h(
+          "header",
+          { className: "mos__co-head" },
+          h("span", { className: "mos__co-head-badge" }, h(Icon, { name: "graduation-cap", size: 18 })),
+          h(
+            "span",
+            { className: "mos__co-head-titles" },
+            h("span", { className: "mos__co-head-title" }, "Lern-Coach"),
+            h("span", { className: "mos__co-head-sub" }, "Klausur-Countdown · Feynman · Lernplan")
+          ),
+          h(CoachJarvisPip, { jarvis }),
+          h(
+            "button",
+            { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Coach schließen", onClick: props.onClose },
+            h(Icon, { name: "x", size: 18 })
+          )
+        ),
+        h(
+          "div",
+          { className: "mos__co-tabs", role: "tablist" },
+          COACH_TABS.map((t) => h("button", {
+            key: t.id,
+            type: "button",
+            role: "tab",
+            "aria-selected": tab === t.id ? "true" : "false",
+            className: "mos__co-tab" + (tab === t.id ? " is-active" : ""),
+            onClick: () => props.onTab(t.id)
+          }, h(Icon, { name: t.icon, size: 15 }), t.label))
+        ),
+        h("div", { className: "mos__co-body" }, body)
       )
     );
   }
@@ -2065,6 +2765,8 @@ var MikaelOSPlugin = function() {
     const [live, setLive] = useState(null);
     const [loadState, setLoadState] = useState("loading");
     const [propose, setPropose] = useState(null);
+    const [review, setReview] = useState(null);
+    const [coach, setCoach] = useState(null);
     useEffect(() => {
       let alive = true;
       const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
@@ -2139,6 +2841,12 @@ var MikaelOSPlugin = function() {
     sheetOpenRef.current = sheetOpen;
     const isMobileRef = useRef(isMobile);
     isMobileRef.current = isMobile;
+    const reviewOpenRef = useRef(false);
+    reviewOpenRef.current = !!review;
+    const coachOpenRef = useRef(false);
+    coachOpenRef.current = !!coach;
+    const proposeRef = useRef(null);
+    proposeRef.current = propose;
     const clearTimers = useCallback(() => {
       timersRef.current.forEach((t) => window.clearTimeout(t));
       timersRef.current = [];
@@ -2179,18 +2887,21 @@ var MikaelOSPlugin = function() {
       setCommand(label);
       runStateSequence();
     }, [runStateSequence]);
-    const proposeOpen = useCallback((objective) => {
+    const proposeOpen = useCallback((objective, profile) => {
       const obj = (objective || "").trim();
+      const prof = profile || "engineering";
+      const api = (PROPOSE_PROFILES[prof] || PROPOSE_PROFILES.engineering).api;
       if (!obj) {
-        setPropose({ phase: "compose", objective: "" });
+        setPropose({ phase: "compose", objective: "", profile: prof });
         return;
       }
-      setPropose({ phase: "loading", objective: obj });
-      sdkPost(PROPOSE_API, { objective: obj, dryRun: true }).then((r) => {
+      setPropose({ phase: "loading", objective: obj, profile: prof });
+      sdkPost(api, { objective: obj, dryRun: true }).then((r) => {
         if (!r || r.ok === false) {
           setPropose({
             phase: "compose",
             objective: obj,
+            profile: prof,
             error: r && r.note || "Vorschau nicht möglich."
           });
           return;
@@ -2199,27 +2910,31 @@ var MikaelOSPlugin = function() {
           phase: "preview",
           objective: r.plan.objective,
           preview: r,
+          profile: prof,
           gate: r.predictedGate,
           controlPlane: r.controlPlane,
           note: null
         });
-      }).catch(() => setPropose({ phase: "compose", objective: obj, error: "Vorschau nicht erreichbar." }));
+      }).catch(() => setPropose({ phase: "compose", objective: obj, profile: prof, error: "Vorschau nicht erreichbar." }));
     }, []);
     const proposeObjective = useCallback((v) => {
       setPropose((prev) => prev ? { ...prev, objective: v, error: null } : prev);
     }, []);
     const proposePreview = useCallback((objective, back) => {
+      const prof = proposeRef.current && proposeRef.current.profile || "engineering";
       if (back) {
-        setPropose((prev) => ({ phase: "compose", objective: prev && prev.objective || "" }));
+        setPropose({ phase: "compose", objective: proposeRef.current && proposeRef.current.objective || "", profile: prof });
         return;
       }
-      proposeOpen(objective);
+      proposeOpen(objective, prof);
     }, [proposeOpen]);
     const proposeSend = useCallback((objective) => {
       const obj = (objective || "").trim();
       if (!obj) return;
+      const prof = proposeRef.current && proposeRef.current.profile || "engineering";
+      const api = (PROPOSE_PROFILES[prof] || PROPOSE_PROFILES.engineering).api;
       setPropose((prev) => ({ ...prev || {}, phase: "submitting", objective: obj }));
-      sdkPost(PROPOSE_API, { objective: obj, dryRun: false }).then((r) => {
+      sdkPost(api, { objective: obj, dryRun: false }).then((r) => {
         if (!r || r.ok === false && r.status !== "auth_pending") {
           setPropose((prev) => ({
             ...prev || {},
@@ -2264,6 +2979,80 @@ var MikaelOSPlugin = function() {
     const proposeClose = useCallback(() => {
       setPropose(null);
     }, []);
+    const reviewOpen = useCallback(() => {
+      setReview({ phase: "loading", data: null, index: 0, flipped: false, reviewed: 0 });
+      sdkGet(REVIEW_API + "?limit=20").then((d) => {
+        const cards = d && Array.isArray(d.cards) ? d.cards : [];
+        let phase;
+        if (!d) phase = "error";
+        else if (cards.length) phase = "ready";
+        else if (d.state === "unavailable" || d.state === "error") phase = "unavailable";
+        else phase = "empty";
+        setReview({ phase, data: d || null, index: 0, flipped: false, reviewed: 0 });
+      }).catch(() => setReview({ phase: "error", data: null, index: 0, flipped: false, reviewed: 0 }));
+    }, []);
+    const reviewFlip = useCallback(() => {
+      setReview((p) => p && p.phase === "ready" && !p.flipped ? { ...p, flipped: true } : p);
+    }, []);
+    const reviewRate = useCallback(() => {
+      setReview((p) => {
+        if (!p || p.phase !== "ready" || !p.flipped) return p;
+        const cards = p.data && p.data.cards || [];
+        const nextIdx = p.index + 1;
+        const reviewed = p.reviewed + 1;
+        if (nextIdx >= cards.length) return { ...p, phase: "done", reviewed };
+        return { ...p, index: nextIdx, flipped: false, reviewed };
+      });
+    }, []);
+    const reviewRestart = useCallback(() => {
+      setReview((p) => {
+        if (!p) return p;
+        const hasCards = p.data && Array.isArray(p.data.cards) && p.data.cards.length;
+        return { ...p, phase: hasCards ? "ready" : p.phase, index: 0, flipped: false, reviewed: 0 };
+      });
+    }, []);
+    const reviewClose = useCallback(() => {
+      setReview(null);
+    }, []);
+    const coachLoadFeynman = useCallback((concept) => {
+      const q = concept ? "?concept=" + encodeURIComponent(concept) : "";
+      setCoach((p) => p ? { ...p, fey: { ...p.fey || {}, phase: "loading" } } : p);
+      sdkGet(FEYNMAN_API + q).then((d) => setCoach((p) => p ? { ...p, fey: { phase: "ready", setup: d || {}, explanation: "", result: null } } : p)).catch(() => setCoach((p) => p ? { ...p, fey: { phase: "ready", setup: {}, explanation: "", result: null } } : p));
+    }, []);
+    const coachOpen = useCallback(() => {
+      setCoach({
+        tab: "countdown",
+        planState: "loading",
+        plan: null,
+        fey: { phase: "loading", setup: {}, explanation: "", result: null }
+      });
+      sdkGet(STUDY_PLAN_API).then((d) => setCoach((p) => p ? { ...p, planState: d ? "ready" : "error", plan: d || null } : p)).catch(() => setCoach((p) => p ? { ...p, planState: "error" } : p));
+      coachLoadFeynman("");
+    }, [coachLoadFeynman]);
+    const coachTab = useCallback((t) => {
+      setCoach((p) => p ? { ...p, tab: t } : p);
+    }, []);
+    const coachExplain = useCallback((v) => {
+      setCoach((p) => p ? { ...p, fey: { ...p.fey || {}, explanation: v } } : p);
+    }, []);
+    const coachNextConcept = useCallback(() => {
+      coachLoadFeynman("");
+    }, [coachLoadFeynman]);
+    const coachEvaluate = useCallback(() => {
+      const cur = coach && coach.fey;
+      const expl = (cur && cur.explanation || "").trim();
+      if (!expl) return;
+      const concept = cur && cur.setup && cur.setup.concept || "";
+      setCoach((p) => p ? { ...p, fey: { ...p.fey || {}, phase: "evaluating" } } : p);
+      sdkPost(FEYNMAN_EVAL_API, { concept, explanation: expl }).then((r) => setCoach((p) => p ? { ...p, fey: { ...p.fey || {}, phase: "done", result: r || { ok: false, note: "Keine Antwort." } } } : p)).catch(() => setCoach((p) => p ? { ...p, fey: { ...p.fey || {}, phase: "done", result: { ok: false, note: "Jarvis nicht erreichbar — nichts bewertet, nichts gespeichert.", jarvisDependent: true } } } : p));
+    }, [coach]);
+    const coachClose = useCallback(() => {
+      setCoach(null);
+    }, []);
+    const coachPropose = useCallback((objective, profile) => {
+      setCoach(null);
+      proposeOpen(objective, profile);
+    }, [proposeOpen]);
     const onNodePointerDown = useCallback((e, id) => {
       if (e.button != null && e.button !== 0) return;
       const stage = stageRef.current;
@@ -2324,6 +3113,7 @@ var MikaelOSPlugin = function() {
     useEffect(() => {
       function onKey(e) {
         const k = e.key;
+        if (reviewOpenRef.current || coachOpenRef.current) return;
         if ((e.metaKey || e.ctrlKey) && (k === "k" || k === "K")) {
           e.preventDefault();
           if (inputRef.current) inputRef.current.focus();
@@ -2410,7 +3200,9 @@ var MikaelOSPlugin = function() {
           sheetDetent,
           onSheetDetent: setSheetDetent,
           onSheetClose: closeSheet,
-          onPropose: proposeOpen
+          onPropose: proposeOpen,
+          onReview: reviewOpen,
+          onCoach: coachOpen
         }),
         h(ProposeFlow, {
           state: propose,
@@ -2419,6 +3211,22 @@ var MikaelOSPlugin = function() {
           onSend: proposeSend,
           onPoll: proposePoll,
           onClose: proposeClose
+        }),
+        h(ReviewSurface, {
+          state: review,
+          onFlip: reviewFlip,
+          onRate: reviewRate,
+          onRestart: reviewRestart,
+          onClose: reviewClose
+        }),
+        h(CoachSurface, {
+          state: coach,
+          onTab: coachTab,
+          onExplain: coachExplain,
+          onEvaluate: coachEvaluate,
+          onNextConcept: coachNextConcept,
+          onPropose: coachPropose,
+          onClose: coachClose
         })
       );
     }
@@ -2501,7 +3309,9 @@ var MikaelOSPlugin = function() {
                 focusId,
                 liveModule: enrichedById[focusId],
                 onClose: closeFocus,
-                onPropose: () => proposeOpen(command)
+                onPropose: () => proposeOpen(command),
+                onReview: reviewOpen,
+                onCoach: coachOpen
               })
             ),
             // add-module affordance (bottom-left of stage)
@@ -2584,6 +3394,22 @@ var MikaelOSPlugin = function() {
         onSend: proposeSend,
         onPoll: proposePoll,
         onClose: proposeClose
+      }),
+      h(ReviewSurface, {
+        state: review,
+        onFlip: reviewFlip,
+        onRate: reviewRate,
+        onRestart: reviewRestart,
+        onClose: reviewClose
+      }),
+      h(CoachSurface, {
+        state: coach,
+        onTab: coachTab,
+        onExplain: coachExplain,
+        onEvaluate: coachEvaluate,
+        onNextConcept: coachNextConcept,
+        onPropose: coachPropose,
+        onClose: coachClose
       })
     );
   }
