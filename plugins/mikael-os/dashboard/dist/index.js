@@ -1,6 +1,25 @@
 var MikaelOSPlugin = function() {
   "use strict";
   const ICONS = {
+    "radar": '<path d="M19.07 4.93A10 10 0 0 0 6.99 3.34" /> <path d="M4 6h.01" /> <path d="M2.29 9.62A10 10 0 1 0 21.31 8.35" /> <path d="M16.24 7.76A6 6 0 1 0 8.23 16.67" /> <path d="M12 18h.01" /> <path d="M17.99 11.66A6 6 0 0 1 15.77 16.67" /> <circle cx="12" cy="12" r="2" /> <path d="m13.41 10.59 5.66-5.66" />',
+    "route": '<circle cx="6" cy="19" r="3" /> <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" /> <circle cx="18" cy="5" r="3" />',
+    "wrench": '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />',
+    "clipboard-list": '<rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" />',
+    "folder-check": '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /> <path d="m9 13 2 2 4-4" />',
+    "briefcase": '<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /> <rect width="20" height="14" x="2" y="6" rx="2" />',
+    "file-text": '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" />',
+    "database": '<ellipse cx="12" cy="5" rx="9" ry="3" /> <path d="M3 5V19A9 3 0 0 0 21 19V5" /> <path d="M3 12A9 3 0 0 0 21 12" />',
+    "database-backup": '<ellipse cx="12" cy="5" rx="9" ry="3" /> <path d="M3 12a9 3 0 0 0 5 2.69" /> <path d="M21 9.3V5" /> <path d="M3 5v14a9 3 0 0 0 6.47 2.88" /> <path d="M12 12v4h4" /> <path d="M13 20a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L12 16" />',
+    "file-plus": '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /> <path d="M9 15h6" /> <path d="M12 18v-6" />',
+    "calendar-check": '<path d="M8 2v4" /> <path d="M16 2v4" /> <rect width="18" height="18" x="3" y="4" rx="2" /> <path d="M3 10h18" /> <path d="m9 16 2 2 4-4" />',
+    "arrow-up-right": '<path d="M7 7h10v10" /> <path d="M7 17 17 7" />',
+    "users": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <circle cx="9" cy="7" r="4" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <path d="M16 3.13a4 4 0 0 1 0 7.75" />',
+    "user-round": '<circle cx="12" cy="8" r="5" /> <path d="M20 21a8 8 0 0 0-16 0" />',
+    "cpu": '<rect width="16" height="16" x="4" y="4" rx="2" /> <rect width="6" height="6" x="9" y="9" rx="1" /> <path d="M15 2v2" /> <path d="M15 20v2" /> <path d="M2 15h2" /> <path d="M2 9h2" /> <path d="M20 15h2" /> <path d="M20 9h2" /> <path d="M9 2v2" /> <path d="M9 20v2" />',
+    "power": '<path d="M12 2v10" /> <path d="M18.4 6.6a9 9 0 1 1-12.77.04" />',
+    "circle-help": '<circle cx="12" cy="12" r="10" /> <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /> <path d="M12 17h.01" />',
+    "list-checks": '<path d="m3 17 2 2 4-4" /> <path d="m3 7 2 2 4-4" /> <path d="M13 6h8" /> <path d="M13 12h8" /> <path d="M13 18h8" />',
+    "folder-open": '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />',
     "sparkles": '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" /> <path d="M20 3v4" /> <path d="M22 5h-4" /> <path d="M4 17v2" /> <path d="M5 18H3" />',
     "orbit": '<circle cx="12" cy="12" r="3" /> <circle cx="19" cy="5" r="2" /> <circle cx="5" cy="19" r="2" /> <path d="M10.4 21.9a10 10 0 0 0 9.941-15.416" /> <path d="M13.5 2.1a10 10 0 0 0-9.841 15.416" />',
     "sun": '<circle cx="12" cy="12" r="4" /> <path d="M12 2v2" /> <path d="M12 20v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="m17.66 17.66 1.41 1.41" /> <path d="M2 12h2" /> <path d="M20 12h2" /> <path d="m6.34 17.66-1.41 1.41" /> <path d="m19.07 4.93-1.41 1.41" />',
@@ -383,6 +402,8 @@ var MikaelOSPlugin = function() {
   const KPI_API = PLUGIN_API + "/cockpit/kpi";
   const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
   const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
+  const FIRMA_OVERVIEW_API = PLUGIN_API + "/firma/overview";
+  const FIRMA_APPROVAL_DETAIL_API = PLUGIN_API + "/firma/approvals/detail";
   MODULES.reduce((acc, m) => {
     acc[m.id] = m.pos;
     return acc;
@@ -1365,7 +1386,8 @@ var MikaelOSPlugin = function() {
         cockpitLoad: props.cockpitLoad,
         onGoJarvis: props.onGoJarvis,
         onGoTimeline: props.onGoTimeline,
-        onGoApprovals: props.onGoApprovals
+        onGoApprovals: props.onGoApprovals,
+        onGoFirma: props.onGoFirma
       }),
       h(
         "div",
@@ -1759,8 +1781,63 @@ var MikaelOSPlugin = function() {
       )
     );
   }
+  function MobileScreen(props) {
+    const isFirma = props.kind === "firma";
+    return h(
+      "div",
+      {
+        className: "mos__mscreen",
+        role: "region",
+        "aria-label": isFirma ? "Firma / Rise-L" : "Entscheidungen"
+      },
+      h(
+        "header",
+        { className: "mos__mscreen-top" },
+        h(
+          "button",
+          { type: "button", className: "mos__mscreen-back", onClick: props.onBack, "aria-label": "Zurück zum Cockpit" },
+          h(Icon, { name: "chevron-left", size: 22 })
+        ),
+        h(
+          "span",
+          { className: "mos__mscreen-titles" },
+          h("span", { className: "mos__mscreen-title" }, isFirma ? "Firma / Rise-L" : "Entscheidungen"),
+          h(
+            "span",
+            { className: "mos__mscreen-sub" },
+            h(Icon, { name: "lock", size: 11 }),
+            isFirma ? "read-only Projektion · Deep-Links ins FSM" : "Entscheidung nur durch dich (Operator)"
+          )
+        )
+      ),
+      h(
+        "main",
+        { className: "mos__mscreen-body" },
+        isFirma ? h(FirmaScene, { firma: props.firma, load: props.firmaLoad }) : h(ApprovalsScene, {
+          approvals: props.approvals,
+          load: props.cockpitLoad,
+          details: props.details,
+          detailLoading: props.detailLoading,
+          onLoadDetail: props.onLoadDetail
+        })
+      )
+    );
+  }
   function MobileShell(props) {
     const tab = props.mobileTab;
+    if (props.mobileScreen) {
+      return h(MobileScreen, {
+        kind: props.mobileScreen,
+        onBack: props.onScreenBack,
+        firma: props.firma,
+        firmaLoad: props.firmaLoad,
+        approvals: props.cockpit && props.cockpit.approvals,
+        cockpitLoad: props.cockpitLoad,
+        details: props.approvalDetails,
+        detailLoading: props.approvalDetailLoading,
+        onLoadDetail: props.onLoadDetail
+      });
+    }
     const showDock = tab !== "jarvis" && tab !== "timeline";
     let content;
     if (tab === "timeline") {
@@ -1800,7 +1877,8 @@ var MikaelOSPlugin = function() {
         cockpitLoad: props.cockpitLoad,
         onChip: props.onChip,
         onGoTimeline: props.onGoTimeline,
-        onGoApprovals: props.onGoApprovals
+        onGoApprovals: props.onGoApprovals,
+        onGoFirma: props.onGoFirma
       });
     }
     return h(
@@ -1872,7 +1950,17 @@ var MikaelOSPlugin = function() {
       h(
         "div",
         { className: "mos__topright" },
-        h(SceneSwitcher, { scene: props.scene, onScene: props.onScene }),
+        props.onBack ? h(
+          "button",
+          {
+            type: "button",
+            className: "mos__topback",
+            onClick: props.onBack,
+            "aria-label": "Zurück zum Cockpit"
+          },
+          h(Icon, { name: "chevron-left", size: 16 }),
+          "Cockpit"
+        ) : h(SceneSwitcher, { scene: props.scene, onScene: props.onScene }),
         function() {
           const ls = props.loadState;
           const liveN = props.liveCount || 0;
@@ -1902,7 +1990,10 @@ var MikaelOSPlugin = function() {
             ls === "offline" ? "Quellen offline · Konzept" : "Konzeptdaten"
           );
         }(),
-        h(
+        // Weather is DROPPED on the M2 drill-down scenes: there is no weather data
+        // source in the stack, so a "22° Klar" reading would be a fabricated value —
+        // the honesty doctrine forbids it. The clock (real, static) stays.
+        props.onBack ? null : h(
           "span",
           { className: "mos__topchip" },
           h(Icon, { name: "cloud-moon", size: 16 }),
@@ -3088,6 +3179,17 @@ var MikaelOSPlugin = function() {
         { className: "mos__card-head" },
         h(Icon, { name: "server", size: 16 }),
         h("span", { className: "mos__card-title" }, "Firma / Rise-L"),
+        props.onOpen ? h(
+          "button",
+          {
+            type: "button",
+            className: "mos__card-open mos__card-open--icon",
+            onClick: props.onOpen,
+            title: "Vollansicht — Firma/Rise-L (read-only Projektion, Deep-Links ins FSM)",
+            "aria-label": "Firma-Vollansicht öffnen"
+          },
+          h(Icon, { name: "arrow-up-right", size: 15 })
+        ) : null,
         h(ZonePip, { state: demo ? "konzept" : rst, observedAt: risel && risel._observedAt, source: risel && risel._source, note: risel && risel._note })
       ),
       h(
@@ -3139,7 +3241,7 @@ var MikaelOSPlugin = function() {
           "Details"
         )
       ),
-      open ? h(
+      open ? props.scene ? h(ApprovalDetailRich, { card: c, detail: props.detail, loading: props.detailLoading }) : h(
         "dl",
         { className: "mos__appc-detail" },
         h("div", null, h("dt", null, "Gate"), h("dd", null, (c.gateClass || "—") + (c.gateReason ? " · " + c.gateReason : ""))),
@@ -3155,18 +3257,267 @@ var MikaelOSPlugin = function() {
       ) : null
     );
   }
+  const APPC_FIELD_LABELS = {
+    command: "Befehl",
+    device: "Gerät",
+    target: "Ziel",
+    execution_path_policy: "Ausführungspfad",
+    agent: "Agent",
+    domain: "Domäne",
+    tool: "Werkzeug",
+    sensitivity: "Sensitivität",
+    rechnungsbetrag: "Rechnungsbetrag",
+    empfaenger: "Empfänger",
+    zahlungsziel: "Zahlungsziel",
+    buchungskonto: "Buchungskonto"
+  };
+  function _appcFieldLabel(k) {
+    return APPC_FIELD_LABELS[k] || String(k).replace(/_/g, " ");
+  }
+  function ApprovalDetailRich(props) {
+    const d = props.detail;
+    if (props.loading || !d) {
+      return h(
+        "div",
+        { className: "mos__apd" },
+        h("div", { className: "mos__skrow" }),
+        h("div", { className: "mos__skrow" })
+      );
+    }
+    if (d.ok === false || d.found === false) {
+      return h(
+        "div",
+        { className: "mos__apd" },
+        h(ZoneEmpty, {
+          state: "unavailable",
+          icon: "inbox",
+          title: "Detail nicht verfügbar",
+          note: d.note || "Approval-Card nicht lesbar."
+        }),
+        h(
+          "div",
+          { className: "mos__apd-lock" },
+          h(Icon, { name: "lock", size: 13 }),
+          h("span", null, "Entscheidung nur durch dich (Operator)")
+        )
+      );
+    }
+    const c = props.card;
+    const fields = d.structuredFields && typeof d.structuredFields === "object" ? Object.keys(d.structuredFields).filter((k) => d.structuredFields[k] != null && d.structuredFields[k] !== "") : [];
+    const affected = Array.isArray(d.affectedObjects) ? d.affectedObjects : [];
+    const risks = Array.isArray(d.risks) ? d.risks : [];
+    const evidence = Array.isArray(d.evidence) ? d.evidence : [];
+    const gateClass = d.gateClass || c && c.gateClass || "—";
+    const gateReason = d.gateReason || c && c.gateReason;
+    const intent = d.intentSha256 || c && c.intentSha256;
+    const approveUrl = d.approveUrl || d.decideUrl && d.decideUrl.approve || null;
+    const rejectUrl = d.rejectUrl || d.decideUrl && d.decideUrl.reject || null;
+    return h(
+      "div",
+      { className: "mos__apd" },
+      // Expected effect — the plain-language "what will happen".
+      d.expectedEffect ? h(
+        "div",
+        { className: "mos__apd-effect" },
+        h("span", { className: "mos__apd-effect-k" }, h(Icon, { name: "zap", size: 12 }), "Erwarteter Effekt"),
+        h("span", { className: "mos__apd-effect-v" }, d.expectedEffect)
+      ) : null,
+      // BETROFFENE FELDER — the structured field table (only if the card carried one).
+      fields.length ? h(
+        "div",
+        { className: "mos__apd-sec" },
+        h("span", { className: "mos__apd-sec-h" }, "Betroffene Felder"),
+        h(
+          "dl",
+          { className: "mos__apd-fields" },
+          fields.map((k) => h(
+            "div",
+            { key: k, className: "mos__apd-field" },
+            h("dt", null, _appcFieldLabel(k)),
+            h("dd", null, String(d.structuredFields[k]))
+          ))
+        )
+      ) : null,
+      // Affected objects — chips (adress-first identity where present).
+      affected.length ? h(
+        "div",
+        { className: "mos__apd-sec" },
+        h("span", { className: "mos__apd-sec-h" }, "Betroffene Objekte"),
+        h(
+          "div",
+          { className: "mos__apd-chips" },
+          affected.map((o, i) => h(
+            "span",
+            { key: i, className: "mos__apd-chip" },
+            h(Icon, { name: "building-2", size: 11 }),
+            String(typeof o === "object" ? o.label || o.id || JSON.stringify(o) : o)
+          ))
+        )
+      ) : null,
+      // Risks — honest amber list.
+      risks.length ? h(
+        "div",
+        { className: "mos__apd-sec" },
+        h("span", { className: "mos__apd-sec-h" }, "Risiken"),
+        h(
+          "ul",
+          { className: "mos__apd-list mos__apd-list--risk" },
+          risks.map((r, i) => h(
+            "li",
+            { key: i },
+            h(Icon, { name: "triangle-alert", size: 12 }),
+            String(typeof r === "object" ? r.text || r.detail || JSON.stringify(r) : r)
+          ))
+        )
+      ) : null,
+      // Evidence — read-only provenance list.
+      evidence.length ? h(
+        "div",
+        { className: "mos__apd-sec" },
+        h("span", { className: "mos__apd-sec-h" }, "Belege / Evidenz"),
+        h(
+          "ul",
+          { className: "mos__apd-list" },
+          evidence.map((e, i) => h(
+            "li",
+            { key: i },
+            h(Icon, { name: "file-text", size: 12 }),
+            String(typeof e === "object" ? e.text || e.ref || e.source || JSON.stringify(e) : e)
+          ))
+        )
+      ) : null,
+      // Proof hashes — the audit of exactly which intent/payload is gated.
+      h(
+        "dl",
+        { className: "mos__appc-detail mos__apd-hashes" },
+        h("div", null, h("dt", null, "Gate"), h("dd", null, gateClass + (gateReason ? " · " + gateReason : ""))),
+        d.status ? h("div", null, h("dt", null, "Status"), h("dd", null, d.status + (d.expiresAt ? " · läuft ab " + d.expiresAt : ""))) : null,
+        intent ? h("div", null, h("dt", null, "Intent-Hash"), h("dd", { className: "mos__mono" }, intent)) : null,
+        d.idempotencyKey ? h("div", null, h("dt", null, "Idempotenz"), h("dd", { className: "mos__mono" }, d.idempotencyKey)) : null,
+        d.payloadSha256 ? h("div", null, h("dt", null, "Payload-Hash"), h("dd", { className: "mos__mono" }, d.payloadSha256)) : null,
+        d.preconditionsSha256 ? h("div", null, h("dt", null, "Vorbedingungen"), h("dd", { className: "mos__mono" }, d.preconditionsSha256)) : null
+      ),
+      // Gated action row — ALWAYS visible, so the "gegatete Aktions-Row" pattern is
+      // legible (visible-but-locked) exactly as the mockup shows. When the backend
+      // supplies a decide surface each button is a NAVIGATION-only deep-link into
+      // the Operator's Hermes decide UI (new tab); when absent it renders visibly
+      // DISABLED. Never a working control, never /approvals/decide, never a
+      // fabricated navigation target.
+      h(
+        "div",
+        { className: "mos__apd-actions", role: "group", "aria-label": "Entscheidung — nur Operator" },
+        h(GatedActionButton, { url: approveUrl, label: "Genehmigen", icon: "circle-check-big", variant: "approve" }),
+        h(GatedActionButton, { url: rejectUrl, label: "Ablehnen", icon: "octagon-alert", variant: "reject" })
+      ),
+      // Permanent lock caption — decision authority is the Operator, always visible.
+      h(
+        "div",
+        { className: "mos__apd-lock" },
+        h(Icon, { name: "lock", size: 13 }),
+        h("span", null, d.decisionNote || "Entscheidung (genehmigen/ablehnen) nur durch dich (Operator) über das Approval-Center / den Operator-Bot. Dieses Plugin liest nur — es ruft nie /approvals/decide.")
+      )
+    );
+  }
+  function DeepLinkButton(props) {
+    const link = props.link;
+    if (!link || !link.url) return null;
+    return h(
+      "a",
+      {
+        className: "mos__deeplink" + (props.variant ? " mos__deeplink--" + props.variant : ""),
+        href: link.url,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        title: link.label || props.label || "Im FSM öffnen"
+      },
+      props.icon ? h(Icon, { name: props.icon, size: 13 }) : null,
+      h("span", null, props.label || link.label || "im FSM öffnen"),
+      h(Icon, { name: "arrow-up-right", size: 12 })
+    );
+  }
+  function GatedActionButton(props) {
+    const cls = "mos__deeplink mos__deeplink--" + props.variant;
+    if (props.url) {
+      return h(
+        "a",
+        {
+          className: cls,
+          href: props.url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          title: props.label + " im Operator-Approval-Center (Hermes) öffnen — Entscheidung dort, nie im Plugin."
+        },
+        h(Icon, { name: props.icon, size: 13 }),
+        h("span", null, props.label),
+        h(Icon, { name: "arrow-up-right", size: 12 })
+      );
+    }
+    return h(
+      "button",
+      {
+        type: "button",
+        disabled: true,
+        "aria-disabled": "true",
+        className: cls + " is-gated",
+        title: "Nur der Operator entscheidet — im Approval-Center (Hermes) bzw. über den Operator-Bot. Dieses Plugin kann nicht genehmigen/ablehnen."
+      },
+      h(Icon, { name: props.icon, size: 13 }),
+      h("span", null, props.label),
+      h(Icon, { name: "lock", size: 12 })
+    );
+  }
   const APPC_MAX = 4;
   function ApprovalCenter(props) {
-    const a = props.approvals, load = props.load;
+    const a = props.approvals, load = props.load, scene = props.scene;
     const [openId, setOpenId] = useState(null);
     const [showAll, setShowAll] = useState(false);
     const st = a ? a.state || "empty" : load === "loading" ? "loading" : "unavailable";
     const cards = a && Array.isArray(a.cards) ? a.cards : [];
     const pending = a ? a.pending != null ? a.pending : cards.length : 0;
+    const initRef = useRef(false);
+    const onLoadDetail = props.onLoadDetail;
+    useEffect(() => {
+      if (!scene || initRef.current || !cards.length) return;
+      initRef.current = true;
+      const firstId = cards[0].id;
+      setOpenId(firstId);
+      if (onLoadDetail) onLoadDetail(firstId);
+    }, [scene, cards, onLoadDetail]);
     const max = props.compact ? 1 : APPC_MAX;
-    const shown = showAll ? cards : cards.slice(0, max);
+    const shown = scene || showAll ? cards : cards.slice(0, max);
     const extra = cards.length - shown.length;
-    const onToggle = useCallback((id) => setOpenId((p) => p === id ? null : id), []);
+    const onToggle = useCallback((id) => {
+      setOpenId((p) => {
+        const next = p === id ? null : id;
+        if (next && scene && onLoadDetail) onLoadDetail(next);
+        return next;
+      });
+    }, [scene, onLoadDetail]);
+    const body = load === "loading" && !a ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" })) : cards.length ? [
+      ...shown.map((c) => h(ApprovalCard, {
+        key: c.id,
+        card: c,
+        open: openId === c.id,
+        onToggle,
+        scene,
+        detail: scene && props.details ? props.details[c.id] : void 0,
+        detailLoading: scene && props.detailLoading ? !!props.detailLoading[c.id] : false
+      })),
+      extra > 0 && !scene ? h(
+        "button",
+        { key: "more", type: "button", className: "mos__appc-more", onClick: props.compact ? props.onMore : () => setShowAll(true) },
+        h(Icon, { name: "ellipsis", size: 14 }),
+        "+" + extra + " weitere"
+      ) : null
+    ] : h(ZoneEmpty, {
+      state: st,
+      icon: "inbox",
+      title: st === "unavailable" || st === "error" ? "Approval-Quelle nicht erreichbar" : "Keine offenen Freigaben",
+      note: a && a.note
+    });
+    if (scene) {
+      return h("div", { className: "mos__appc mos__appc--scene", role: "list", "aria-label": "Offene Freigaben" }, body);
+    }
     return h(
       "section",
       { className: "mos__card mos__appc" + (props.flash ? " is-flash" : ""), ref: props.innerRef, id: "mos-approvals" },
@@ -3176,24 +3527,153 @@ var MikaelOSPlugin = function() {
         h(Icon, { name: "shield-check", size: 16 }),
         h("span", { className: "mos__card-title" }, "Freigaben"),
         pending > 0 ? h("span", { className: "mos__appc-count" }, pending) : null,
+        props.onOpen ? h(
+          "button",
+          {
+            type: "button",
+            className: "mos__card-open mos__card-open--icon",
+            onClick: props.onOpen,
+            title: "Entscheidungen-Center öffnen (Intent-Hash, Effekt-Felder · Entscheidung nur Operator)",
+            "aria-label": "Entscheidungen-Center öffnen"
+          },
+          h(Icon, { name: "arrow-up-right", size: 15 })
+        ) : null,
         h(ZonePip, { state: st, observedAt: a && a.observedAt, source: a && a.source, note: a && a.note })
+      ),
+      h("div", { className: "mos__appc-body" }, body)
+    );
+  }
+  function FirmaDomainCard(props) {
+    const card = props.card || {};
+    const st = card.state || (props.load === "loading" ? "loading" : "unavailable");
+    const rows = Array.isArray(card.rows) ? card.rows : [];
+    const bad = st === "unavailable" || st === "error";
+    const empty = st === "empty";
+    const fresh = card.observedAt ? freshnessLabel(card.observedAt) : null;
+    const deep = card.deepLink && card.deepLink.url ? card.deepLink : null;
+    return h(
+      "section",
+      { className: "mos__card mos__fdcard" },
+      h(
+        "header",
+        { className: "mos__card-head mos__fdcard-head" },
+        h(Icon, { name: card.icon || "server", size: 16 }),
+        h("span", { className: "mos__card-title" }, card.title || card.id),
+        deep ? h(DeepLinkButton, {
+          link: deep,
+          label: deep.label || "im FSM öffnen",
+          icon: deep.externalSystem === "paperless" ? "folder-open" : "external-link"
+        }) : null,
+        h(ZonePip, { state: st, observedAt: card.observedAt, source: card.source, note: card.note })
       ),
       h(
         "div",
-        { className: "mos__appc-body" },
-        load === "loading" && !a ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" })) : cards.length ? [
-          ...shown.map((c) => h(ApprovalCard, { key: c.id, card: c, open: openId === c.id, onToggle })),
-          extra > 0 ? h(
-            "button",
-            { key: "more", type: "button", className: "mos__appc-more", onClick: props.compact ? props.onMore : () => setShowAll(true) },
-            h(Icon, { name: "ellipsis", size: 14 }),
-            "+" + extra + " weitere"
-          ) : null
-        ] : h(ZoneEmpty, {
-          state: st,
-          icon: "inbox",
-          title: st === "unavailable" || st === "error" ? "Approval-Quelle nicht erreichbar" : "Keine offenen Freigaben",
-          note: a && a.note
+        { className: "mos__fdcard-body" },
+        card.summary && !bad ? h("div", { className: "mos__fdcard-summary" }, card.summary) : null,
+        props.load === "loading" && !props.card ? [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" })) : bad || empty || !rows.length ? h(ZoneEmpty, {
+          state: bad ? st : "empty",
+          icon: card.icon || "inbox",
+          title: bad ? card.summary || "Quelle nicht erreichbar" : card.summary || "Keine Signale",
+          note: card.note
+        }) : h(
+          "div",
+          { className: "mos__fdcard-rows" },
+          rows.map((r, i) => h(FirmaMetric, { key: i, row: r }))
+        )
+      ),
+      h(
+        "footer",
+        { className: "mos__firma-foot mos__fdcard-foot" },
+        h(Icon, { name: "lock", size: 12 }),
+        h(
+          "span",
+          { className: "mos__firma-foot-t" },
+          (card.source ? "Quelle: " + card.source : "Firma-Signal") + (fresh ? " · Stand: " + fresh : "")
+        ),
+        h("span", { className: "mos__firma-foot-ro" }, card.permission ? "Nur lesen" : "Nur lesen")
+      )
+    );
+  }
+  const FIRMA_CARD_ORDER = ["auftraege", "billing", "dispo", "wartung", "dokumente", "runtime"];
+  function FirmaScene(props) {
+    const ov = props.firma;
+    const load = props.load;
+    const raw = ov && Array.isArray(ov.cards) ? ov.cards : [];
+    const byId = {};
+    raw.forEach((c) => {
+      byId[c.id] = c;
+    });
+    const ordered = FIRMA_CARD_ORDER.map((id) => byId[id]).filter(Boolean);
+    const cards = ordered.length ? ordered : raw;
+    const offline = load === "offline" || !ov && load !== "loading";
+    return h(
+      "div",
+      { className: "mos__firmascene" },
+      offline && !cards.length ? h(ZoneEmpty, {
+        state: "unavailable",
+        icon: "server",
+        title: "Firma-Projektion nicht erreichbar",
+        note: "Read-Modelle offline — die Karten erscheinen, sobald /firma/overview wieder antwortet."
+      }) : h(
+        "div",
+        { className: "mos__firmagrid" },
+        (cards.length ? cards : FIRMA_CARD_ORDER.map((id) => ({ id }))).map((c) => h(FirmaDomainCard, { key: c.id, card: ov ? c : null, load }))
+      )
+    );
+  }
+  const SUMMARY_BUCKETS = [
+    { key: "Geld", icon: "banknote", tone: "amber" },
+    { key: "Kunde", icon: "building-2", tone: "blue" },
+    { key: "Daten", icon: "octagon-alert", tone: "red" },
+    { key: "Personal", icon: "user", tone: "violet" }
+  ];
+  function SummaryRail(props) {
+    const cards = props.cards || [];
+    const counts = {};
+    cards.forEach((c) => {
+      const cat = gateCategory(c.gateClass, c.gateReason, c.text);
+      counts[cat.label] = (counts[cat.label] || 0) + 1;
+    });
+    const total = cards.length;
+    return h(
+      "aside",
+      { className: "mos__sumrail" },
+      h(
+        "div",
+        { className: "mos__sumrail-head" },
+        h("b", null, total),
+        h("span", null, "offen · nach Kategorie")
+      ),
+      h(
+        "div",
+        { className: "mos__sumrail-list" },
+        SUMMARY_BUCKETS.map((b) => h(
+          "div",
+          { key: b.key, className: "mos__sumrail-row mos__sumrail-row--" + b.tone + (counts[b.key] || 0 ? "" : " is-zero") },
+          h("span", { className: "mos__sumrail-ico" }, h(Icon, { name: b.icon, size: 14 })),
+          h("span", { className: "mos__sumrail-k" }, b.key),
+          h("span", { className: "mos__sumrail-n" }, counts[b.key] || 0)
+        ))
+      )
+    );
+  }
+  function ApprovalsScene(props) {
+    const a = props.approvals;
+    const cards = a && Array.isArray(a.cards) ? a.cards : [];
+    return h(
+      "div",
+      { className: "mos__apscene" },
+      h(SummaryRail, { cards }),
+      h(
+        "div",
+        { className: "mos__apscene-main" },
+        h(ApprovalCenter, {
+          approvals: a,
+          load: props.load,
+          scene: true,
+          details: props.details,
+          detailLoading: props.detailLoading,
+          onLoadDetail: props.onLoadDetail
         })
       )
     );
@@ -3230,12 +3710,13 @@ var MikaelOSPlugin = function() {
       h(
         "aside",
         { className: "mos__ckpt-col mos__ckpt-right" },
-        h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load }),
+        h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load, onOpen: props.onFirma }),
         h(ApprovalCenter, {
           approvals: props.cockpit.approvals,
           load: props.cockpitLoad,
           flash: props.approvalsFlash,
-          innerRef: props.approvalsRef
+          innerRef: props.approvalsRef,
+          onOpen: props.onApprovals
         })
       )
     );
@@ -3292,9 +3773,15 @@ var MikaelOSPlugin = function() {
         onMore: props.onGoTimeline
       }),
       // Firma compact.
-      h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load }),
+      h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load, onOpen: props.onGoFirma }),
       // Approvals — compact (max 1 + counter → deep link).
-      h(ApprovalCenter, { approvals: c.approvals, load: props.cockpitLoad, compact: true, onMore: props.onGoApprovals })
+      h(ApprovalCenter, {
+        approvals: c.approvals,
+        load: props.cockpitLoad,
+        compact: true,
+        onMore: props.onGoApprovals,
+        onOpen: props.onGoApprovals
+      })
     );
   }
   function AgendaRailMobile(props) {
@@ -3330,12 +3817,17 @@ var MikaelOSPlugin = function() {
     const [scene, setScene] = useState("cockpit");
     const isMobile = useMediaQuery("(max-width: 430px)");
     const [mobileTab, setMobileTab] = useState("home");
+    const [mobileScreen, setMobileScreen] = useState(null);
     const [sheetOpen, setSheetOpen] = useState(false);
     const [sheetDetent, setSheetDetent] = useState(1);
     const [live, setLive] = useState(null);
     const [loadState, setLoadState] = useState("loading");
     const [cockpit, setCockpit] = useState({ kpi: null, jarvis: null, approvals: null });
     const [cockpitLoad, setCockpitLoad] = useState("loading");
+    const [firma, setFirma] = useState(null);
+    const [firmaLoad, setFirmaLoad] = useState("loading");
+    const [approvalDetails, setApprovalDetails] = useState({});
+    const [approvalDetailLoading, setApprovalDetailLoading] = useState({});
     const [approvalsFlash, setApprovalsFlash] = useState(false);
     const approvalsRef = useRef(null);
     const [propose, setPropose] = useState(null);
@@ -3361,15 +3853,41 @@ var MikaelOSPlugin = function() {
         setCockpitLoad([k, j, a].some((r) => r.status === "fulfilled") ? "ready" : "offline");
       });
     }, []);
+    const loadFirma = useCallback(() => {
+      setFirmaLoad((p) => p === "ready" ? "ready" : "loading");
+      sdkGet(FIRMA_OVERVIEW_API).then((data) => {
+        setFirma(data);
+        setFirmaLoad("ready");
+      }).catch(() => {
+        setFirmaLoad((p) => p === "ready" ? "ready" : "offline");
+      });
+    }, []);
+    const loadApprovalDetail = useCallback((id) => {
+      if (!id) return;
+      setApprovalDetails((prev) => {
+        if (prev[id]) return prev;
+        setApprovalDetailLoading((l) => ({ ...l, [id]: true }));
+        sdkGet(FIRMA_APPROVAL_DETAIL_API + "?id=" + encodeURIComponent(id)).then((data) => {
+          setApprovalDetails((p) => ({ ...p, [id]: data }));
+          setApprovalDetailLoading((l) => ({ ...l, [id]: false }));
+        }).catch(() => {
+          setApprovalDetails((p) => ({ ...p, [id]: { ok: false, found: false, note: "Detail nicht erreichbar." } }));
+          setApprovalDetailLoading((l) => ({ ...l, [id]: false }));
+        });
+        return prev;
+      });
+    }, []);
     useEffect(() => {
       loadOverview();
       loadCockpit();
-    }, [loadOverview, loadCockpit]);
+      loadFirma();
+    }, [loadOverview, loadCockpit, loadFirma]);
     useEffect(() => {
       if (typeof window === "undefined") return;
       const reload = () => {
         loadOverview();
         loadCockpit();
+        loadFirma();
       };
       window.addEventListener("online", reload);
       window.addEventListener("focus", reload);
@@ -3377,7 +3895,7 @@ var MikaelOSPlugin = function() {
         window.removeEventListener("online", reload);
         window.removeEventListener("focus", reload);
       };
-    }, [loadOverview, loadCockpit]);
+    }, [loadOverview, loadCockpit, loadFirma]);
     const liveById = useMemo(() => indexLive(live), [live]);
     const loadingModules = loadState === "loading";
     const viewModules = useMemo(
@@ -3766,12 +4284,10 @@ var MikaelOSPlugin = function() {
       9e4,
       useCallback(() => setScene("constellation"), [])
     );
-    const onGates = useCallback(() => {
-      const el = approvalsRef.current;
-      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
-      setApprovalsFlash(true);
-      window.setTimeout(() => setApprovalsFlash(false), 1400);
-    }, []);
+    const onGates = useCallback(() => setScene("approvals"), []);
+    const onFirma = useCallback(() => setScene("firma"), []);
+    const onApprovals = useCallback(() => setScene("approvals"), []);
+    const onSceneBack = useCallback(() => setScene("cockpit"), []);
     const onChip = useCallback((label) => {
       setCommand(label);
       if (inputRef.current) inputRef.current.focus();
@@ -3782,7 +4298,13 @@ var MikaelOSPlugin = function() {
       else setScene("timeline");
     }, [isMobile]);
     const onGoApprovals = useCallback(() => {
-      setMobileTab("home");
+      setMobileScreen("approvals");
+    }, []);
+    const onGoFirma = useCallback(() => {
+      setMobileScreen("firma");
+    }, []);
+    const onScreenBack = useCallback(() => {
+      setMobileScreen(null);
     }, []);
     if (isMobile) {
       return h(
@@ -3821,7 +4343,15 @@ var MikaelOSPlugin = function() {
           cockpitLoad,
           onChip,
           onGoTimeline,
-          onGoApprovals
+          onGoApprovals,
+          onGoFirma,
+          mobileScreen,
+          onScreenBack,
+          firma,
+          firmaLoad,
+          approvalDetails,
+          approvalDetailLoading,
+          onLoadDetail: loadApprovalDetail
         }),
         h(ProposeFlow, {
           state: propose,
@@ -3907,9 +4437,10 @@ var MikaelOSPlugin = function() {
         h("span", { className: "mos__kbd" }, h(Icon, { name: "command", size: 12 }), "K · Kurzbefehle")
       )
     );
+    const isBackScene = scene === "firma" || scene === "approvals";
     return h(
       "div",
-      { className: "mos" + (scene === "timeline" ? " mos--timeline" : scene === "cockpit" ? " mos--cockpit" : "") },
+      { className: "mos" + (scene === "timeline" ? " mos--timeline" : scene === "cockpit" ? " mos--cockpit" : isBackScene ? " mos--cockpit mos--" + scene : "") },
       h("div", { className: "mos__atmosphere", "aria-hidden": "true" }),
       h("div", { className: "mos__atmosphere-veil", "aria-hidden": "true" }),
       h(LiveAnnouncer, { message: announce }),
@@ -3917,7 +4448,14 @@ var MikaelOSPlugin = function() {
         "main",
         { className: "mos__shell", role: "main" },
         h("h1", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
-        h(TopBar, { loadState, liveCount, total: viewModules.length, scene, onScene: setScene }),
+        h(TopBar, {
+          loadState,
+          liveCount,
+          total: viewModules.length,
+          scene,
+          onScene: setScene,
+          onBack: isBackScene ? onSceneBack : void 0
+        }),
         scene === "cockpit" ? h(
           React.Fragment,
           null,
@@ -3938,9 +4476,51 @@ var MikaelOSPlugin = function() {
               onChip,
               onAgendaMore,
               approvalsFlash,
-              approvalsRef
+              approvalsRef,
+              onFirma,
+              onApprovals
             })
           )
+        ) : scene === "firma" ? h(
+          "div",
+          { className: "mos__stagewrap mos__stagewrap--scene" },
+          h(
+            "div",
+            { className: "mos__scenehead" },
+            h(Icon, { name: "server", size: 20 }),
+            h(
+              "div",
+              { className: "mos__scenehead-t" },
+              h("h2", null, "Firma / Rise-L"),
+              h("span", null, "Read-only Projektion · fsm.db/belege.db mode=ro · Paperless nur lesen · Deep-Links ins FSM")
+            ),
+            h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")
+          ),
+          h(FirmaScene, { firma, load: firmaLoad }),
+          h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false }))
+        ) : scene === "approvals" ? h(
+          "div",
+          { className: "mos__stagewrap mos__stagewrap--scene" },
+          h(
+            "div",
+            { className: "mos__scenehead" },
+            h(Icon, { name: "shield-check", size: 20 }),
+            h(
+              "div",
+              { className: "mos__scenehead-t" },
+              h("h2", null, "Entscheidungen"),
+              h("span", null, "Approval-Cards inkl. Intent-Hash + Effekt-Felder · Entscheidung nur durch dich (Operator)")
+            ),
+            h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Operator-only")
+          ),
+          h(ApprovalsScene, {
+            approvals: cockpit.approvals,
+            load: cockpitLoad,
+            details: approvalDetails,
+            detailLoading: approvalDetailLoading,
+            onLoadDetail: loadApprovalDetail
+          }),
+          h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false }))
         ) : scene === "timeline" ? h(
           "div",
           { className: "mos__stagewrap mos__stagewrap--tl" },
@@ -4025,7 +4605,7 @@ var MikaelOSPlugin = function() {
         ),
         // Footer (UI-SPEC §1): in the Cockpit the StateRail sits directly ABOVE the
         // command bar; Konstellation/Timeline keep the command bar → footer order.
-        scene === "cockpit" ? h(
+        scene === "cockpit" || isBackScene ? h(
           "footer",
           { className: "mos__ckpt-foot" },
           h(StateRail, { activeIndex: stateIndex }),

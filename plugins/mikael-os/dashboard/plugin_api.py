@@ -163,6 +163,36 @@ CAL_FIRMA = os.environ.get("MIKAELOS_CAL_FIRMA", "deltatortechnik@gmail.com")   
 CAL_SOURCE_LABEL = "calendar-evidence · calendar.db (Google read-only, 30-min-Mirror)"
 CAL_HORIZON_DAYS = int(os.environ.get("MIKAELOS_CAL_HORIZON_DAYS", "14"))
 
+# ---------------------------------------------------------------------------
+# FIRMA / Rise-L — read-only company-signal projections (workspace
+# ``company_signal``, technically isolated from private/engineering). fsm.db and
+# belege.db are opened STRICTLY ``mode=ro`` (URI) — every write on fsm.db goes
+# through the Cockpit :18065 single-writer, NEVER here. Reports are curated
+# daily snapshots (already aggregated); Paperless is read via its REST API only.
+# Nothing here fabricates a value: a missing source degrades to honest
+# empty/unavailable, and the Delta/Wensauer mandant is only shown where the data
+# actually carries it (belege/wartungsvertrag) — the FSM ``auftrag.firma`` column
+# is factually NULL today, so auftrag/dispo cards say "Mandant unbekannt" rather
+# than guessing "Delta".
+FSM_DB = Path(os.environ.get("MIKAELOS_FSM_DB", "/srv/delta/data/fsm/fsm.db"))
+BELEGE_DB = Path(os.environ.get("MIKAELOS_BELEGE_DB", "/srv/delta/data/belege/belege.db"))
+REPORTS_DIR = Path(os.environ.get("MIKAELOS_REPORTS_DIR", "/srv/delta/data/reports"))
+BILLING_RADAR_JSON = Path(os.environ.get(
+    "MIKAELOS_BILLING_RADAR", str(REPORTS_DIR / "billing-radar-latest.json")))
+BILLING_KPI_JSON = Path(os.environ.get(
+    "MIKAELOS_BILLING_KPI", str(REPORTS_DIR / "billing-kpi-latest.json")))
+WARTUNGS_RADAR_JSON = Path(os.environ.get(
+    "MIKAELOS_WARTUNGS_RADAR", str(REPORTS_DIR / "wartungs-radar-latest.json")))
+PAPERLESS_BASE = os.environ.get("MIKAELOS_PAPERLESS_BASE", "http://127.0.0.1:18075")
+_PAPERLESS_TOKEN_REF = os.environ.get("MIKAELOS_PAPERLESS_TOKEN_REF", "paperless/API_TOKEN")
+_PAPERLESS_TOKEN_CACHE: Optional[str] = None
+# Cockpit deep-link base (the "im FSM öffnen" target). Navigation only — the
+# plugin never renders an editable Cockpit control, it only links out.
+COCKPIT_BASE = os.environ.get(
+    "MIKAELOS_COCKPIT_BASE", "https://delta-ai-01.tailbc3df5.ts.net:18065").rstrip("/")
+# The restic offsite backup unit (systemd --user), for the RUNTIME "Backups ok" row.
+RESTIC_UNIT = os.environ.get("MIKAELOS_RESTIC_UNIT", "rise-l-backup.service")
+
 try:  # Berlin local time for day windows (CLAUDE.md: immer Berliner Zeit)
     from zoneinfo import ZoneInfo
     _BERLIN: Optional[Any] = ZoneInfo("Europe/Berlin")
@@ -221,6 +251,13 @@ STALE = {
     "calendar": 2 * 3600,   # 30-min mirror timer + generous slack
     "learning": 14 * 24 * 3600,  # Anki-Sync ist gelegentlich (Gerät-getrieben) — großzügig
     "study": 24 * 3600,          # exams.json wird selten editiert — großzügig
+    # FIRMA / company_signal read-only projections:
+    "firma_auftraege": 3600,     # fsm.db updated_ts is near-live
+    "firma_billing": 26 * 3600,  # billing-kpi snapshot regenerates ~07:30 daily
+    "firma_dispo": 12 * 3600,    # tages_dispo is sparse; generous
+    "firma_wartung": 26 * 3600,  # wartungs-radar snapshot regenerates ~01:30 daily
+    "firma_dokumente": 6 * 3600, # Paperless intake is continuous
+    "firma_runtime": 3600,       # systemd/backup health
 }
 
 # ---------------------------------------------------------------------------
@@ -463,10 +500,10 @@ def read_task_policy() -> Dict[str, Any]:
 #     (connection + scopes); recovery/HRV detail needs the internal token, which
 #     is only used if present in this process' environment (never harvested).
 # ---------------------------------------------------------------------------
-def _http_get_json(url: str, *, token: str = "") -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
+def _http_get_json(url: str, *, token: str = "", auth_scheme: str = "Bearer") -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
     headers = {"Accept": "application/json"}
     if token:
-        headers["Authorization"] = f"Bearer {token}"
+        headers["Authorization"] = f"{auth_scheme} {token}"
     try:
         req = Request(url, headers=headers, method="GET")
         with urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 - fixed loopback base
@@ -2793,6 +2830,686 @@ def cockpit_approvals(include_decided: bool = False) -> Dict[str, Any]:
         extra={"readOnly": True, "cards": cards, "pending": pending_n})
 
 
+# ===========================================================================
+# FIRMA / Rise-L — six READ-ONLY company-signal projections (Aufträge · Billing
+# · Dispo · Wartung · Dokumente · Runtime), bundled under GET /firma/overview.
+# workspace="company_signal", technically isolated from private/engineering.
+# fsm.db + belege.db are opened STRICTLY mode=ro (any write goes through Cockpit
+# :18065 single-writer, NEVER here); Paperless is read via REST only. Every card
+# carries the _prov envelope + an "im FSM öffnen" deep-link (navigation only) and
+# degrades to honest empty/unavailable — no value is ever fabricated.
+# ===========================================================================
+_FIRMA_PERM = "Nur lesen (company_signal, mode=ro · Writes nur via Cockpit :18065)"
+
+
+def _open_ro(path: Path) -> Optional["sqlite3.Connection"]:
+    """Open a SQLite DB STRICTLY read-only (URI mode=ro). Returns None if the
+    file is absent or unreadable. mode=ro guarantees the connection can never
+    write — a write attempt raises sqlite3.OperationalError (readonly database)."""
+    if not path.exists():
+        return None
+    try:
+        return sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1.5)
+    except sqlite3.Error:
+        return None
+
+
+def _load_report(path: Path) -> Optional[Dict[str, Any]]:
+    """Read a curated daily report snapshot (JSON). None if absent/unreadable."""
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return doc if isinstance(doc, dict) else None
+
+
+def _fsm_link(path: str, label: str = "Im FSM öffnen") -> Dict[str, str]:
+    """Build a Cockpit deep-link (navigation only; no editable control)."""
+    p = path if path.startswith("/") else "/" + path
+    return {"url": f"{COCKPIT_BASE}{p}", "label": label, "navigationOnly": True}
+
+
+def _paperless_token() -> str:
+    """Resolve the Paperless API token: env first, then the sanctioned SOPS
+    ``secret get`` render (cached in-process). NEVER logged or written to disk.
+    Empty string => the Dokumente card stays an honest partial (reachable but no
+    live count)."""
+    global _PAPERLESS_TOKEN_CACHE
+    if _PAPERLESS_TOKEN_CACHE:
+        return _PAPERLESS_TOKEN_CACHE
+    tok = (os.environ.get("MIKAELOS_PAPERLESS_TOKEN") or "").strip()
+    if not tok and os.environ.get("MIKAELOS_PAPERLESS_SECRET", "1") != "0":
+        try:
+            proc = subprocess.run(
+                ["secret", "get", _PAPERLESS_TOKEN_REF],
+                capture_output=True, text=True, timeout=6)
+            if proc.returncode == 0:
+                tok = (proc.stdout or "").strip()
+        except (OSError, subprocess.SubprocessError):
+            tok = tok
+    if tok:
+        _PAPERLESS_TOKEN_CACHE = tok
+    return tok
+
+
+def _epoch_dt(value: Any) -> Optional[datetime]:
+    """UTC datetime from a unix-epoch int/float (fsm.db *_ts columns). None if invalid."""
+    try:
+        return datetime.fromtimestamp(float(value), tz=timezone.utc)
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
+
+
+def _eur(value: Any) -> str:
+    """German-formatted euro amount (e.g. 138.979 €). '—' if not a number."""
+    if not isinstance(value, (int, float)):
+        return "—"
+    s = f"{value:,.0f}".replace(",", ".")
+    return f"{s} €"
+
+
+# --- (1) AUFTRÄGE — fsm.db · auftrag (mode=ro) -----------------------------
+# offen  ≈ neu + eingeplant + wartet_material   laufend ≈ unterwegs + pruefen
+# "heute fällig" is NOT derivable — the auftrag table has NO due-date column —
+# so that metric is honestly absent (never a guessed value). Mandant is NOT
+# shown: auftrag.firma is factually NULL for all rows today.
+_AUFTRAG_OFFEN = {"neu", "eingeplant", "wartet_material"}
+_AUFTRAG_LAUFEND = {"unterwegs", "pruefen"}
+
+
+def firma_auftraege() -> Dict[str, Any]:
+    con = _open_ro(FSM_DB)
+    if con is None:
+        return _prov(
+            state="unavailable", source="fsm.db · auftrag (mode=ro)", source_kind="file",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Auftrags-DB nicht lesbar", stale_after=STALE["firma_auftraege"],
+            note="fsm.db nicht vorhanden/lesbar (read-only).",
+            extra={"readOnly": True, "deepLink": _fsm_link("/auftraege")})
+    try:
+        dist = dict(con.execute("SELECT status, COUNT(*) FROM auftrag GROUP BY status").fetchall())
+        firma_nonnull = con.execute(
+            "SELECT COUNT(*) FROM auftrag WHERE firma IS NOT NULL AND firma <> ''").fetchone()[0]
+        latest_ts = con.execute("SELECT MAX(updated_ts) FROM auftrag").fetchone()[0]
+    except sqlite3.Error as exc:
+        con.close()
+        return _prov(
+            state="error", source="fsm.db · auftrag (mode=ro)", source_kind="file",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Auftrags-Lesefehler", stale_after=STALE["firma_auftraege"],
+            note=f"SQL-Fehler: {type(exc).__name__}",
+            extra={"readOnly": True, "deepLink": _fsm_link("/auftraege")})
+    finally:
+        con.close()
+    total = sum(int(v) for v in dist.values())
+    if total == 0:
+        return _prov(
+            state="empty", source="fsm.db · auftrag (mode=ro)", source_kind="file",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Keine Aufträge erfasst", stale_after=STALE["firma_auftraege"],
+            extra={"readOnly": True, "deepLink": _fsm_link("/auftraege")})
+    offen = sum(int(dist.get(s, 0)) for s in _AUFTRAG_OFFEN)
+    laufend = sum(int(dist.get(s, 0)) for s in _AUFTRAG_LAUFEND)
+    abrechnungsbereit = int(dist.get("abrechnungsbereit", 0))
+    observed = _epoch_dt(latest_ts)
+    rows = [
+        {"icon": "inbox", "accent": "amber", "title": "Offen",
+         "sub": "neu · eingeplant · wartet Material", "value": str(offen)},
+        {"icon": "truck", "accent": "cyan", "title": "Laufend",
+         "sub": "unterwegs · in Prüfung", "value": str(laufend)},
+        {"icon": "receipt-euro", "accent": "emerald", "title": "Abrechnungsbereit",
+         "sub": "wartet auf Rechnung", "value": str(abrechnungsbereit)},
+    ]
+    # Mandant honesty: the auftrag table cannot attribute Delta/Wensauer today.
+    mandant_note = ("Mandant (Delta/Wensauer) im FSM-Kern nicht gepflegt "
+                    f"(auftrag.firma = NULL für {total - firma_nonnull}/{total}) — "
+                    "hier bewusst NICHT geraten."
+                    if firma_nonnull < total else None)
+    return _prov(
+        state=_freshness_state(observed, STALE["firma_auftraege"]),
+        source="fsm.db · auftrag (mode=ro)", source_kind="file",
+        workspace="company_signal", permission=_FIRMA_PERM,
+        summary=f"{offen} offen · {laufend} laufend · {abrechnungsbereit} abrechnungsbereit",
+        observed_at=observed, stale_after=STALE["firma_auftraege"], rows=rows,
+        note=("„Heute fällig“ ist nicht ableitbar — die Auftragstabelle hat kein "
+              "Fälligkeitsfeld; daher ehrlich weggelassen statt geraten."
+              + (f" {mandant_note}" if mandant_note else "")),
+        extra={"readOnly": True, "deepLink": _fsm_link("/auftraege"),
+               "byStatus": {k: int(v) for k, v in dist.items()},
+               "mandantResolvable": firma_nonnull > 0,
+               "heuteFaelligVerfuegbar": False})
+
+
+# --- (2) BILLING-RADAR — curated snapshots + fsm.db doc-check --------------
+# Truth-source = the daily billing-kpi / billing-radar snapshots (already
+# aggregated). "Kandidaten ohne Pflichtbericht" is read live from fsm.db
+# auftrag_doc_status (status='fehlt'). Mandant breakdown only where the snapshot
+# actually carries it (aging.je_mandant).
+def firma_billing() -> Dict[str, Any]:
+    kpi = _load_report(BILLING_KPI_JSON)
+    radar = _load_report(BILLING_RADAR_JSON)
+    if kpi is None and radar is None:
+        return _prov(
+            state="unavailable", source="billing-kpi-latest.json + billing-radar-latest.json",
+            source_kind="file", workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Billing-Reports nicht lesbar", stale_after=STALE["firma_billing"],
+            note="Weder billing-kpi- noch billing-radar-Snapshot vorhanden.",
+            extra={"readOnly": True, "deepLink": _fsm_link("/abrechnung")})
+    kpi = kpi or {}
+    radar = radar or {}
+    by_status = kpi.get("by_status") if isinstance(kpi.get("by_status"), dict) else {}
+    sum_by_status = (kpi.get("sum_estimated_brutto_eur_by_status")
+                     if isinstance(kpi.get("sum_estimated_brutto_eur_by_status"), dict) else {})
+    pending_n = int(by_status.get("pending", 0) or 0)
+    pending_eur = sum_by_status.get("pending")
+    radar_n = radar.get("n_cases")
+    radar_eur = radar.get("total_estimated_brutto_eur")
+    observed = _parse_iso(kpi.get("generated_utc") or radar.get("generated_utc"))
+
+    # Live "Kandidaten ohne Pflichtbericht" from fsm.db (read-only).
+    doc_missing: Optional[Dict[str, int]] = None
+    doc_auftraege: Optional[int] = None
+    con = _open_ro(FSM_DB)
+    if con is not None:
+        try:
+            doc_missing = {
+                str(k): int(v) for k, v in con.execute(
+                    "SELECT doc_typ, COUNT(*) FROM auftrag_doc_status "
+                    "WHERE status='fehlt' GROUP BY doc_typ").fetchall()}
+            doc_auftraege = con.execute(
+                "SELECT COUNT(DISTINCT auftrag_id) FROM auftrag_doc_status "
+                "WHERE status='fehlt'").fetchone()[0]
+        except sqlite3.Error:
+            doc_missing, doc_auftraege = None, None
+        finally:
+            con.close()
+
+    rows: List[Dict[str, Any]] = []
+    if pending_n or pending_eur is not None:
+        rows.append({"icon": "file-clock", "accent": "amber", "title": "Offene Approval-Cards",
+                     "sub": "Billing-Radar · wartet auf Freigabe",
+                     "value": f"{pending_n} · {_eur(pending_eur)}"})
+    if isinstance(radar_n, (int, float)):
+        rows.append({"icon": "radar", "accent": "cyan", "title": "Radar-Fälle",
+                     "sub": "Abrechnungs-Kandidaten gesamt",
+                     "value": f"{int(radar_n)} · {_eur(radar_eur)}"})
+    if doc_auftraege is not None:
+        total_missing = sum(doc_missing.values()) if doc_missing else 0
+        rows.append({"icon": "file-x", "accent": "amber" if total_missing else "emerald",
+                     "title": "Kandidaten ohne Pflichtbericht",
+                     "sub": "Arbeitsbericht/Prüfbericht/Lieferschein fehlt",
+                     "value": str(doc_auftraege)})
+
+    if not rows:
+        return _prov(
+            state="empty", source="billing-kpi + billing-radar snapshots", source_kind="file",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Keine Billing-Signale", stale_after=STALE["firma_billing"],
+            extra={"readOnly": True, "deepLink": _fsm_link("/abrechnung")})
+
+    # Mandant breakdown from the KPI aging block (the snapshot that carries it).
+    aging = kpi.get("aging") if isinstance(kpi.get("aging"), dict) else {}
+    je_mandant = aging.get("je_mandant") if isinstance(aging.get("je_mandant"), dict) else None
+
+    return _prov(
+        state=_freshness_state(observed, STALE["firma_billing"]),
+        source="billing-kpi-latest.json + billing-radar-latest.json + fsm.db doc-check (ro)",
+        source_kind="file", workspace="company_signal", permission=_FIRMA_PERM,
+        summary=(f"{pending_n} Card(s) offen · {_eur(pending_eur)}"
+                 + (f" · {int(radar_n)} Radar-Fälle" if isinstance(radar_n, (int, float)) else "")),
+        observed_at=observed, stale_after=STALE["firma_billing"], rows=rows,
+        note=("Kandidat ohne Pflichtbericht = Flag, kein stiller Durchlauf. Snapshots "
+              "07:30 UTC; Mandant-Aufschlüsselung nur aus dem KPI-Aging (belege-getrieben)."),
+        extra={"readOnly": True, "deepLink": _fsm_link("/abrechnung"),
+               "cardsTotal": kpi.get("cards_total"),
+               "byStatus": {k: int(v) for k, v in by_status.items()} if by_status else None,
+               "pendingEur": pending_eur, "radarCases": radar_n, "radarEur": radar_eur,
+               "docMissingByType": doc_missing, "docMissingAuftraege": doc_auftraege,
+               "agingJeMandant": je_mandant, "digestLine": kpi.get("digest_line")})
+
+
+# --- (3) DISPO — fsm.db · tages_dispo (mode=ro) ----------------------------
+# auto_dispatch is OFF by operating doctrine (Dry-Run/Freigabe pending). There is
+# NO live flag for it in the DB, so it is surfaced as a TEXT fact, not read from
+# data. "Heute geplant" is honest-empty when no row matches today's Berlin date.
+def _berlin_today_str() -> str:
+    now = datetime.now(_BERLIN) if _BERLIN is not None else _now()
+    return now.date().isoformat()
+
+
+def firma_dispo() -> Dict[str, Any]:
+    con = _open_ro(FSM_DB)
+    if con is None:
+        return _prov(
+            state="unavailable", source="fsm.db · tages_dispo (mode=ro)", source_kind="file",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Dispo-DB nicht lesbar", stale_after=STALE["firma_dispo"],
+            note="fsm.db nicht vorhanden/lesbar (read-only).",
+            extra={"readOnly": True, "deepLink": _fsm_link("/dispo?karte=1"),
+                   "autoDispatch": "aus"})
+    today = _berlin_today_str()
+    try:
+        today_rows = con.execute(
+            "SELECT firma, fahrer, status, auftrag_ids FROM tages_dispo "
+            "WHERE tag = ? ORDER BY fahrer", (today,)).fetchall()
+        upcoming = con.execute(
+            "SELECT COUNT(*) FROM tages_dispo WHERE tag > ?", (today,)).fetchone()[0]
+        latest_ts = con.execute("SELECT MAX(created_ts) FROM tages_dispo").fetchone()[0]
+    except sqlite3.Error as exc:
+        con.close()
+        return _prov(
+            state="error", source="fsm.db · tages_dispo (mode=ro)", source_kind="file",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Dispo-Lesefehler", stale_after=STALE["firma_dispo"],
+            note=f"SQL-Fehler: {type(exc).__name__}",
+            extra={"readOnly": True, "deepLink": _fsm_link("/dispo?karte=1"),
+                   "autoDispatch": "aus"})
+    finally:
+        con.close()
+    observed = _epoch_dt(latest_ts)
+    deep = _fsm_link(f"/dispo?tag={today}")
+    auto_note = ("auto_dispatch ist AUS (Dry-Run/Operator-Go ausstehend) — "
+                 "Betriebs-Doktrin, kein DB-Flag; daher als Text-Fakt.")
+    if not today_rows:
+        return _prov(
+            state="empty", source="fsm.db · tages_dispo (mode=ro)", source_kind="file",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary=f"Keine Dispo für heute ({today})",
+            observed_at=observed, stale_after=STALE["firma_dispo"],
+            note=(f"Für heute ist keine Tages-Dispo hinterlegt. "
+                  + (f"{upcoming} Tag(e) künftig geplant. " if upcoming else "")
+                  + auto_note),
+            extra={"readOnly": True, "deepLink": deep, "autoDispatch": "aus",
+                   "today": today, "upcomingDays": int(upcoming)})
+    rows: List[Dict[str, Any]] = []
+    for firma, fahrer, status, auftrag_ids in today_rows:
+        try:
+            n_auftraege = len(json.loads(auftrag_ids)) if auftrag_ids else 0
+        except (ValueError, TypeError):
+            n_auftraege = 0
+        rows.append({
+            "icon": "route", "accent": "cyan" if status in ("confirmed", "unterwegs") else "amber",
+            "title": str(fahrer or "—"),
+            "sub": f"{firma or 'Mandant unbekannt'} · {status or '—'}",
+            "value": f"{n_auftraege} Auftr." if n_auftraege else "—"})
+    return _prov(
+        state=_freshness_state(observed, STALE["firma_dispo"]),
+        source="fsm.db · tages_dispo (mode=ro)", source_kind="file",
+        workspace="company_signal", permission=_FIRMA_PERM,
+        summary=f"{len(today_rows)} Fahrer heute geplant ({today})",
+        observed_at=observed, stale_after=STALE["firma_dispo"], rows=rows,
+        note=auto_note, extra={"readOnly": True, "deepLink": deep,
+                               "autoDispatch": "aus", "today": today,
+                               "upcomingDays": int(upcoming)})
+
+
+# --- (4) WARTUNG — wartungs-radar snapshot + wartungsvertrag mandant-split --
+def firma_wartung() -> Dict[str, Any]:
+    radar = _load_report(WARTUNGS_RADAR_JSON)
+    # Mandant-clean contract split from fsm.db (wartungsvertrag carries mandant).
+    mandant_split: Optional[Dict[str, Dict[str, Any]]] = None
+    con = _open_ro(FSM_DB)
+    if con is not None:
+        try:
+            mandant_split = {}
+            for mandant, n, betrag in con.execute(
+                "SELECT mandant, COUNT(*), COALESCE(SUM(betrag_netto),0) FROM wartungsvertrag "
+                "WHERE aktiv=1 GROUP BY mandant").fetchall():
+                mandant_split[str(mandant or "unbekannt")] = {
+                    "aktiveVertraege": int(n), "betragNetto": float(betrag or 0)}
+        except sqlite3.Error:
+            mandant_split = None
+        finally:
+            con.close()
+
+    if radar is None and mandant_split is None:
+        return _prov(
+            state="unavailable", source="wartungs-radar-latest.json + fsm.db · wartungsvertrag",
+            source_kind="file", workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Wartungs-Quellen nicht lesbar", stale_after=STALE["firma_wartung"],
+            note="Weder Wartungs-Radar-Snapshot noch wartungsvertrag lesbar.",
+            extra={"readOnly": True, "deepLink": _fsm_link("/wartung-plan")})
+    radar = radar or {}
+    n_faellig = radar.get("n_faellig")
+    n_termin = radar.get("n_termin")
+    n_angebot = radar.get("n_angebot_entwurf")
+    eur_gesamt = radar.get("eur_potenzial_gesamt")
+    observed = _parse_iso(radar.get("generated_utc"))
+
+    rows: List[Dict[str, Any]] = []
+    if isinstance(n_faellig, (int, float)):
+        rows.append({"icon": "calendar-clock", "accent": "amber" if n_faellig else "emerald",
+                     "title": "Fällig", "sub": "Wartung überfällig/jetzt fällig",
+                     "value": str(int(n_faellig))})
+    if isinstance(n_termin, (int, float)):
+        rows.append({"icon": "calendar-check", "accent": "cyan", "title": "Termin-Vorschläge",
+                     "sub": "im Vorlauf-Fenster", "value": str(int(n_termin))})
+    if isinstance(n_angebot, (int, float)):
+        rows.append({"icon": "file-plus", "accent": "violet", "title": "Angebots-Entwürfe",
+                     "sub": "Mangel-Signale erkannt", "value": str(int(n_angebot))})
+    if mandant_split:
+        for mandant in ("Delta", "Wensauer"):
+            info = mandant_split.get(mandant)
+            if info:
+                rows.append({"icon": "building-2", "accent": "neutral",
+                             "title": f"Verträge {mandant}", "sub": "aktive Wartungsverträge",
+                             "value": str(info["aktiveVertraege"])})
+
+    if not rows:
+        return _prov(
+            state="empty", source="wartungs-radar-latest.json + fsm.db · wartungsvertrag",
+            source_kind="file", workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Keine Wartungs-Signale", stale_after=STALE["firma_wartung"],
+            extra={"readOnly": True, "deepLink": _fsm_link("/wartung-plan")})
+    return _prov(
+        state=_freshness_state(observed, STALE["firma_wartung"]) if observed else "partial",
+        source="wartungs-radar-latest.json + fsm.db · wartungsvertrag (ro)", source_kind="file",
+        workspace="company_signal", permission=_FIRMA_PERM,
+        summary=(f"{int(n_faellig)} fällig · {int(n_termin)} Termine · {_eur(eur_gesamt)} Potenzial"
+                 if isinstance(n_faellig, (int, float)) and isinstance(n_termin, (int, float))
+                 else "Wartungs-Signale"),
+        observed_at=observed, stale_after=STALE["firma_wartung"], rows=rows,
+        note="Radar-Snapshot ~01:30 UTC; Mandant-Split aus wartungsvertrag (Delta/Wensauer sauber gepflegt).",
+        extra={"readOnly": True, "deepLink": _fsm_link("/wartung-plan"),
+               "nFaellig": n_faellig, "nTermin": n_termin, "nAngebotEntwurf": n_angebot,
+               "eurPotenzialGesamt": eur_gesamt, "mandantSplit": mandant_split})
+
+
+# --- (5) DOKUMENTE — Paperless :18075 REST (read-only) ---------------------
+# Reachability is probed unauthenticated; the live document count needs the API
+# token (env or SOPS). No token => honest 'partial' (reachable, no count) — never
+# a fabricated number. No direct DB access — the REST API is the clean read path.
+def firma_dokumente() -> Dict[str, Any]:
+    deep = {"url": f"{PAPERLESS_BASE}/documents/", "label": "In Paperless öffnen",
+            "navigationOnly": True, "externalSystem": "paperless"}
+    # Unauthenticated reachability: /api/ answers 200/302/401/403 when the
+    # service is up; only a connection failure (code None) is truly unavailable.
+    code, _ = _http_get_json(f"{PAPERLESS_BASE}/api/")
+    if code is None:
+        return _prov(
+            state="unavailable", source=f"Paperless {PAPERLESS_BASE}", source_kind="http",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Paperless nicht erreichbar", stale_after=STALE["firma_dokumente"],
+            note="GET /api/ nicht erreichbar.",
+            extra={"readOnly": True, "deepLink": deep})
+    token = _paperless_token()
+    if not token:
+        return _prov(
+            state="partial", source=f"Paperless {PAPERLESS_BASE} (/api/)", source_kind="http",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Paperless erreichbar · Zähler braucht Token",
+            stale_after=STALE["firma_dokumente"],
+            note=("Dokument-Zähler nur mit API-Token (env MIKAELOS_PAPERLESS_TOKEN "
+                  "oder SOPS paperless/API_TOKEN) — kein Token im Plugin-Kontext, "
+                  "daher ehrlich ohne Zahl."),
+            rows=[{"icon": "folder-check", "accent": "cyan", "title": "Paperless online",
+                   "sub": "OCR-/Beleg-Truth :18075", "value": "OK"}],
+            extra={"readOnly": True, "deepLink": deep})
+    # Authenticated: total document count + newest 'added' as freshness.
+    total_code, total_body = _http_get_json(
+        f"{PAPERLESS_BASE}/api/documents/?page_size=1", token=token, auth_scheme="Token")
+    recent_code, recent_body = _http_get_json(
+        f"{PAPERLESS_BASE}/api/documents/?ordering=-added&page_size=1", token=token, auth_scheme="Token")
+    if total_code != 200 or not isinstance(total_body, dict):
+        return _prov(
+            state="partial", source=f"Paperless {PAPERLESS_BASE}", source_kind="http",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Paperless erreichbar · Zähler nicht lesbar",
+            stale_after=STALE["firma_dokumente"],
+            note=f"GET /api/documents/ lieferte {total_code}.",
+            extra={"readOnly": True, "deepLink": deep})
+    count = total_body.get("count")
+    observed: Optional[datetime] = None
+    if isinstance(recent_body, dict):
+        results = recent_body.get("results")
+        if isinstance(results, list) and results and isinstance(results[0], dict):
+            observed = _parse_iso(results[0].get("added"))
+    rows = [{"icon": "folder-check", "accent": "cyan", "title": "Dokumente gesamt",
+             "sub": "Paperless OCR-/Beleg-Truth",
+             "value": (f"{int(count):,}".replace(",", ".") if isinstance(count, int) else "—")}]
+    if observed is not None:
+        rows.append({"icon": "clock", "accent": "amber", "title": "Zuletzt hinzugefügt",
+                     "sub": "Eingang", "value": observed.strftime("%d.%m. %H:%M")})
+    return _prov(
+        state=_freshness_state(observed, STALE["firma_dokumente"]) if observed else "fresh",
+        source=f"Paperless {PAPERLESS_BASE} · /api/documents/", source_kind="http",
+        workspace="company_signal", permission=_FIRMA_PERM,
+        summary=(f"{int(count):,}".replace(",", ".") + " Dokumente"
+                 if isinstance(count, int) else "Paperless online"),
+        observed_at=observed, stale_after=STALE["firma_dokumente"], rows=rows,
+        note="Read-only über Paperless-REST; kein direkter DB-Zugriff.",
+        extra={"readOnly": True, "deepLink": deep, "count": count})
+
+
+# --- (6) RUNTIME — systemd --user health + restic backup + open gates ------
+# Reuses the existing read paths: _systemd_counts() (services), the restic unit
+# state, and the SAME approvals reader as module_company() for "offene Gates".
+def _unit_active(unit: str) -> Optional[Dict[str, Any]]:
+    """Read one systemd --user unit's ActiveState/SubState + last-run result. None
+    if systemctl is unreachable. Read-only ``show`` — never start/stop."""
+    try:
+        out = subprocess.run(
+            ["systemctl", "--user", "show", unit,
+             "--property=ActiveState,SubState,Result,ExecMainExitTimestamp",
+             "--no-pager"],
+            capture_output=True, text=True, timeout=4)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    props: Dict[str, str] = {}
+    for line in out.stdout.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            props[k] = v
+    return props
+
+
+def firma_runtime() -> Dict[str, Any]:
+    counts = _systemd_counts()
+    backup = _unit_active(RESTIC_UNIT)
+    # Open gates: SAME approvals dir as module_company (do not duplicate the reader).
+    open_gates: Optional[int] = None
+    if APPROVALS_DIR.exists():
+        open_gates = 0
+        for path in glob.glob(str(APPROVALS_DIR / "appr_*.json")):
+            try:
+                c = json.loads(Path(path).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if str(c.get("status") or "").lower() in ("pending", ""):
+                open_gates += 1
+
+    if counts is None and backup is None and open_gates is None:
+        return _prov(
+            state="unavailable", source="systemd --user + restic + approvals", source_kind="subprocess",
+            workspace="company_signal", permission=_FIRMA_PERM,
+            summary="Runtime-Status nicht lesbar", stale_after=STALE["firma_runtime"],
+            note="Weder systemctl --user noch approvals erreichbar.",
+            extra={"readOnly": True, "deepLink": _fsm_link("/auftraege")})
+    rows: List[Dict[str, Any]] = []
+    if counts is not None:
+        ok = counts["failed"] == 0
+        rows.append({"icon": "server", "accent": "emerald" if ok else "amber",
+                     "title": "Dienste online", "sub": f"{counts['active']} aktiv · {counts['total']} gesamt",
+                     "status": "verified" if ok else "waiting",
+                     "statusLabel": "Stabil" if ok else f"{counts['failed']} gestört",
+                     "value": "OK" if ok else str(counts["failed"])})
+    if backup is not None:
+        result = backup.get("Result", "")
+        backup_ok = result in ("success", "")
+        rows.append({"icon": "database-backup", "accent": "emerald" if backup_ok else "amber",
+                     "title": "Backup (restic offsite)",
+                     "sub": RESTIC_UNIT + f" · {backup.get('ActiveState', '?')}",
+                     "value": "OK" if backup_ok else (result or "—")})
+    if open_gates is not None:
+        rows.append({"icon": "shield-check", "accent": "amber" if open_gates else "emerald",
+                     "title": "Offene Gates", "sub": "Approval-Cards · Operator entscheidet",
+                     "value": str(open_gates)})
+    failed = counts["failed"] if counts else 0
+    state = "partial" if (failed or backup is None or counts is None) else "fresh"
+    return _prov(
+        state=state, source="systemd --user + restic + /srv/hermes/approvals", source_kind="subprocess",
+        workspace="company_signal", permission=_FIRMA_PERM,
+        summary=((f"{counts['active']} Dienste aktiv" if counts else "Dienste unbekannt")
+                 + (f" · {failed} gestört" if failed else "")
+                 + (f" · {open_gates} Gate(s) offen" if open_gates else "")),
+        stale_after=STALE["firma_runtime"], rows=rows,
+        note=("Backup-Frische aus dem restic-Unit-Result; „Offene Gates“ nutzt denselben "
+              "Approvals-Lesepfad wie Firma-Signale — Entscheidung bleibt Operator-only."),
+        extra={"readOnly": True, "deepLink": _fsm_link("/auftraege"),
+               "services": counts, "backup": backup, "openGates": open_gates})
+
+
+# Bundle registry — id -> (title, reader). GET /firma/overview reads all six.
+_FIRMA_MODULES: List[Dict[str, Any]] = [
+    {"id": "auftraege", "title": "Aufträge", "icon": "clipboard-list", "reader": firma_auftraege},
+    {"id": "billing", "title": "Billing-Radar", "icon": "radar", "reader": firma_billing},
+    {"id": "dispo", "title": "Dispo", "icon": "route", "reader": firma_dispo},
+    {"id": "wartung", "title": "Wartung", "icon": "wrench", "reader": firma_wartung},
+    {"id": "dokumente", "title": "Dokumente", "icon": "folder-check", "reader": firma_dokumente},
+    {"id": "runtime", "title": "Runtime", "icon": "server", "reader": firma_runtime},
+]
+
+
+def firma_overview() -> Dict[str, Any]:
+    """All six company-signal cards, each with its own _prov envelope + deep-link.
+    A single card raising never breaks the bundle (honest per-card error)."""
+    cards: List[Dict[str, Any]] = []
+    for meta in _FIRMA_MODULES:
+        try:
+            payload = meta["reader"]()
+        except Exception as exc:  # noqa: BLE001 - one card must never break the bundle
+            payload = _prov(
+                state="error", source="unbekannt", source_kind="konzept",
+                workspace="company_signal", permission=_FIRMA_PERM,
+                summary="Lesefehler", note=f"Read-Fehler: {type(exc).__name__}",
+                extra={"readOnly": True})
+        cards.append({"id": meta["id"], "title": meta["title"], "icon": meta["icon"],
+                      "workspace": "company_signal", "readOnly": True, **payload})
+    return {
+        "workspace": "company_signal",
+        "readOnly": True,
+        "cards": cards,
+        "observedAt": _iso(_now()),
+        "note": ("Firma-Karten sind reine read-only Projektion (fsm.db/belege.db mode=ro, "
+                 "Paperless nur lesen). Writes laufen ausschließlich über Cockpit :18065."),
+    }
+
+
+# --- Approval detail — full raw field projection (read-only, no decide) -----
+# Extends the schema-poor list (/cockpit/approvals) with EVERY raw field of one
+# card: intent/idempotency/payload/preconditions hashes, expected_effect,
+# affected_objects, risks, evidence, proposed_execution, mandant, expires_at. A
+# field absent in the raw JSON is emitted explicitly null/[], never omitted, so
+# the UI shows an honest "nicht verfügbar" instead of a blank. The category is a
+# heuristic derived from gate_class+gate_reason+text and is flagged inferred.
+_FIRMA_CATEGORY_RULES = [
+    ("geld", "euro", ["book_invoice", "invoice", "rechnung", "sevdesk", "zahlung",
+                      "mahnung", "buchung", "geld", "betrag"]),
+    ("kunde", "user-round", ["kunde", "kunden", "mail", "versand", "angebot", "customer"]),
+    ("personal", "users", ["personal", "gehalt", "lohn", "mitarbeiter", "hr"]),
+    ("restart", "power", ["restart", "neustart", "reboot", "deploy", "prod-restart"]),
+    ("daten", "database", ["destructive_data", "delete", "löschen", "loeschen",
+                           "schema", "migration", "drop"]),
+    ("gerät", "cpu", ["device", "uptime", "command", "exec", "host"]),
+]
+
+
+def _firma_category(gate_class: str, gate_reason: str, text: str) -> Dict[str, Any]:
+    hay = f"{gate_class} {gate_reason} {text}".lower()
+    for label, icon, terms in _FIRMA_CATEGORY_RULES:
+        if any(t in hay for t in terms):
+            return {"label": label, "icon": icon, "inferred": True}
+    return {"label": "sonstiges", "icon": "shield-question", "inferred": True}
+
+
+def firma_approval_detail(card_id: str) -> Dict[str, Any]:
+    """Full read-only detail of ONE approval card. Never decides; the plugin has
+    no /approvals/decide path. Emits every raw field (null/[] when absent)."""
+    cid = (card_id or "").strip()
+    if not cid or "/" in cid or ".." in cid:
+        return {"ok": False, "found": False, "error": "invalid_id",
+                "note": "Keine gültige Card-ID.",
+                "_prov": {"workspace": "company_signal", "readOnly": True,
+                          "permission": _FIRMA_PERM, "source": "/srv/hermes/approvals",
+                          "observedAt": _iso(_now())}}
+    path = APPROVALS_DIR / f"{cid}.json"
+    try:
+        card = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"ok": True, "found": False, "id": cid,
+                "note": "Approval-Card nicht gefunden oder nicht lesbar.",
+                "_prov": {"workspace": "company_signal", "readOnly": True,
+                          "permission": _FIRMA_PERM, "source": "/srv/hermes/approvals",
+                          "sourceKind": "file", "observedAt": _iso(_now())}}
+    status = str(card.get("status") or "").lower() or "pending"
+    gate_class = str(card.get("gate_class") or "")
+    gate_reason = str(card.get("gate_reason") or "")
+    text = str(card.get("text") or card.get("action") or "")
+    proposed = card.get("proposed_execution") if isinstance(card.get("proposed_execution"), dict) else None
+    # Generic structured fields: prefer proposed_execution, else route summary.
+    structured: Optional[Dict[str, Any]] = None
+    if proposed:
+        structured = {k: proposed.get(k) for k in
+                      ("command", "device", "target", "execution_path_policy") if k in proposed}
+    elif isinstance(card.get("route"), dict):
+        r = card["route"]
+        structured = {k: r.get(k) for k in ("agent", "domain", "tool", "sensitivity") if r.get(k)} or None
+
+    def _lst(key: str) -> List[Any]:
+        v = card.get(key)
+        return v if isinstance(v, list) else []
+
+    return {
+        "ok": True,
+        "found": True,
+        "id": card.get("id") or cid,
+        "status": status,
+        "lifecycle": _CARD_STATUS_LIFECYCLE.get(status, "waiting_approval"),
+        "gateClass": card.get("gate_class"),
+        "gateReason": card.get("gate_reason"),
+        "category": _firma_category(gate_class, gate_reason, text),  # heuristic, inferred=True
+        "text": text or None,
+        "action": card.get("action"),
+        "source": card.get("source"),
+        "createdUtc": card.get("created_utc"),
+        "expiresAt": card.get("expires_at"),
+        "mandant": card.get("mandant"),
+        "targetSystem": card.get("target_system"),
+        # decidedBy/decidedUtc = WHO decided (present only AFTER a decision) — this
+        # is NOT the authorization field; the authority is always the Operator.
+        "decidedBy": card.get("decided_by"),
+        "decidedUtc": card.get("decided_utc"),
+        # Proof hashes — the audit of exactly which intent/payload is gated.
+        "intentSha256": card.get("intent_sha256"),
+        "idempotencyKey": card.get("idempotency_key"),
+        "payloadSha256": card.get("payload_sha256"),
+        "preconditionsSha256": card.get("preconditions_sha256"),
+        # Rich (new-schema) fields — explicit null/[] when the card is old-schema.
+        "expectedEffect": card.get("expected_effect"),
+        "affectedObjects": _lst("affected_objects"),
+        "risks": _lst("risks"),
+        "evidence": _lst("evidence"),
+        "structuredFields": structured,   # null when the card carries no fields
+        "proposedExecution": proposed,
+        # The decision path is a STATIC honest hint — the plugin never links or
+        # calls a decide endpoint; the Operator decides (Telegram Operator-Bot).
+        "decisionAuthority": "operator",
+        "decisionPath": "operator_telegram_bot",
+        "decisionNote": ("Entscheidung (genehmigen/ablehnen) nur durch dich (Operator) "
+                         "über das Approval-Center / den Operator-Bot. Dieses Plugin "
+                         "liest nur — es ruft nie /approvals/decide."),
+        "_prov": {
+            "state": _freshness_state(_parse_iso(card.get("created_utc")), STALE["company"]),
+            "source": "/srv/hermes/approvals", "sourceKind": "file",
+            "workspace": "company_signal", "permission": "Nur lesen (entscheidet nie)",
+            "readOnly": True, "observedAt": _iso(_now()),
+            "staleAfterSeconds": STALE["company"],
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # HTTP surface. GET reads are zero-write. The single POST route is propose-only:
 # dry-run previews with no network; a live submit hands the intent to the gated
@@ -2841,6 +3558,25 @@ def cockpit_approvals_route(includeDecided: bool = False) -> Dict[str, Any]:
     """READ-ONLY Approval-Center: offene Approval-Cards inkl. Intent-Hash
     (intent_sha256) + idempotency_key. Liest nur — nie /approvals/decide."""
     return cockpit_approvals(include_decided=bool(includeDecided))
+
+
+@router.get("/firma/overview")
+def firma_overview_route() -> Dict[str, Any]:
+    """READ-ONLY company-signal bundle: six FIRMA/Rise-L cards (Aufträge · Billing
+    · Dispo · Wartung · Dokumente · Runtime). Each carries a _prov envelope,
+    workspace=company_signal, an "im FSM öffnen" deep-link (navigation only) and
+    degrades to honest empty/unavailable. fsm.db/belege.db are read mode=ro only;
+    every write goes through Cockpit :18065. No decide, no controls."""
+    return firma_overview()
+
+
+@router.get("/firma/approvals/detail")
+def firma_approval_detail_route(id: str = "") -> Dict[str, Any]:
+    """READ-ONLY full detail of ONE approval card (intent/payload/preconditions
+    hashes, expected_effect, affected_objects, risks, evidence, inferred category,
+    status). Emits absent fields as explicit null/[]. Never calls /approvals/decide
+    — the decision is Operator-only; this only shows the gated path."""
+    return firma_approval_detail(card_id=id)
 
 
 @router.get("/review/session")
@@ -2913,6 +3649,20 @@ def health() -> Dict[str, Any]:
             "exams_json": str(EXAMS_PATH),
             "exams_readable": EXAMS_PATH.exists(),
             "brain_gateway": BRAIN_GATEWAY_BASE,
+        },
+        "firma": {
+            "workspace": "company_signal",
+            "readOnly": True,
+            "fsm_db": str(FSM_DB), "fsm_db_readable": FSM_DB.exists(),
+            "belege_db": str(BELEGE_DB), "belege_db_readable": BELEGE_DB.exists(),
+            "billing_kpi": str(BILLING_KPI_JSON), "billing_kpi_readable": BILLING_KPI_JSON.exists(),
+            "billing_radar": str(BILLING_RADAR_JSON), "billing_radar_readable": BILLING_RADAR_JSON.exists(),
+            "wartungs_radar": str(WARTUNGS_RADAR_JSON), "wartungs_radar_readable": WARTUNGS_RADAR_JSON.exists(),
+            "paperless_base": PAPERLESS_BASE,
+            "cockpit_deeplink_base": COCKPIT_BASE,
+            "sqliteMode": "ro",
+            "overview": "GET /firma/overview (6 Karten, read-only)",
+            "approvalDetail": "GET /firma/approvals/detail?id=<card> (read-only, kein decide)",
         },
         "coach": {
             "countdown": "GET /study/plan (exams.json × Anki, read-only)",

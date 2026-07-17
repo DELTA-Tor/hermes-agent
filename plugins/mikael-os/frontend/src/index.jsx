@@ -360,6 +360,12 @@ const STUDY_PROPOSE_API = PLUGIN_API + "/study/plan/propose";
 const KPI_API = PLUGIN_API + "/cockpit/kpi";
 const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
 const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
+// M2 — FIRMA/Rise-L read-only projection bundle + one approval card's full
+// detail. Both are GET-only, zero-write. The detail route NEVER decides — it
+// only projects the raw fields + the honest gated path; the plugin has no
+// /approvals/decide code path at all.
+const FIRMA_OVERVIEW_API = PLUGIN_API + "/firma/overview";
+const FIRMA_APPROVAL_DETAIL_API = PLUGIN_API + "/firma/approvals/detail";
 const POS = MODULES.reduce((acc, m) => { acc[m.id] = m.pos; return acc; }, {});
 
 // SDK-aware POST/GET. Prefer the host's authed transport; fall back to window
@@ -1479,7 +1485,8 @@ function MobileHome(props) {
     h(MobileCockpit, {
       byId: props.byId, workspace: props.workspace || "private", load: props.loadState,
       cockpit: props.cockpit || {}, cockpitLoad: props.cockpitLoad,
-      onGoJarvis: props.onGoJarvis, onGoTimeline: props.onGoTimeline, onGoApprovals: props.onGoApprovals,
+      onGoJarvis: props.onGoJarvis, onGoTimeline: props.onGoTimeline,
+      onGoApprovals: props.onGoApprovals, onGoFirma: props.onGoFirma,
     }),
     h(
       "div",
@@ -1853,8 +1860,38 @@ function MobileSheet(props) {
   );
 }
 
+// Full mobile screen for the two M2 drill-downs (FIRMA · Entscheidungen). Pushed
+// ABOVE the tab content — covering the tab bar + command dock — with a top-left
+// back-chevron, reusing the tab-suppression precedent rather than a bottom-sheet.
+function MobileScreen(props) {
+  const isFirma = props.kind === "firma";
+  return h("div", { className: "mos__mscreen", role: "region",
+      "aria-label": isFirma ? "Firma / Rise-L" : "Entscheidungen" },
+    h("header", { className: "mos__mscreen-top" },
+      h("button", { type: "button", className: "mos__mscreen-back", onClick: props.onBack, "aria-label": "Zurück zum Cockpit" },
+        h(Icon, { name: "chevron-left", size: 22 })),
+      h("span", { className: "mos__mscreen-titles" },
+        h("span", { className: "mos__mscreen-title" }, isFirma ? "Firma / Rise-L" : "Entscheidungen"),
+        h("span", { className: "mos__mscreen-sub" },
+          h(Icon, { name: "lock", size: 11 }),
+          isFirma ? "read-only Projektion · Deep-Links ins FSM" : "Entscheidung nur durch dich (Operator)"))),
+    h("main", { className: "mos__mscreen-body" },
+      isFirma
+        ? h(FirmaScene, { firma: props.firma, load: props.firmaLoad })
+        : h(ApprovalsScene, { approvals: props.approvals, load: props.cockpitLoad,
+            details: props.details, detailLoading: props.detailLoading, onLoadDetail: props.onLoadDetail })));
+}
+
 function MobileShell(props) {
   const tab = props.mobileTab;
+  if (props.mobileScreen) {
+    return h(MobileScreen, {
+      kind: props.mobileScreen, onBack: props.onScreenBack,
+      firma: props.firma, firmaLoad: props.firmaLoad,
+      approvals: props.cockpit && props.cockpit.approvals, cockpitLoad: props.cockpitLoad,
+      details: props.approvalDetails, detailLoading: props.approvalDetailLoading, onLoadDetail: props.onLoadDetail,
+    });
+  }
   // The command pill belongs to the Jarvis tab; the Timeline is a read view
   // (reference shows no input there), so the dock never overlaps its last card.
   const showDock = tab !== "jarvis" && tab !== "timeline";
@@ -1888,7 +1925,8 @@ function MobileShell(props) {
       stateIndex: props.stateIndex, greeting: props.greeting, onGoJarvis: props.onGoJarvis,
       workspace: props.workspace, loadState: props.loadState,
       cockpit: props.cockpit, cockpitLoad: props.cockpitLoad,
-      onChip: props.onChip, onGoTimeline: props.onGoTimeline, onGoApprovals: props.onGoApprovals,
+      onChip: props.onChip, onGoTimeline: props.onGoTimeline,
+      onGoApprovals: props.onGoApprovals, onGoFirma: props.onGoFirma,
     });
   }
   return h(
@@ -1956,7 +1994,11 @@ function TopBar(props) {
     h(
       "div",
       { className: "mos__topright" },
-      h(SceneSwitcher, { scene: props.scene, onScene: props.onScene }),
+      props.onBack
+        ? h("button", { type: "button", className: "mos__topback", onClick: props.onBack,
+            "aria-label": "Zurück zum Cockpit" },
+            h(Icon, { name: "chevron-left", size: 16 }), "Cockpit")
+        : h(SceneSwitcher, { scene: props.scene, onScene: props.onScene }),
       (function () {
         const ls = props.loadState;
         const liveN = props.liveCount || 0;
@@ -1978,7 +2020,10 @@ function TopBar(props) {
           h(Icon, { name: "flask-conical", size: 14 }),
           ls === "offline" ? "Quellen offline · Konzept" : "Konzeptdaten");
       })(),
-      h(
+      // Weather is DROPPED on the M2 drill-down scenes: there is no weather data
+      // source in the stack, so a "22° Klar" reading would be a fabricated value —
+      // the honesty doctrine forbids it. The clock (real, static) stays.
+      props.onBack ? null : h(
         "span",
         { className: "mos__topchip" },
         h(Icon, { name: "cloud-moon", size: 16 }),
@@ -3027,6 +3072,12 @@ function FirmaPanel(props) {
     h("header", { className: "mos__card-head" },
       h(Icon, { name: "server", size: 16 }),
       h("span", { className: "mos__card-title" }, "Firma / Rise-L"),
+      props.onOpen
+        ? h("button", { type: "button", className: "mos__card-open mos__card-open--icon", onClick: props.onOpen,
+            title: "Vollansicht — Firma/Rise-L (read-only Projektion, Deep-Links ins FSM)",
+            "aria-label": "Firma-Vollansicht öffnen" },
+            h(Icon, { name: "arrow-up-right", size: 15 }))
+        : null,
       h(ZonePip, { state: demo ? "konzept" : rst, observedAt: risel && risel._observedAt, source: risel && risel._source, note: risel && risel._note })),
     h("div", { className: "mos__firma-body" },
       load === "loading" && !risel
@@ -3066,48 +3117,343 @@ function ApprovalCard(props) {
         title: "Nur-Lese-Details. Freigabe/Ablehnung ausschließlich im Operator-Approval-Center (Hermes) — nie aus dem Plugin." },
         h(Icon, { name: "eye", size: 13 }), "Details")),
     open
-      ? h("dl", { className: "mos__appc-detail" },
-          h("div", null, h("dt", null, "Gate"), h("dd", null, (c.gateClass || "—") + (c.gateReason ? " · " + c.gateReason : ""))),
-          c.intentSha256 ? h("div", null, h("dt", null, "Intent-Hash"), h("dd", { className: "mos__mono" }, c.intentSha256)) : null,
-          c.idempotencyKey ? h("div", null, h("dt", null, "Idempotenz"), h("dd", { className: "mos__mono" }, c.idempotencyKey)) : null,
-          c.payloadSha256 ? h("div", null, h("dt", null, "Payload-Hash"), h("dd", { className: "mos__mono" }, c.payloadSha256)) : null,
-          h("div", { className: "mos__appc-decidenote" }, h(Icon, { name: "shield-check", size: 12 }),
-            "Entscheidung nur im Operator-Approval-Center. Dieses Cockpit liest ausschließlich."))
+      ? (props.scene
+          // Scene mode (Entscheidungen-Center): full read-only projection from
+          // /firma/approvals/detail — BETROFFENE FELDER + Effekt + Hashes + the
+          // gated (never-executed) action row. Never calls /approvals/decide.
+          ? h(ApprovalDetailRich, { card: c, detail: props.detail, loading: props.detailLoading })
+          // Cockpit mode (M1, unchanged): the compact hash <dl>.
+          : h("dl", { className: "mos__appc-detail" },
+              h("div", null, h("dt", null, "Gate"), h("dd", null, (c.gateClass || "—") + (c.gateReason ? " · " + c.gateReason : ""))),
+              c.intentSha256 ? h("div", null, h("dt", null, "Intent-Hash"), h("dd", { className: "mos__mono" }, c.intentSha256)) : null,
+              c.idempotencyKey ? h("div", null, h("dt", null, "Idempotenz"), h("dd", { className: "mos__mono" }, c.idempotencyKey)) : null,
+              c.payloadSha256 ? h("div", null, h("dt", null, "Payload-Hash"), h("dd", { className: "mos__mono" }, c.payloadSha256)) : null,
+              h("div", { className: "mos__appc-decidenote" }, h(Icon, { name: "shield-check", size: 12 }),
+                "Entscheidung nur im Operator-Approval-Center. Dieses Cockpit liest ausschließlich.")))
       : null);
+}
+
+// Humanize the structuredFields keys the backend emits (proposed_execution /
+// route summary) into short German labels. Unknown keys fall back verbatim.
+const APPC_FIELD_LABELS = {
+  command: "Befehl", device: "Gerät", target: "Ziel",
+  execution_path_policy: "Ausführungspfad", agent: "Agent", domain: "Domäne",
+  tool: "Werkzeug", sensitivity: "Sensitivität",
+  rechnungsbetrag: "Rechnungsbetrag", empfaenger: "Empfänger",
+  zahlungsziel: "Zahlungsziel", buchungskonto: "Buchungskonto",
+};
+function _appcFieldLabel(k) {
+  return APPC_FIELD_LABELS[k] || String(k).replace(/_/g, " ");
+}
+
+// Full read-only detail of ONE approval card (Entscheidungen-Center scene). Every
+// block renders only when the backend actually carried it — a missing field is
+// honestly omitted, never inferred from the card text. The action row is gated:
+// it renders GENEHMIGEN/ABLEHNEN ONLY as deep-links into the Operator's real
+// decide surface IF (and only if) the backend supplies those URLs; it never
+// calls /approvals/decide and never fabricates an affordance. The lock caption
+// is permanently visible on the expanded card.
+function ApprovalDetailRich(props) {
+  const d = props.detail;
+  if (props.loading || !d) {
+    return h("div", { className: "mos__apd" },
+      h("div", { className: "mos__skrow" }),
+      h("div", { className: "mos__skrow" }));
+  }
+  if (d.ok === false || d.found === false) {
+    return h("div", { className: "mos__apd" },
+      h(ZoneEmpty, { state: "unavailable", icon: "inbox",
+        title: "Detail nicht verfügbar", note: d.note || "Approval-Card nicht lesbar." }),
+      h("div", { className: "mos__apd-lock" }, h(Icon, { name: "lock", size: 13 }),
+        h("span", null, "Entscheidung nur durch dich (Operator)")));
+  }
+  const c = props.card;
+  const fields = (d.structuredFields && typeof d.structuredFields === "object")
+    ? Object.keys(d.structuredFields).filter((k) => d.structuredFields[k] != null && d.structuredFields[k] !== "")
+    : [];
+  const affected = Array.isArray(d.affectedObjects) ? d.affectedObjects : [];
+  const risks = Array.isArray(d.risks) ? d.risks : [];
+  const evidence = Array.isArray(d.evidence) ? d.evidence : [];
+  const gateClass = d.gateClass || (c && c.gateClass) || "—";
+  const gateReason = d.gateReason || (c && c.gateReason);
+  const intent = d.intentSha256 || (c && c.intentSha256);
+  // Gated action links — a real decide surface is used ONLY if the backend
+  // explicitly supplies it; otherwise the control renders visibly-locked.
+  const approveUrl = d.approveUrl || (d.decideUrl && d.decideUrl.approve) || null;
+  const rejectUrl = d.rejectUrl || (d.decideUrl && d.decideUrl.reject) || null;
+  return h("div", { className: "mos__apd" },
+    // Expected effect — the plain-language "what will happen".
+    d.expectedEffect
+      ? h("div", { className: "mos__apd-effect" },
+          h("span", { className: "mos__apd-effect-k" }, h(Icon, { name: "zap", size: 12 }), "Erwarteter Effekt"),
+          h("span", { className: "mos__apd-effect-v" }, d.expectedEffect))
+      : null,
+    // BETROFFENE FELDER — the structured field table (only if the card carried one).
+    fields.length
+      ? h("div", { className: "mos__apd-sec" },
+          h("span", { className: "mos__apd-sec-h" }, "Betroffene Felder"),
+          h("dl", { className: "mos__apd-fields" },
+            fields.map((k) => h("div", { key: k, className: "mos__apd-field" },
+              h("dt", null, _appcFieldLabel(k)),
+              h("dd", null, String(d.structuredFields[k]))))))
+      : null,
+    // Affected objects — chips (adress-first identity where present).
+    affected.length
+      ? h("div", { className: "mos__apd-sec" },
+          h("span", { className: "mos__apd-sec-h" }, "Betroffene Objekte"),
+          h("div", { className: "mos__apd-chips" },
+            affected.map((o, i) => h("span", { key: i, className: "mos__apd-chip" },
+              h(Icon, { name: "building-2", size: 11 }), String(typeof o === "object" ? (o.label || o.id || JSON.stringify(o)) : o)))))
+      : null,
+    // Risks — honest amber list.
+    risks.length
+      ? h("div", { className: "mos__apd-sec" },
+          h("span", { className: "mos__apd-sec-h" }, "Risiken"),
+          h("ul", { className: "mos__apd-list mos__apd-list--risk" },
+            risks.map((r, i) => h("li", { key: i },
+              h(Icon, { name: "triangle-alert", size: 12 }),
+              String(typeof r === "object" ? (r.text || r.detail || JSON.stringify(r)) : r)))))
+      : null,
+    // Evidence — read-only provenance list.
+    evidence.length
+      ? h("div", { className: "mos__apd-sec" },
+          h("span", { className: "mos__apd-sec-h" }, "Belege / Evidenz"),
+          h("ul", { className: "mos__apd-list" },
+            evidence.map((e, i) => h("li", { key: i },
+              h(Icon, { name: "file-text", size: 12 }),
+              String(typeof e === "object" ? (e.text || e.ref || e.source || JSON.stringify(e)) : e)))))
+      : null,
+    // Proof hashes — the audit of exactly which intent/payload is gated.
+    h("dl", { className: "mos__appc-detail mos__apd-hashes" },
+      h("div", null, h("dt", null, "Gate"), h("dd", null, gateClass + (gateReason ? " · " + gateReason : ""))),
+      d.status ? h("div", null, h("dt", null, "Status"), h("dd", null, d.status + (d.expiresAt ? " · läuft ab " + d.expiresAt : ""))) : null,
+      intent ? h("div", null, h("dt", null, "Intent-Hash"), h("dd", { className: "mos__mono" }, intent)) : null,
+      d.idempotencyKey ? h("div", null, h("dt", null, "Idempotenz"), h("dd", { className: "mos__mono" }, d.idempotencyKey)) : null,
+      d.payloadSha256 ? h("div", null, h("dt", null, "Payload-Hash"), h("dd", { className: "mos__mono" }, d.payloadSha256)) : null,
+      d.preconditionsSha256 ? h("div", null, h("dt", null, "Vorbedingungen"), h("dd", { className: "mos__mono" }, d.preconditionsSha256)) : null),
+    // Gated action row — ALWAYS visible, so the "gegatete Aktions-Row" pattern is
+    // legible (visible-but-locked) exactly as the mockup shows. When the backend
+    // supplies a decide surface each button is a NAVIGATION-only deep-link into
+    // the Operator's Hermes decide UI (new tab); when absent it renders visibly
+    // DISABLED. Never a working control, never /approvals/decide, never a
+    // fabricated navigation target.
+    h("div", { className: "mos__apd-actions", role: "group", "aria-label": "Entscheidung — nur Operator" },
+      h(GatedActionButton, { url: approveUrl, label: "Genehmigen", icon: "circle-check-big", variant: "approve" }),
+      h(GatedActionButton, { url: rejectUrl, label: "Ablehnen", icon: "octagon-alert", variant: "reject" })),
+    // Permanent lock caption — decision authority is the Operator, always visible.
+    h("div", { className: "mos__apd-lock" },
+      h(Icon, { name: "lock", size: 13 }),
+      h("span", null, d.decisionNote
+        || "Entscheidung (genehmigen/ablehnen) nur durch dich (Operator) über das Approval-Center / den Operator-Bot. Dieses Plugin liest nur — es ruft nie /approvals/decide.")));
+}
+
+// A pure-navigation deep-link. Renders NOTHING when no URL is supplied (never a
+// disabled ghost) — the frontend never synthesizes a target, so an absent URL is
+// an honest omission. No onClick side effect beyond navigating a new tab.
+function DeepLinkButton(props) {
+  const link = props.link;
+  if (!link || !link.url) return null;
+  return h("a", {
+    className: "mos__deeplink" + (props.variant ? " mos__deeplink--" + props.variant : ""),
+    href: link.url, target: "_blank", rel: "noopener noreferrer",
+    title: link.label || props.label || "Im FSM öffnen",
+  },
+    props.icon ? h(Icon, { name: props.icon, size: 13 }) : null,
+    h("span", null, props.label || link.label || "im FSM öffnen"),
+    h(Icon, { name: "arrow-up-right", size: 12 }));
+}
+
+// One approval action control (Genehmigen / Ablehnen). If — and only if — the
+// backend supplied a real decide URL, it is a NAVIGATION-only deep-link into the
+// Operator's Hermes decide surface (new tab, no onClick side effect, never
+// /approvals/decide). Without a URL it renders as a visibly DISABLED, locked
+// button: the gated action row stays legible (sichtbar-aber-gesperrt) without
+// ever becoming a working control or fabricating a target. The permanent lock
+// caption below the row names the Operator as the sole decision authority.
+function GatedActionButton(props) {
+  const cls = "mos__deeplink mos__deeplink--" + props.variant;
+  if (props.url) {
+    return h("a", {
+      className: cls, href: props.url, target: "_blank", rel: "noopener noreferrer",
+      title: props.label + " im Operator-Approval-Center (Hermes) öffnen — Entscheidung dort, nie im Plugin.",
+    },
+      h(Icon, { name: props.icon, size: 13 }),
+      h("span", null, props.label),
+      h(Icon, { name: "arrow-up-right", size: 12 }));
+  }
+  return h("button", {
+    type: "button", disabled: true, "aria-disabled": "true",
+    className: cls + " is-gated",
+    title: "Nur der Operator entscheidet — im Approval-Center (Hermes) bzw. über den Operator-Bot. Dieses Plugin kann nicht genehmigen/ablehnen.",
+  },
+    h(Icon, { name: props.icon, size: 13 }),
+    h("span", null, props.label),
+    h(Icon, { name: "lock", size: 12 }));
 }
 
 const APPC_MAX = 4;
 function ApprovalCenter(props) {
-  const a = props.approvals, load = props.load;
+  const a = props.approvals, load = props.load, scene = props.scene;
   const [openId, setOpenId] = useState(null);
   const [showAll, setShowAll] = useState(false);
   const st = a ? (a.state || "empty") : (load === "loading" ? "loading" : "unavailable");
   const cards = (a && Array.isArray(a.cards)) ? a.cards : [];
   const pending = a ? (a.pending != null ? a.pending : cards.length) : 0;
+  // Scene (Entscheidungen-Center): never truncate + auto-expand the most urgent
+  // (first) card once on entry, loading its detail. Cockpit (M1): unchanged.
+  const initRef = useRef(false);
+  const onLoadDetail = props.onLoadDetail;
+  useEffect(() => {
+    if (!scene || initRef.current || !cards.length) return;
+    initRef.current = true;
+    const firstId = cards[0].id;
+    setOpenId(firstId);
+    if (onLoadDetail) onLoadDetail(firstId);
+  }, [scene, cards, onLoadDetail]);
   const max = props.compact ? 1 : APPC_MAX;
-  const shown = showAll ? cards : cards.slice(0, max);
+  const shown = (scene || showAll) ? cards : cards.slice(0, max);
   const extra = cards.length - shown.length;
-  const onToggle = useCallback((id) => setOpenId((p) => (p === id ? null : id)), []);
+  const onToggle = useCallback((id) => {
+    setOpenId((p) => {
+      const next = p === id ? null : id;
+      if (next && scene && onLoadDetail) onLoadDetail(next);
+      return next;
+    });
+  }, [scene, onLoadDetail]);
+  const body = load === "loading" && !a
+    ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" }))
+    : cards.length
+      ? [
+          ...shown.map((c) => h(ApprovalCard, { key: c.id, card: c, open: openId === c.id, onToggle: onToggle,
+            scene: scene, detail: scene && props.details ? props.details[c.id] : undefined,
+            detailLoading: scene && props.detailLoading ? !!props.detailLoading[c.id] : false })),
+          (extra > 0 && !scene)
+            ? h("button", { key: "more", type: "button", className: "mos__appc-more", onClick: props.compact ? props.onMore : () => setShowAll(true) },
+                h(Icon, { name: "ellipsis", size: 14 }), "+" + extra + " weitere")
+            : null,
+        ]
+      : h(ZoneEmpty, { state: st, icon: "inbox",
+          title: st === "unavailable" || st === "error" ? "Approval-Quelle nicht erreichbar" : "Keine offenen Freigaben",
+          note: a && a.note });
+  // In the scene the card list is the whole surface (no card chrome/header — the
+  // scene provides its own H1); in the cockpit it stays a bordered zone card.
+  if (scene) {
+    return h("div", { className: "mos__appc mos__appc--scene", role: "list", "aria-label": "Offene Freigaben" }, body);
+  }
   return h("section", { className: "mos__card mos__appc" + (props.flash ? " is-flash" : ""), ref: props.innerRef, id: "mos-approvals" },
     h("header", { className: "mos__card-head" },
       h(Icon, { name: "shield-check", size: 16 }),
       h("span", { className: "mos__card-title" }, "Freigaben"),
       pending > 0 ? h("span", { className: "mos__appc-count" }, pending) : null,
+      props.onOpen
+        ? h("button", { type: "button", className: "mos__card-open mos__card-open--icon", onClick: props.onOpen,
+            title: "Entscheidungen-Center öffnen (Intent-Hash, Effekt-Felder · Entscheidung nur Operator)",
+            "aria-label": "Entscheidungen-Center öffnen" },
+            h(Icon, { name: "arrow-up-right", size: 15 }))
+        : null,
       h(ZonePip, { state: st, observedAt: a && a.observedAt, source: a && a.source, note: a && a.note })),
-    h("div", { className: "mos__appc-body" },
-      load === "loading" && !a
-        ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" }))
-        : cards.length
-          ? [
-              ...shown.map((c) => h(ApprovalCard, { key: c.id, card: c, open: openId === c.id, onToggle: onToggle })),
-              extra > 0
-                ? h("button", { key: "more", type: "button", className: "mos__appc-more", onClick: props.compact ? props.onMore : () => setShowAll(true) },
-                    h(Icon, { name: "ellipsis", size: 14 }), "+" + extra + " weitere")
-                : null,
-            ]
-          : h(ZoneEmpty, { state: st, icon: "inbox",
-              title: st === "unavailable" || st === "error" ? "Approval-Quelle nicht erreichbar" : "Keine offenen Freigaben",
-              note: a && a.note })));
+    h("div", { className: "mos__appc-body" }, body));
+}
+
+// --- FIRMA / Rise-L full-card + scene (M2) ---------------------------------
+// A full-size read-only projection card for one company-signal domain. Body
+// rows reuse the exact FirmaMetric row vocabulary the backend already emits
+// ({icon,accent,title,sub,value|status/statusLabel}); footer is the generalized
+// mos__firma-foot provenance line ({source,observedAt,permission}); the deep-
+// link ("im FSM öffnen") renders ONLY when the backend supplied a URL.
+function FirmaDomainCard(props) {
+  const card = props.card || {};
+  const st = card.state || (props.load === "loading" ? "loading" : "unavailable");
+  const rows = Array.isArray(card.rows) ? card.rows : [];
+  const bad = st === "unavailable" || st === "error";
+  const empty = st === "empty";
+  const fresh = card.observedAt ? freshnessLabel(card.observedAt) : null;
+  const deep = card.deepLink && card.deepLink.url ? card.deepLink : null;
+  return h("section", { className: "mos__card mos__fdcard" },
+    h("header", { className: "mos__card-head mos__fdcard-head" },
+      h(Icon, { name: card.icon || "server", size: 16 }),
+      h("span", { className: "mos__card-title" }, card.title || card.id),
+      deep
+        ? h(DeepLinkButton, { link: deep, label: deep.label || "im FSM öffnen",
+            icon: deep.externalSystem === "paperless" ? "folder-open" : "external-link" })
+        : null,
+      h(ZonePip, { state: st, observedAt: card.observedAt, source: card.source, note: card.note })),
+    h("div", { className: "mos__fdcard-body" },
+      card.summary && !bad
+        ? h("div", { className: "mos__fdcard-summary" }, card.summary)
+        : null,
+      props.load === "loading" && !props.card
+        ? [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" }))
+        : (bad || empty || !rows.length)
+          ? h(ZoneEmpty, { state: bad ? st : "empty", icon: card.icon || "inbox",
+              title: bad ? (card.summary || "Quelle nicht erreichbar") : (card.summary || "Keine Signale"),
+              note: card.note })
+          : h("div", { className: "mos__fdcard-rows" },
+              rows.map((r, i) => h(FirmaMetric, { key: i, row: r })))),
+    h("footer", { className: "mos__firma-foot mos__fdcard-foot" },
+      h(Icon, { name: "lock", size: 12 }),
+      h("span", { className: "mos__firma-foot-t" },
+        (card.source ? "Quelle: " + card.source : "Firma-Signal")
+        + (fresh ? " · Stand: " + fresh : "")),
+      h("span", { className: "mos__firma-foot-ro" }, card.permission ? "Nur lesen" : "Nur lesen")));
+}
+
+// Scene A — FIRMA / Rise-L: the 6-card company-signal projection grid.
+const FIRMA_CARD_ORDER = ["auftraege", "billing", "dispo", "wartung", "dokumente", "runtime"];
+function FirmaScene(props) {
+  const ov = props.firma;
+  const load = props.load;
+  const raw = (ov && Array.isArray(ov.cards)) ? ov.cards : [];
+  const byId = {};
+  raw.forEach((c) => { byId[c.id] = c; });
+  const ordered = FIRMA_CARD_ORDER.map((id) => byId[id]).filter(Boolean);
+  const cards = ordered.length ? ordered : raw;
+  const offline = load === "offline" || (!ov && load !== "loading");
+  return h("div", { className: "mos__firmascene" },
+    offline && !cards.length
+      ? h(ZoneEmpty, { state: "unavailable", icon: "server",
+          title: "Firma-Projektion nicht erreichbar",
+          note: "Read-Modelle offline — die Karten erscheinen, sobald /firma/overview wieder antwortet." })
+      : h("div", { className: "mos__firmagrid" },
+          (cards.length ? cards : FIRMA_CARD_ORDER.map((id) => ({ id }))).map((c) =>
+            h(FirmaDomainCard, { key: c.id, card: (ov ? c : null), load: load }))));
+}
+
+// Scene B — Entscheidungen: SummaryRail (category tally) + full card list.
+// The tally reuses the existing gateCategory() — zero new categorization logic.
+const SUMMARY_BUCKETS = [
+  { key: "Geld", icon: "banknote", tone: "amber" },
+  { key: "Kunde", icon: "building-2", tone: "blue" },
+  { key: "Daten", icon: "octagon-alert", tone: "red" },
+  { key: "Personal", icon: "user", tone: "violet" },
+];
+function SummaryRail(props) {
+  const cards = props.cards || [];
+  const counts = {};
+  cards.forEach((c) => {
+    const cat = gateCategory(c.gateClass, c.gateReason, c.text);
+    counts[cat.label] = (counts[cat.label] || 0) + 1;
+  });
+  const total = cards.length;
+  return h("aside", { className: "mos__sumrail" },
+    h("div", { className: "mos__sumrail-head" },
+      h("b", null, total),
+      h("span", null, "offen · nach Kategorie")),
+    h("div", { className: "mos__sumrail-list" },
+      SUMMARY_BUCKETS.map((b) => h("div", { key: b.key, className: "mos__sumrail-row mos__sumrail-row--" + b.tone + ((counts[b.key] || 0) ? "" : " is-zero") },
+        h("span", { className: "mos__sumrail-ico" }, h(Icon, { name: b.icon, size: 14 })),
+        h("span", { className: "mos__sumrail-k" }, b.key),
+        h("span", { className: "mos__sumrail-n" }, counts[b.key] || 0)))));
+}
+
+function ApprovalsScene(props) {
+  const a = props.approvals;
+  const cards = (a && Array.isArray(a.cards)) ? a.cards : [];
+  return h("div", { className: "mos__apscene" },
+    h(SummaryRail, { cards: cards }),
+    h("div", { className: "mos__apscene-main" },
+      h(ApprovalCenter, { approvals: a, load: props.load, scene: true,
+        details: props.details, detailLoading: props.detailLoading, onLoadDetail: props.onLoadDetail })));
 }
 
 // --- Cockpit desktop assembly (3-column grid) ---------------------------------
@@ -3121,9 +3467,9 @@ function CockpitScene(props) {
       h(JarvisLive, { jarvis: props.cockpit.jarvis, load: props.cockpitLoad, workspace: props.workspace,
         stateIndex: props.stateIndex, greeting: props.greeting, onPropose: props.onPropose, onChip: props.onChip })),
     h("aside", { className: "mos__ckpt-col mos__ckpt-right" },
-      h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load }),
+      h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load, onOpen: props.onFirma }),
       h(ApprovalCenter, { approvals: props.cockpit.approvals, load: props.cockpitLoad,
-        flash: props.approvalsFlash, innerRef: props.approvalsRef })));
+        flash: props.approvalsFlash, innerRef: props.approvalsRef, onOpen: props.onApprovals })));
 }
 
 // --- Mobile cockpit stack (inside the existing home tab) -----------------------
@@ -3155,9 +3501,10 @@ function MobileCockpit(props) {
     h(AgendaRailMobile, { workspace: props.workspace, todayModule: props.byId.today,
       engineeringModule: props.byId.engineering, load: props.load, onMore: props.onGoTimeline }),
     // Firma compact.
-    h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load }),
+    h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load, onOpen: props.onGoFirma }),
     // Approvals — compact (max 1 + counter → deep link).
-    h(ApprovalCenter, { approvals: c.approvals, load: props.cockpitLoad, compact: true, onMore: props.onGoApprovals }));
+    h(ApprovalCenter, { approvals: c.approvals, load: props.cockpitLoad, compact: true,
+      onMore: props.onGoApprovals, onOpen: props.onGoApprovals }));
 }
 // Mobile agenda = the desktop AgendaRail capped at 3 rows.
 function AgendaRailMobile(props) {
@@ -3189,9 +3536,12 @@ function MikaelOS() {
   const [command, setCommand] = useState("");
   // Phase 4 — desktop scene toggle (Konstellation ⇄ Timeline), iOS shell switch,
   // active mobile tab, and the mobile focus bottom-sheet (open + detent index).
-  const [scene, setScene] = useState("cockpit"); // cockpit (default) | constellation | timeline
+  const [scene, setScene] = useState("cockpit"); // cockpit (default) | constellation | timeline | firma | approvals
   const isMobile = useMediaQuery("(max-width: 430px)");
   const [mobileTab, setMobileTab] = useState("home"); // home | timeline | jarvis | module | profil
+  // M2 — mobile full-screen drill-down (null | "firma" | "approvals"), pushed
+  // above the tab content (hides tab bar + dock) with a back-chevron.
+  const [mobileScreen, setMobileScreen] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetDetent, setSheetDetent] = useState(1); // index into SHEET_DETENTS
   // Live read-model overview (null until the plugin adapter responds; a failed
@@ -3203,6 +3553,13 @@ function MikaelOS() {
   // on its own — a missing payload shows unavailable, never a fabricated value.
   const [cockpit, setCockpit] = useState({ kpi: null, jarvis: null, approvals: null });
   const [cockpitLoad, setCockpitLoad] = useState("loading"); // loading | ready | offline
+  // M2 — FIRMA/Rise-L overview bundle (/firma/overview) + lazily-loaded per-card
+  // approval detail (/firma/approvals/detail?id=). Read-only; a failed fetch
+  // leaves the honest offline/unavailable state — never a fabricated value.
+  const [firma, setFirma] = useState(null);
+  const [firmaLoad, setFirmaLoad] = useState("loading"); // loading | ready | offline
+  const [approvalDetails, setApprovalDetails] = useState({});      // id -> detail payload
+  const [approvalDetailLoading, setApprovalDetailLoading] = useState({}); // id -> bool
   // Focus flash for the Approval-Center when the Gates-KPI is clicked (§6).
   const [approvalsFlash, setApprovalsFlash] = useState(false);
   const approvalsRef = useRef(null);
@@ -3240,16 +3597,43 @@ function MikaelOS() {
         setCockpitLoad([k, j, a].some((r) => r.status === "fulfilled") ? "ready" : "offline");
       });
   }, []);
-  useEffect(() => { loadOverview(); loadCockpit(); }, [loadOverview, loadCockpit]);
-  // Reconnect: on regained focus / online, re-read both models so a returning
+  // M2 — read the FIRMA/Rise-L bundle. Same honesty contract: any error → the
+  // scene shows an honest offline/unavailable state; never a fabricated value.
+  const loadFirma = useCallback(() => {
+    setFirmaLoad((p) => (p === "ready" ? "ready" : "loading"));
+    sdkGet(FIRMA_OVERVIEW_API)
+      .then((data) => { setFirma(data); setFirmaLoad("ready"); })
+      .catch(() => { setFirmaLoad((p) => (p === "ready" ? "ready" : "offline")); });
+  }, []);
+  // Lazily load ONE approval card's full detail (Entscheidungen-Center). Read-
+  // only; never decides. Cached per id; a re-open re-uses the cache.
+  const loadApprovalDetail = useCallback((id) => {
+    if (!id) return;
+    setApprovalDetails((prev) => {
+      if (prev[id]) return prev; // already loaded — keep cache
+      setApprovalDetailLoading((l) => ({ ...l, [id]: true }));
+      sdkGet(FIRMA_APPROVAL_DETAIL_API + "?id=" + encodeURIComponent(id))
+        .then((data) => {
+          setApprovalDetails((p) => ({ ...p, [id]: data }));
+          setApprovalDetailLoading((l) => ({ ...l, [id]: false }));
+        })
+        .catch(() => {
+          setApprovalDetails((p) => ({ ...p, [id]: { ok: false, found: false, note: "Detail nicht erreichbar." } }));
+          setApprovalDetailLoading((l) => ({ ...l, [id]: false }));
+        });
+      return prev;
+    });
+  }, []);
+  useEffect(() => { loadOverview(); loadCockpit(); loadFirma(); }, [loadOverview, loadCockpit, loadFirma]);
+  // Reconnect: on regained focus / online, re-read the models so a returning
   // session sees the live state at once (no stale snapshot lingering).
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const reload = () => { loadOverview(); loadCockpit(); };
+    const reload = () => { loadOverview(); loadCockpit(); loadFirma(); };
     window.addEventListener("online", reload);
     window.addEventListener("focus", reload);
     return () => { window.removeEventListener("online", reload); window.removeEventListener("focus", reload); };
-  }, [loadOverview, loadCockpit]);
+  }, [loadOverview, loadCockpit, loadFirma]);
 
   const liveById = useMemo(() => indexLive(live), [live]);
   const loadingModules = loadState === "loading";
@@ -3617,18 +4001,19 @@ function MikaelOS() {
   useIdleTimer(scene === "cockpit" && stateIndex === 0 && !isMobile, 90000,
     useCallback(() => setScene("constellation"), []));
 
-  // Gates-KPI click → focus the Approval-Center (scroll + brief flash), never a
-  // modal, never a decision. Chips in the Jarvis greeting just pre-fill the box.
-  const onGates = useCallback(() => {
-    const el = approvalsRef.current;
-    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
-    setApprovalsFlash(true);
-    window.setTimeout(() => setApprovalsFlash(false), 1400);
-  }, []);
+  // M2 navigation — the Gates-KPI, the FIRMA zone header and the Approval zone
+  // header all converge on the dedicated peer scenes (no modal, never a decision).
+  const onGates = useCallback(() => setScene("approvals"), []);
+  const onFirma = useCallback(() => setScene("firma"), []);
+  const onApprovals = useCallback(() => setScene("approvals"), []);
+  const onSceneBack = useCallback(() => setScene("cockpit"), []);
   const onChip = useCallback((label) => { setCommand(label); if (inputRef.current) inputRef.current.focus(); }, []);
   const onAgendaMore = useCallback(() => setScene("timeline"), []);
   const onGoTimeline = useCallback(() => { if (isMobile) setMobileTab("timeline"); else setScene("timeline"); }, [isMobile]);
-  const onGoApprovals = useCallback(() => { setMobileTab("home"); }, []);
+  // Mobile: the FIRMA / Approval entry points push a full mobile screen.
+  const onGoApprovals = useCallback(() => { setMobileScreen("approvals"); }, []);
+  const onGoFirma = useCallback(() => { setMobileScreen("firma"); }, []);
+  const onScreenBack = useCallback(() => { setMobileScreen(null); }, []);
 
   // iOS shell — a distinct vertical scene stack (not a shrunken desktop). All
   // state (focusId, stateIndex, command, live read-models) is shared, so opening
@@ -3652,7 +4037,10 @@ function MikaelOS() {
         onSheetDetent: setSheetDetent, onSheetClose: closeSheet,
         onPropose: proposeOpen, onReview: reviewOpen, onCoach: coachOpen,
         cockpit: cockpit, cockpitLoad: cockpitLoad,
-        onChip: onChip, onGoTimeline: onGoTimeline, onGoApprovals: onGoApprovals,
+        onChip: onChip, onGoTimeline: onGoTimeline, onGoApprovals: onGoApprovals, onGoFirma: onGoFirma,
+        mobileScreen: mobileScreen, onScreenBack: onScreenBack,
+        firma: firma, firmaLoad: firmaLoad,
+        approvalDetails: approvalDetails, approvalDetailLoading: approvalDetailLoading, onLoadDetail: loadApprovalDetail,
       }),
       h(ProposeFlow, {
         state: propose, onObjective: proposeObjective, onPreview: proposePreview,
@@ -3722,9 +4110,10 @@ function MikaelOS() {
     ),
   );
 
+  const isBackScene = scene === "firma" || scene === "approvals";
   return h(
     "div",
-    { className: "mos" + (scene === "timeline" ? " mos--timeline" : scene === "cockpit" ? " mos--cockpit" : "") },
+    { className: "mos" + (scene === "timeline" ? " mos--timeline" : scene === "cockpit" ? " mos--cockpit" : isBackScene ? " mos--cockpit mos--" + scene : "") },
     h("div", { className: "mos__atmosphere", "aria-hidden": "true" }),
     h("div", { className: "mos__atmosphere-veil", "aria-hidden": "true" }),
     h(LiveAnnouncer, { message: announce }),
@@ -3732,7 +4121,8 @@ function MikaelOS() {
       "main",
       { className: "mos__shell", role: "main" },
       h("h1", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
-      h(TopBar, { loadState: loadState, liveCount: liveCount, total: viewModules.length, scene: scene, onScene: setScene }),
+      h(TopBar, { loadState: loadState, liveCount: liveCount, total: viewModules.length, scene: scene, onScene: setScene,
+        onBack: isBackScene ? onSceneBack : undefined }),
       scene === "cockpit"
         ? h(
             React.Fragment,
@@ -3745,7 +4135,29 @@ function MikaelOS() {
                 stateIndex: stateIndex, greeting: greeting,
                 onPropose: proposeOpen, onChip: onChip, onAgendaMore: onAgendaMore,
                 approvalsFlash: approvalsFlash, approvalsRef: approvalsRef,
+                onFirma: onFirma, onApprovals: onApprovals,
               })))
+        : scene === "firma"
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
+            h("div", { className: "mos__scenehead" },
+              h(Icon, { name: "server", size: 20 }),
+              h("div", { className: "mos__scenehead-t" },
+                h("h2", null, "Firma / Rise-L"),
+                h("span", null, "Read-only Projektion · fsm.db/belege.db mode=ro · Paperless nur lesen · Deep-Links ins FSM")),
+              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")),
+            h(FirmaScene, { firma: firma, load: firmaLoad }),
+            h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
+        : scene === "approvals"
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
+            h("div", { className: "mos__scenehead" },
+              h(Icon, { name: "shield-check", size: 20 }),
+              h("div", { className: "mos__scenehead-t" },
+                h("h2", null, "Entscheidungen"),
+                h("span", null, "Approval-Cards inkl. Intent-Hash + Effekt-Felder · Entscheidung nur durch dich (Operator)")),
+              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Operator-only")),
+            h(ApprovalsScene, { approvals: cockpit.approvals, load: cockpitLoad,
+              details: approvalDetails, detailLoading: approvalDetailLoading, onLoadDetail: loadApprovalDetail }),
+            h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
         : scene === "timeline"
         ? h("div", { className: "mos__stagewrap mos__stagewrap--tl" },
             h(TimelineScene, { byId: enrichedById, focusId: focusId, onActivate: activate, onClose: closeFocus }))
@@ -3828,7 +4240,7 @@ function MikaelOS() {
       ),
       // Footer (UI-SPEC §1): in the Cockpit the StateRail sits directly ABOVE the
       // command bar; Konstellation/Timeline keep the command bar → footer order.
-      scene === "cockpit"
+      (scene === "cockpit" || isBackScene)
         ? h("footer", { className: "mos__ckpt-foot" },
             h(StateRail, { activeIndex: stateIndex }),
             commandForm)
