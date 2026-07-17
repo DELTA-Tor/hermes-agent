@@ -27,6 +27,9 @@ var MikaelOSPlugin = function() {
     "circle-check-big": '<path d="M21.801 10A10 10 0 1 1 17 3.335" /> <path d="m9 11 3 3L22 4" />',
     "target": '<circle cx="12" cy="12" r="10" /> <circle cx="12" cy="12" r="6" /> <circle cx="12" cy="12" r="2" />',
     "flame": '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />',
+    "dumbbell": '<path d="M14.4 14.4 9.6 9.6" /> <path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z" /> <path d="m21.5 21.5-1.4-1.4" /> <path d="M3.9 3.9 2.5 2.5" /> <path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z" />',
+    "droplet": '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />',
+    "footprints": '<path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z" /> <path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z" /> <path d="M16 17h4" /> <path d="M4 13h4" />',
     "code-xml": '<path d="m18 16 4-4-4-4" /> <path d="m6 8-4 4 4 4" /> <path d="m14.5 4-5 16" />',
     "server": '<rect width="20" height="8" x="2" y="2" rx="2" ry="2" /> <rect width="20" height="8" x="2" y="14" rx="2" ry="2" /> <line x1="6" x2="6.01" y1="6" y2="6" /> <line x1="6" x2="6.01" y1="18" y2="18" />',
     "notebook-pen": '<path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4" /> <path d="M2 6h4" /> <path d="M2 10h4" /> <path d="M2 14h4" /> <path d="M2 18h4" /> <path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z" />',
@@ -108,7 +111,16 @@ var MikaelOSPlugin = function() {
     "trending-up": '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /> <polyline points="16 7 22 7 22 13" />',
     "banknote": '<rect width="20" height="12" x="2" y="6" rx="2" /> <circle cx="12" cy="12" r="2" /> <path d="M6 12h.01M18 12h.01" />',
     "refresh-cw": '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" />',
-    "radio": '<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" /> <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" /> <circle cx="12" cy="12" r="2" /> <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" /> <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />'
+    "radio": '<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" /> <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" /> <circle cx="12" cy="12" r="2" /> <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" /> <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />',
+    "search": '<circle cx="11" cy="11" r="8" /> <path d="m21 21-4.3-4.3" />',
+    "search-x": '<path d="m13.5 8.5-5 5" /> <path d="m8.5 8.5 5 5" /> <circle cx="11" cy="11" r="8" /> <path d="m21 21-4.3-4.3" />',
+    "terminal": '<polyline points="4 17 10 11 4 5" /> <line x1="12" x2="20" y1="19" y2="19" />',
+    "bot": '<path d="M12 8V4H8" /> <rect width="16" height="12" x="4" y="8" rx="2" /> <path d="M2 14h2" /> <path d="M20 14h2" /> <path d="M15 13v2" /> <path d="M9 13v2" />',
+    "send": '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" /> <path d="m21.854 2.147-10.94 10.939" />',
+    "history": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" />',
+    "mail": '<rect width="20" height="16" x="2" y="4" rx="2" /> <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />',
+    "filter": '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />',
+    "eye-off": '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" /> <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /> <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" /> <path d="m2 2 20 20" />'
   };
   const SDK = typeof window !== "undefined" ? window.__HERMES_PLUGIN_SDK__ : void 0;
   const React = SDK && SDK.React;
@@ -404,6 +416,12 @@ var MikaelOSPlugin = function() {
   const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
   const FIRMA_OVERVIEW_API = PLUGIN_API + "/firma/overview";
   const FIRMA_APPROVAL_DETAIL_API = PLUGIN_API + "/firma/approvals/detail";
+  const WISSEN_SEARCH_API = PLUGIN_API + "/wissen/search";
+  const KOMM_OVERVIEW_API = PLUGIN_API + "/kommunikation/overview";
+  const SESSIONS_OVERVIEW_API = PLUGIN_API + "/agent-sessions/overview";
+  const ZIELE_OVERVIEW_API = PLUGIN_API + "/ziele/overview";
+  const REFLEXION_OVERVIEW_API = PLUGIN_API + "/reflexion/overview";
+  const GESUNDHEIT_OVERVIEW_API = PLUGIN_API + "/gesundheit/overview";
   MODULES.reduce((acc, m) => {
     acc[m.id] = m.pos;
     return acc;
@@ -1387,7 +1405,8 @@ var MikaelOSPlugin = function() {
         onGoJarvis: props.onGoJarvis,
         onGoTimeline: props.onGoTimeline,
         onGoApprovals: props.onGoApprovals,
-        onGoFirma: props.onGoFirma
+        onGoFirma: props.onGoFirma,
+        onArea: props.onArea
       }),
       h(
         "div",
@@ -1781,15 +1800,52 @@ var MikaelOSPlugin = function() {
       )
     );
   }
+  const MSCREEN_META = {
+    firma: { title: "Firma / Rise-L", sub: "read-only Projektion · Deep-Links ins FSM" },
+    approvals: { title: "Entscheidungen", sub: "Entscheidung nur durch dich (Operator)" },
+    wissen: { title: "Wissen & Suche", sub: "föderiert · Workspace je Treffer · nur lesen" },
+    kommunikation: { title: "Kommunikation", sub: "nur Signale · Versand G7-gated" },
+    sessions: { title: "Sessions / Agenten", sub: "mission.v2 + Broker · Steuern gated" },
+    ziele: { title: "Ziele & Systeme", sub: "mission.v2 + Policy · keine neue Task-DB" },
+    reflexion: { title: "Reflexion", sub: "strikt privat · nur lesen · kein Versand" },
+    gesundheit: { title: "Gesundheit", sub: "WHOOP :18090 · privat · nur lesen" }
+  };
   function MobileScreen(props) {
-    const isFirma = props.kind === "firma";
+    const kind = props.kind;
+    const meta = MSCREEN_META[kind] || MSCREEN_META.firma;
+    let body;
+    if (kind === "firma") {
+      body = h(FirmaScene, { firma: props.firma, load: props.firmaLoad });
+    } else if (kind === "approvals") {
+      body = h(ApprovalsScene, {
+        approvals: props.approvals,
+        load: props.cockpitLoad,
+        details: props.details,
+        detailLoading: props.detailLoading,
+        onLoadDetail: props.onLoadDetail
+      });
+    } else if (kind === "wissen") {
+      body = h(WissenScene, {
+        data: props.wissen,
+        load: props.wissenLoad,
+        query: props.wissenQuery,
+        onQuery: props.onWissenQuery,
+        onSearch: props.onWissenSearch
+      });
+    } else if (kind === "kommunikation") {
+      body = h(KommunikationScene, { data: props.komm, load: props.kommLoad });
+    } else if (kind === "sessions") {
+      body = h(SessionsScene, { data: props.sessions, load: props.sessionsLoad });
+    } else if (kind === "ziele") {
+      body = h(ZieleScene, { data: props.ziele, load: props.zieleLoad });
+    } else if (kind === "reflexion") {
+      body = h(ReflexionScene, { data: props.reflexion, load: props.reflexionLoad });
+    } else if (kind === "gesundheit") {
+      body = h(GesundheitScene, { data: props.gesundheit, load: props.gesundheitLoad });
+    }
     return h(
       "div",
-      {
-        className: "mos__mscreen",
-        role: "region",
-        "aria-label": isFirma ? "Firma / Rise-L" : "Entscheidungen"
-      },
+      { className: "mos__mscreen mos__mscreen--" + kind, role: "region", "aria-label": meta.title },
       h(
         "header",
         { className: "mos__mscreen-top" },
@@ -1801,26 +1857,11 @@ var MikaelOSPlugin = function() {
         h(
           "span",
           { className: "mos__mscreen-titles" },
-          h("span", { className: "mos__mscreen-title" }, isFirma ? "Firma / Rise-L" : "Entscheidungen"),
-          h(
-            "span",
-            { className: "mos__mscreen-sub" },
-            h(Icon, { name: "lock", size: 11 }),
-            isFirma ? "read-only Projektion · Deep-Links ins FSM" : "Entscheidung nur durch dich (Operator)"
-          )
+          h("span", { className: "mos__mscreen-title" }, meta.title),
+          h("span", { className: "mos__mscreen-sub" }, h(Icon, { name: "lock", size: 11 }), meta.sub)
         )
       ),
-      h(
-        "main",
-        { className: "mos__mscreen-body" },
-        isFirma ? h(FirmaScene, { firma: props.firma, load: props.firmaLoad }) : h(ApprovalsScene, {
-          approvals: props.approvals,
-          load: props.cockpitLoad,
-          details: props.details,
-          detailLoading: props.detailLoading,
-          onLoadDetail: props.onLoadDetail
-        })
-      )
+      h("main", { className: "mos__mscreen-body" }, body)
     );
   }
   function MobileShell(props) {
@@ -1835,7 +1876,22 @@ var MikaelOSPlugin = function() {
         cockpitLoad: props.cockpitLoad,
         details: props.approvalDetails,
         detailLoading: props.approvalDetailLoading,
-        onLoadDetail: props.onLoadDetail
+        onLoadDetail: props.onLoadDetail,
+        wissen: props.wissen,
+        wissenLoad: props.wissenLoad,
+        wissenQuery: props.wissenQuery,
+        onWissenQuery: props.onWissenQuery,
+        onWissenSearch: props.onWissenSearch,
+        komm: props.komm,
+        kommLoad: props.kommLoad,
+        sessions: props.sessions,
+        sessionsLoad: props.sessionsLoad,
+        ziele: props.ziele,
+        zieleLoad: props.zieleLoad,
+        reflexion: props.reflexion,
+        reflexionLoad: props.reflexionLoad,
+        gesundheit: props.gesundheit,
+        gesundheitLoad: props.gesundheitLoad
       });
     }
     const showDock = tab !== "jarvis" && tab !== "timeline";
@@ -1878,7 +1934,8 @@ var MikaelOSPlugin = function() {
         onChip: props.onChip,
         onGoTimeline: props.onGoTimeline,
         onGoApprovals: props.onGoApprovals,
-        onGoFirma: props.onGoFirma
+        onGoFirma: props.onGoFirma,
+        onArea: props.onArea
       });
     }
     return h(
@@ -2877,7 +2934,11 @@ var MikaelOSPlugin = function() {
   const WS_TAG = {
     private: { label: "Privat", tone: "cyan" },
     company_signal: { label: "Firma", tone: "neutral" },
-    engineering: { label: "Eng", tone: "violet" }
+    engineering: { label: "Eng", tone: "violet" },
+    // M3/wissen — the session/history corpus mixes private + company work and is
+    // NOT cleanly separable, so it gets its own honest fourth tone (amber, striped)
+    // and is never silently shown as cyan-private nor neutral-company.
+    gemischt: { label: "Gemischt", tone: "amber" }
   };
   function gateCategory(gc, gr, text) {
     const s = ((gc || "") + " " + (gr || "") + " " + (text || "")).toLowerCase();
@@ -3678,6 +3739,1032 @@ var MikaelOSPlugin = function() {
       )
     );
   }
+  const M3_AREAS = [
+    {
+      id: "wissen",
+      icon: "search",
+      accent: "cyan",
+      title: "Wissen & Suche",
+      sub: "Föderiert · Workspace je Treffer"
+    },
+    {
+      id: "kommunikation",
+      icon: "radio-tower",
+      accent: "violet",
+      title: "Kommunikation",
+      sub: "Telegram · Hermes · FreeScout"
+    },
+    {
+      id: "sessions",
+      icon: "waypoints",
+      accent: "cyan",
+      title: "Sessions / Agenten",
+      sub: "Stränge · mission.v2 · steuern gated"
+    },
+    // M4 peers (same launch mechanism, same read-only peer-scene contract).
+    {
+      id: "ziele",
+      icon: "target",
+      accent: "emerald",
+      title: "Ziele & Systeme",
+      sub: "mission.v2 + Policy · keine neue Task-DB"
+    },
+    {
+      id: "reflexion",
+      icon: "notebook-pen",
+      accent: "violet",
+      title: "Reflexion",
+      sub: "Journal · Entscheidungen · Erkenntnisse"
+    },
+    {
+      id: "gesundheit",
+      icon: "heart-pulse",
+      accent: "emerald",
+      title: "Gesundheit",
+      sub: "WHOOP · Recovery · Schlaf · Strain"
+    }
+  ];
+  function AreaLauncher(props) {
+    return h(
+      "nav",
+      { className: "mos__arealaunch", "aria-label": "Bereiche öffnen" },
+      M3_AREAS.map((a) => h(
+        "button",
+        {
+          key: a.id,
+          type: "button",
+          className: "mos__arealaunch-btn mos--" + a.accent,
+          onClick: () => props.onOpen(a.id),
+          "aria-label": a.title + " öffnen"
+        },
+        h("span", { className: "mos__arealaunch-ico" }, h(Icon, { name: a.icon, size: 18 })),
+        h(
+          "span",
+          { className: "mos__arealaunch-body" },
+          h("span", { className: "mos__arealaunch-title" }, a.title),
+          h("span", { className: "mos__arealaunch-sub" }, a.sub)
+        ),
+        h(Icon, { name: "arrow-up-right", size: 15, className: "mos__arealaunch-go" })
+      ))
+    );
+  }
+  function WorkspacePill(props) {
+    const ws = props.workspace;
+    const tag = WS_TAG[ws] || { label: props.label || ws || "—", tone: "neutral" };
+    return h(
+      "span",
+      { className: "mos__wtag mos__wtag--" + tag.tone, title: props.title || ws || "" },
+      ws === "gemischt" ? h(Icon, { name: "eye-off", size: 10 }) : null,
+      props.label || tag.label
+    );
+  }
+  const WISSEN_SOURCE = {
+    gbrain: { icon: "brain", label: "gbrain" },
+    qdrant: { icon: "database", label: "Mail" },
+    docs: { icon: "file-text", label: "Dokumente" },
+    paperless: { icon: "folder-open", label: "Paperless" },
+    history: { icon: "history", label: "Sessions" },
+    techniker: { icon: "wrench", label: "Technik-Wissen" }
+  };
+  function WissenResult(props) {
+    const r = props.row;
+    const src = WISSEN_SOURCE[r.quelle] || { icon: "circle", label: r.quelle || "?" };
+    const hasLink = r.link && typeof r.link === "string";
+    return h(
+      "li",
+      { className: "mos__wres" },
+      h("span", { className: "mos__wres-ico" }, h(Icon, { name: src.icon, size: 16 })),
+      h(
+        "div",
+        { className: "mos__wres-body" },
+        h(
+          "div",
+          { className: "mos__wres-head" },
+          h("span", { className: "mos__wres-title" }, r.titel || "—"),
+          r.datum ? h("span", { className: "mos__wres-datum" }, r.datum) : null
+        ),
+        r.snippet ? h("p", { className: "mos__wres-snippet" }, String(r.snippet).slice(0, 220)) : null,
+        h(
+          "div",
+          { className: "mos__wres-tags" },
+          h("span", { className: "mos__wres-src" }, h(Icon, { name: src.icon, size: 11 }), src.label),
+          h(WorkspacePill, { workspace: r.workspace, label: r.workspaceLabel }),
+          r.typ ? h("span", { className: "mos__wres-typ" }, r.typ) : null,
+          hasLink ? h("a", {
+            className: "mos__wres-open",
+            href: r.link,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            title: "Quelle öffnen (neuer Tab)"
+          }, h(Icon, { name: "external-link", size: 12 }), "öffnen") : h(
+            "span",
+            { className: "mos__wres-nolink", title: "Kein direkter Link (z. B. Technik-Wissen aus dem Vektorindex)" },
+            h(Icon, { name: "lock", size: 11 }),
+            "kein Link"
+          )
+        )
+      )
+    );
+  }
+  function WissenScene(props) {
+    const ov = props.data;
+    const load = props.load;
+    const q = props.query || "";
+    const st = ov ? ov.state || "empty" : load === "loading" ? "loading" : load === "offline" ? "unavailable" : "idle";
+    const rows = ov && Array.isArray(ov.rows) ? ov.rows : [];
+    const onSearch = props.onSearch;
+    useEffect(() => {
+      const term = q.trim();
+      if (term.length < 2) return void 0;
+      const t = setTimeout(() => onSearch(term), 320);
+      return () => clearTimeout(t);
+    }, [q, onSearch]);
+    const errs = ov && Array.isArray(ov.errors) ? ov.errors : [];
+    let body;
+    if (st === "idle" || !ov && load === "idle") {
+      body = h(ZoneEmpty, {
+        state: "empty",
+        icon: "search",
+        title: "Über alle Wissensquellen suchen",
+        note: "gbrain · Mail · Dokumente · Paperless · Sessions · Technik-Wissen — jeder Treffer zeigt seinen Workspace."
+      });
+    } else if (load === "loading" || st === "loading") {
+      body = h("ul", { className: "mos__wres-list" }, [0, 1, 2, 3].map((i) => h("li", { key: i, className: "mos__skrow" })));
+    } else if (st === "unavailable" || st === "error" || load === "offline") {
+      body = h(ZoneEmpty, {
+        state: "unavailable",
+        icon: "search-x",
+        title: "Unified-Search nicht erreichbar",
+        note: ov && ov.note || "Die föderierte Suche (:18055) antwortet nicht — bitte später erneut."
+      });
+    } else if (st === "partial" && !rows.length) {
+      body = h(ZoneEmpty, {
+        state: "empty",
+        icon: "search",
+        title: ov && ov.summary || "Suchbegriff eingeben",
+        note: ov && ov.note
+      });
+    } else if (!rows.length) {
+      body = h(ZoneEmpty, {
+        state: "empty",
+        icon: "search-x",
+        title: ov && ov.summary || "Keine Treffer",
+        note: ov && ov.note || "Andere Begriffe probieren."
+      });
+    } else {
+      body = h("ul", { className: "mos__wres-list" }, rows.map((r, i) => h(WissenResult, { key: i, row: r })));
+    }
+    const historyNote = ov && ov.historyNote;
+    return h(
+      "div",
+      { className: "mos__wissen" },
+      h(
+        "form",
+        {
+          className: "mos__wsearch",
+          role: "search",
+          onSubmit: (e) => {
+            if (e && e.preventDefault) e.preventDefault();
+            if (q.trim().length >= 2) onSearch(q.trim());
+          }
+        },
+        h("span", { className: "mos__wsearch-ico" }, h(Icon, { name: "search", size: 18 })),
+        h("input", {
+          className: "mos__wsearch-input",
+          type: "search",
+          value: q,
+          placeholder: "Suche über alle Wissensquellen …",
+          "aria-label": "Wissenssuche",
+          autoComplete: "off",
+          onChange: (e) => props.onQuery(e.target.value)
+        }),
+        ov && rows.length ? h("span", { className: "mos__wsearch-count" }, rows.length + " Treffer") : null
+      ),
+      // Honest per-query banners: partial backend errors + the gemischt caption.
+      st === "partial" && errs.length ? h(
+        "div",
+        { className: "mos__wbanner mos__wbanner--warn" },
+        h(Icon, { name: "triangle-alert", size: 14 }),
+        h("span", null, "Teil-Backends nicht erreichbar: " + errs.join("; "))
+      ) : null,
+      historyNote ? h(
+        "div",
+        { className: "mos__wbanner mos__wbanner--mixed" },
+        h(Icon, { name: "eye-off", size: 14 }),
+        h("span", null, historyNote)
+      ) : null,
+      body
+    );
+  }
+  function KommRow(props) {
+    const r = props.row;
+    const dirIcon = r.direction === "in" ? "chevron-left" : r.direction === "out" ? "arrow-up-right" : r.icon || "circle";
+    return h(
+      "li",
+      { className: "mos__krow mos--" + (r.accent || "cyan") },
+      h("span", { className: "mos__krow-ico" }, h(Icon, { name: r.icon || dirIcon, size: 15 })),
+      h(
+        "div",
+        { className: "mos__krow-body" },
+        h("span", { className: "mos__krow-title" }, r.title || "—"),
+        r.sub ? h("span", { className: "mos__krow-sub" }, r.sub) : null
+      ),
+      r.wartetSeit || r.datum ? h("span", { className: "mos__krow-when" }, freshnessLabel(r.wartetSeit || r.datum) || "") : r.statusLabel ? h("span", { className: "mos__status mos__status--" + (r.status || "waiting") }, r.statusLabel) : null
+    );
+  }
+  function KommColumn(props) {
+    const sub = props.sub || {};
+    const st = sub.state || (props.load === "loading" ? "loading" : "unavailable");
+    const rows = Array.isArray(sub.rows) ? sub.rows : [];
+    const bad = st === "unavailable" || st === "error";
+    return h(
+      "section",
+      { className: "mos__card mos__kcol" },
+      h(
+        "header",
+        { className: "mos__card-head" },
+        h(Icon, { name: props.icon, size: 16 }),
+        h("span", { className: "mos__card-title" }, props.title),
+        h(WorkspacePill, { workspace: props.workspace }),
+        h(ZonePip, { state: st, source: sub.source, note: sub.note })
+      ),
+      h(
+        "div",
+        { className: "mos__kcol-body" },
+        props.load === "loading" && !props.sub ? [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" })) : bad || !rows.length ? h(ZoneEmpty, {
+          state: bad ? st : st === "partial" ? "partial" : "empty",
+          icon: props.emptyIcon || "inbox",
+          title: bad ? props.badTitle || "Quelle nicht erreichbar" : props.emptyTitle || "Keine Signale",
+          note: sub.note
+        }) : [
+          // Optional mailbox tally (FreeScout).
+          props.byMailbox && sub.byMailbox ? h(
+            "div",
+            { key: "mb", className: "mos__kcol-mb" },
+            Object.keys(sub.byMailbox).map((mb) => h(
+              "span",
+              { key: mb, className: "mos__kcol-mbchip" },
+              h("b", null, sub.byMailbox[mb]),
+              mb
+            ))
+          ) : null,
+          h("ul", { key: "rows", className: "mos__krow-list" }, rows.map((r, i) => h(KommRow, { key: i, row: r })))
+        ]
+      ),
+      sub.note && rows.length ? h(
+        "footer",
+        { className: "mos__firma-foot mos__kcol-foot" },
+        h(Icon, { name: "lock", size: 12 }),
+        h("span", { className: "mos__firma-foot-t", title: sub.note }, sub.note)
+      ) : null
+    );
+  }
+  function KommunikationScene(props) {
+    const ov = props.data;
+    const load = props.load;
+    const offline = load === "offline" || !ov && load !== "loading";
+    const tg = ov && ov.telegram, vs = ov && ov.vorschlaege, fs = ov && ov.freescout;
+    const fsOpen = fs && typeof fs.open === "number" ? fs.open : null;
+    const vsPending = vs && typeof vs.pending === "number" ? vs.pending : null;
+    return h(
+      "div",
+      { className: "mos__komm" },
+      // The permanent, honest gate banner — no compose button exists in this scene.
+      h(
+        "div",
+        { className: "mos__kbanner" },
+        h(Icon, { name: "lock", size: 14 }),
+        h("span", null, "Nur Signale — Versand (Mail/Telegram) ist freigabepflichtig (G7) und hier nicht möglich."),
+        h("span", { className: "mos__kbanner-ro" }, h(Icon, { name: "eye", size: 12 }), "read-only")
+      ),
+      offline && !ov ? h(ZoneEmpty, {
+        state: "unavailable",
+        icon: "radio-tower",
+        title: "Kommunikations-Projektion nicht erreichbar",
+        note: "Signale offline — die Spalten erscheinen, sobald /kommunikation/overview antwortet."
+      }) : h(
+        "div",
+        { className: "mos__kgrid" },
+        h(KommColumn, {
+          title: "Telegram",
+          icon: "send",
+          workspace: "private",
+          load,
+          sub: tg,
+          emptyIcon: "send",
+          emptyTitle: "Keine Telegram-Signale"
+        }),
+        h(KommColumn, {
+          title: vsPending != null ? "Hermes-Vorschläge · " + vsPending : "Hermes-Vorschläge",
+          icon: "shield-check",
+          workspace: "company_signal",
+          load,
+          sub: vs,
+          emptyIcon: "shield-check",
+          emptyTitle: "Keine offenen Vorschläge"
+        }),
+        h(KommColumn, {
+          title: fsOpen != null ? "FreeScout · " + fsOpen + " offen" : "FreeScout",
+          icon: "inbox",
+          workspace: "company_signal",
+          load,
+          sub: fs,
+          byMailbox: true,
+          emptyIcon: "inbox",
+          emptyTitle: "Keine offenen Tickets",
+          badTitle: "FreeScout-DB nicht erreichbar"
+        })
+      )
+    );
+  }
+  function SessionRow(props) {
+    const s = props.session;
+    const running = s.status === "running";
+    return h(
+      "li",
+      { className: "mos__sess mos--" + (running ? "emerald" : "cyan") },
+      h("span", { className: "mos__sess-ico" }, h(Icon, { name: s.icon || "terminal", size: 15 })),
+      h(
+        "div",
+        { className: "mos__sess-body" },
+        h("span", { className: "mos__sess-name" }, s.name || "—"),
+        h(
+          "span",
+          { className: "mos__sess-meta" },
+          h(
+            "span",
+            { className: "mos__status mos__status--" + (running ? "verified" : "waiting") },
+            running ? h(Icon, { name: "circle-check-big", size: 12 }) : h(Icon, { name: "clock", size: 12 }),
+            s.status || "—"
+          ),
+          s.cwd ? h("span", { className: "mos__sess-cwd", title: s.cwd }, s.cwd) : null,
+          s.startedAt ? h("span", { className: "mos__sess-when" }, freshnessLabel(s.startedAt) || "") : null
+        )
+      ),
+      // Gated controls — sichtbar-aber-gesperrt, never a working steer/continue.
+      h(
+        "span",
+        { className: "mos__sess-acts" },
+        h(
+          "button",
+          {
+            type: "button",
+            disabled: true,
+            "aria-disabled": "true",
+            className: "mos__sess-act is-gated",
+            title: "Öffnen/Steuern nur über den propose-Weg (gated) — hier nicht ausführbar."
+          },
+          h(Icon, { name: "eye", size: 12 }),
+          "öffnen"
+        ),
+        h(
+          "button",
+          {
+            type: "button",
+            disabled: true,
+            "aria-disabled": "true",
+            className: "mos__sess-act is-gated",
+            title: "Verfolgen/Steer bleibt gated (propose-only) — hier nicht ausführbar."
+          },
+          h(Icon, { name: "waypoints", size: 12 }),
+          "verfolgen",
+          h(Icon, { name: "lock", size: 11 })
+        )
+      )
+    );
+  }
+  function StrandCard(props) {
+    const s = props.strand || {};
+    const st = s.state || (props.load === "loading" ? "loading" : "unavailable");
+    const sessions = Array.isArray(s.sessions) ? s.sessions : null;
+    const rows = Array.isArray(s.rows) ? s.rows : null;
+    const bad = st === "unavailable" || st === "error";
+    const cur = s.currentMission;
+    return h(
+      "section",
+      { className: "mos__card mos__strand" },
+      h(
+        "header",
+        { className: "mos__card-head" },
+        h(Icon, { name: s.icon || "bot", size: 16 }),
+        h("span", { className: "mos__card-title" }, s.title || s.id),
+        h(ZonePip, { state: st, observedAt: s.observedAt, source: s.source, note: s.note })
+      ),
+      h(
+        "div",
+        { className: "mos__strand-body" },
+        cur ? h(
+          "div",
+          { className: "mos__strand-cur" },
+          h("span", { className: "mos__strand-cur-k" }, "Aktuelle Mission"),
+          h("span", { className: "mos__strand-cur-goal" }, cur.goal),
+          cur.state ? h("span", { className: "mos__strand-cur-state" }, cur.state) : null
+        ) : s.id !== "jarvis" ? null : h(
+          "div",
+          { className: "mos__strand-cur is-none" },
+          h(Icon, { name: "circle", size: 12 }),
+          "Keine Mission zugeordnet"
+        ),
+        props.load === "loading" && !props.strand ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" })) : bad ? h(ZoneEmpty, {
+          state: st,
+          icon: "unplug",
+          title: s.id === "jarvis" ? "mission.v2 nicht lesbar" : "Session-Broker :18087 nicht erreichbar",
+          note: s.note
+        }) : sessions != null ? sessions.length ? h("ul", { className: "mos__sess-list" }, sessions.map((x, i) => h(SessionRow, { key: i, session: x }))) : h(ZoneEmpty, {
+          state: st === "partial" ? "partial" : "empty",
+          icon: "terminal",
+          title: st === "partial" ? "Broker erreichbar — Token/Scope fehlt" : "Keine aktiven Sessions",
+          note: s.note
+        }) : rows != null ? rows.length ? h("div", { className: "mos__strand-rows" }, rows.map((r, i) => h(LensRow, { key: i, row: r, index: i + 1 }))) : h(ZoneEmpty, { state: "empty", icon: "sparkles", title: "Keine Engineering-Missionen", note: s.note }) : h(ZoneEmpty, { state: "empty", icon: "circle", title: "Keine Daten" })
+      ),
+      h(
+        "footer",
+        { className: "mos__firma-foot mos__strand-foot" },
+        h(Icon, { name: "lock", size: 12 }),
+        h(
+          "span",
+          { className: "mos__firma-foot-t" },
+          (s.source ? s.source : "read-only") + " · steuern gated"
+        ),
+        h("span", { className: "mos__firma-foot-ro" }, "Nur lesen")
+      )
+    );
+  }
+  function SessionsScene(props) {
+    const ov = props.data;
+    const load = props.load;
+    const offline = load === "offline" || !ov && load !== "loading";
+    const strands = ov && Array.isArray(ov.strands) ? ov.strands : [];
+    const missions = ov && Array.isArray(ov.missions) ? ov.missions : [];
+    if (offline && !ov) {
+      return h(
+        "div",
+        { className: "mos__sessions" },
+        h(ZoneEmpty, {
+          state: "unavailable",
+          icon: "waypoints",
+          title: "Session-Projektion nicht erreichbar",
+          note: "Read-Modelle offline — Stränge + mission.v2 erscheinen, sobald /agent-sessions/overview antwortet."
+        })
+      );
+    }
+    return h(
+      "div",
+      { className: "mos__sessions" },
+      h(
+        "div",
+        { className: "mos__sgrid" },
+        (strands.length ? strands : [{ id: "jarvis" }, { id: "codex" }, { id: "claude" }]).map((s) => h(StrandCard, { key: s.id, strand: ov ? s : null, load }))
+      ),
+      h(
+        "section",
+        { className: "mos__card mos__slist" },
+        h(
+          "header",
+          { className: "mos__card-head" },
+          h(Icon, { name: "list-checks", size: 16 }),
+          h("span", { className: "mos__card-title" }, "mission.v2 · Job-Liste"),
+          missions.length ? h("span", { className: "mos__appc-count" }, missions.length) : null,
+          h(ZonePip, {
+            state: ov ? missions.length ? "fresh" : "empty" : load === "loading" ? "loading" : "unavailable",
+            source: "mission.v2",
+            note: ov && ov.note
+          })
+        ),
+        h(
+          "div",
+          { className: "mos__slist-body" },
+          load === "loading" && !ov ? [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" })) : missions.length ? missions.map((r, i) => h(LensRow, { key: i, row: r, index: i + 1 })) : h(ZoneEmpty, { state: "empty", icon: "list-checks", title: "Keine Missionen", note: ov && ov.note })
+        )
+      ),
+      // The gated-controls caption — steer/continue/bind never execute from here.
+      h(
+        "div",
+        { className: "mos__kbanner mos__kbanner--sessions" },
+        h(Icon, { name: "lock", size: 14 }),
+        h("span", null, ov && ov.controls && ov.controls.note || "Steuern/Continue/Steer/Bind bleiben gated (propose-only) — hier nicht ausführbar.")
+      )
+    );
+  }
+  const ZIELE_RINGS = [
+    { id: "jahr", label: "Jahresziel", icon: "target" },
+    { id: "quartal", label: "Quartalsziel", icon: "calendar-days" },
+    { id: "woche", label: "Wochenziel", icon: "circle-check-big" }
+  ];
+  const ZIELE_HABITS = [
+    { id: "deepwork", label: "Deep Work", icon: "brain" },
+    { id: "sport", label: "Sport", icon: "footprints" },
+    { id: "lesen", label: "Lesen", icon: "book-open" },
+    { id: "schlaf", label: "Schlaf", icon: "moon" }
+  ];
+  const ZIELE_LANE_ACCENT = { running: "emerald", waiting: "amber", error: "red", verified: "cyan" };
+  const ZIELE_POLICY_ORDER = ["now", "today", "planned", "waiting", "later"];
+  function ZieleRing(props) {
+    const C = 2 * Math.PI * 52;
+    return h(
+      "div",
+      { className: "mos__whoop-ring mos__zring is-connected" },
+      h(
+        "svg",
+        { viewBox: "0 0 120 120", "aria-hidden": "true" },
+        h("circle", { cx: 60, cy: 60, r: 52, className: "mos__whoop-track" }),
+        h("circle", {
+          cx: 60,
+          cy: 60,
+          r: 52,
+          className: "mos__whoop-arc",
+          style: {
+            strokeDasharray: C + " " + C,
+            strokeDashoffset: C * 0.25,
+            transform: "rotate(-90deg)",
+            transformOrigin: "60px 60px"
+          }
+        })
+      ),
+      h(
+        "span",
+        { className: "mos__whoop-center" },
+        h(Icon, { name: props.icon || "target", size: 20 }),
+        h("b", { className: "mos__zring-dash" }, "—")
+      )
+    );
+  }
+  function ZieleScene(props) {
+    const ov = props.data;
+    const load = props.load;
+    const offline = load === "offline" || !ov && load !== "loading";
+    const loading = load === "loading" && !ov;
+    const policy = ov && ov.policy;
+    const systems = ov && ov.systems;
+    const gh = ov && ov.goalHierarchy;
+    const habits = ov && ov.habits;
+    const lanes = systems && Array.isArray(systems.lanes) ? systems.lanes : [];
+    const displayLanes = policy && policy.ok && policy.displayLanes ? policy.displayLanes : null;
+    const wip = policy && policy.ok ? policy.wipLimitNow : null;
+    const sysState = systems ? systems.state || "empty" : loading ? "loading" : "unavailable";
+    const sysBad = sysState === "unavailable" || sysState === "error";
+    if (offline && !ov) {
+      return h(
+        "div",
+        { className: "mos__ziele" },
+        h(ZoneEmpty, {
+          state: "unavailable",
+          icon: "target",
+          title: "Ziele-Projektion nicht erreichbar",
+          note: "Read-Modelle offline — mission.v2 + Policy erscheinen, sobald /ziele/overview antwortet."
+        })
+      );
+    }
+    return h(
+      "div",
+      { className: "mos__ziele" },
+      // Section 1 — goal-hierarchy rings (honestly empty: no source in the stack).
+      h(
+        "section",
+        { className: "mos__zsec" },
+        h(
+          "div",
+          { className: "mos__zsec-head" },
+          h(Icon, { name: "target", size: 15 }),
+          h("span", { className: "mos__zsec-title" }, "Ziel-Hierarchie"),
+          h(ZonePip, {
+            state: gh ? gh.state || "empty" : loading ? "loading" : "empty",
+            source: gh && gh.source,
+            note: gh && gh.note
+          })
+        ),
+        h(
+          "div",
+          { className: "mos__zrings" },
+          ZIELE_RINGS.map((r) => h(
+            "div",
+            { key: r.id, className: "mos__card mos__zringcard" },
+            h(ZieleRing, { icon: r.icon }),
+            h("span", { className: "mos__zringcard-label" }, r.label),
+            h("span", { className: "mos__zringcard-empty" }, "Keine Quelle")
+          ))
+        ),
+        gh && gh.note ? h(
+          "p",
+          { className: "mos__zsec-note" },
+          h(Icon, { name: "circle-help", size: 13 }),
+          gh.note
+        ) : null
+      ),
+      // Section 2 — habit streak chips (honestly empty: no tracker in the stack).
+      h(
+        "section",
+        { className: "mos__zsec" },
+        h(
+          "div",
+          { className: "mos__zsec-head" },
+          h(Icon, { name: "flame", size: 15 }),
+          h("span", { className: "mos__zsec-title" }, "Gewohnheiten"),
+          h(ZonePip, {
+            state: habits ? habits.state || "empty" : loading ? "loading" : "empty",
+            source: habits && habits.source,
+            note: habits && habits.note
+          })
+        ),
+        h(
+          "div",
+          { className: "mos__zhabits" },
+          ZIELE_HABITS.map((hb) => h(
+            "div",
+            { key: hb.id, className: "mos__zhabit" },
+            h("span", { className: "mos__zhabit-ico" }, h(Icon, { name: hb.icon, size: 15 })),
+            h("span", { className: "mos__zhabit-label" }, hb.label),
+            h("span", { className: "mos__zhabit-streak" }, "—"),
+            h("span", { className: "mos__zhabit-unit" }, "kein Tracker")
+          ))
+        ),
+        habits && habits.note ? h(
+          "p",
+          { className: "mos__zsec-note" },
+          h(Icon, { name: "circle-help", size: 13 }),
+          habits.note
+        ) : null
+      ),
+      // Section 3 — Systeme / WIP board (real mission.v2 status buckets + policy).
+      h(
+        "section",
+        { className: "mos__zsec mos__zsec--wip" },
+        h(
+          "div",
+          { className: "mos__zsec-head" },
+          h(Icon, { name: "list-checks", size: 15 }),
+          h("span", { className: "mos__zsec-title" }, "Systeme · WIP"),
+          systems && systems.summary && !sysBad ? h("span", { className: "mos__zsec-sum" }, systems.summary) : null,
+          h(ZonePip, {
+            state: sysState,
+            observedAt: systems && systems.observedAt,
+            source: systems && systems.source,
+            note: systems && systems.note
+          })
+        ),
+        // Policy priority-lane reference strip (real display_lanes from the YAML).
+        displayLanes ? h(
+          "div",
+          { className: "mos__zpolicy" },
+          h("span", { className: "mos__zpolicy-k" }, "Prioritäts-Lanes (Policy)"),
+          ZIELE_POLICY_ORDER.filter((k) => displayLanes[k]).map((k) => h(
+            "span",
+            { key: k, className: "mos__zpolicy-lane" + (k === "now" ? " is-now" : "") },
+            displayLanes[k],
+            k === "now" && wip != null ? h("b", { className: "mos__zpolicy-wip" }, "WIP " + wip) : null
+          )),
+          h(
+            "span",
+            {
+              className: "mos__zpolicy-note",
+              title: "Die feinkörnige Prioritäts-Zuordnung ist control-plane-intern und nicht als Read-Endpunkt exponiert."
+            },
+            h(Icon, { name: "lock", size: 11 }),
+            "Zuordnung gated"
+          )
+        ) : null,
+        // Real WIP board — missions grouped by STATUS bucket (not priority).
+        loading ? h("div", { className: "mos__zboard" }, [0, 1, 2, 3].map((i) => h("div", { key: i, className: "mos__card mos__zlane" }, h("div", { className: "mos__skrow" })))) : sysBad ? h(ZoneEmpty, { state: sysState, icon: "list-checks", title: "mission.v2 nicht lesbar", note: systems && systems.note }) : lanes.length ? h("div", { className: "mos__zboard" }, lanes.map((ln) => h(
+          "div",
+          { key: ln.id, className: "mos__card mos__zlane mos--" + (ZIELE_LANE_ACCENT[ln.id] || "cyan") },
+          h(
+            "header",
+            { className: "mos__zlane-head" },
+            h("span", { className: "mos__zlane-title" }, ln.label),
+            h("span", { className: "mos__zlane-count" }, ln.count),
+            ln.wipLimit != null ? h("span", { className: "mos__zlane-wip" }, "WIP " + ln.wipLimit) : null
+          ),
+          h(
+            "div",
+            { className: "mos__zlane-body" },
+            ln.rows && ln.rows.length ? ln.rows.map((r, i) => h(LensRow, { key: i, row: r, index: i + 1 })) : h("div", { className: "mos__zlane-none" }, h(Icon, { name: "circle", size: 12 }), "leer")
+          )
+        ))) : h(ZoneEmpty, {
+          state: "empty",
+          icon: "list-checks",
+          title: systems && systems.summary || "Keine Systeme",
+          note: systems && systems.note
+        }),
+        h(
+          "footer",
+          { className: "mos__firma-foot mos__zsec-foot" },
+          h(Icon, { name: "lock", size: 12 }),
+          h(
+            "span",
+            { className: "mos__firma-foot-t" },
+            (systems && systems.source ? "Quelle: " + systems.source : "mission.v2 + Policy") + (policy && policy.ok && policy.version ? " · Policy " + policy.version : "") + (policy && policy.ok && policy.policySha256 ? " · sha " + String(policy.policySha256).slice(0, 8) : "")
+          ),
+          h("span", { className: "mos__firma-foot-ro" }, "Nur lesen")
+        )
+      )
+    );
+  }
+  function ReflexionCard(props) {
+    const sub = props.sub || {};
+    const st = props.loading ? "loading" : sub.state || "empty";
+    const rows = Array.isArray(sub.rows) ? sub.rows : [];
+    const bad = st === "unavailable" || st === "error";
+    return h(
+      "section",
+      { className: "mos__card mos__reflcard" + (props.composer ? " mos__reflcard--journal" : "") },
+      h(
+        "header",
+        { className: "mos__card-head" },
+        h(Icon, { name: props.icon, size: 16 }),
+        h("span", { className: "mos__card-title" }, props.title),
+        h(WorkspacePill, { workspace: "private" }),
+        h(ZonePip, { state: st, observedAt: sub.observedAt, source: sub.source, note: sub.note })
+      ),
+      h(
+        "div",
+        { className: "mos__reflcard-body" },
+        props.loading ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" })) : rows.length ? h("div", { className: "mos__strand-rows" }, rows.map((r, i) => h(LensRow, { key: i, row: r, index: i + 1 }))) : h(ZoneEmpty, {
+          state: bad ? st : "empty",
+          icon: props.emptyIcon || "inbox",
+          title: props.emptyTitle,
+          note: sub.note
+        }),
+        props.composer && !props.loading ? h(
+          "div",
+          { className: "mos__reflcompose" },
+          h(
+            "button",
+            {
+              type: "button",
+              className: "mos__reflcompose-mic",
+              disabled: true,
+              "aria-disabled": "true",
+              title: "Spracheingabe erst mit angebundenem Journal-Store — hier inaktiv."
+            },
+            h(Icon, { name: "mic", size: 16 })
+          ),
+          h("input", {
+            type: "text",
+            className: "mos__reflcompose-input",
+            disabled: true,
+            "aria-disabled": "true",
+            placeholder: "Journal-Eintrag … (erst mit angebundenem Store)",
+            "aria-label": "Journal-Eintrag (inaktiv)"
+          }),
+          h("span", { className: "mos__reflcompose-hint" }, h(Icon, { name: "lock", size: 11 }), "kein Schreibpfad")
+        ) : null
+      )
+    );
+  }
+  function ReflexionScene(props) {
+    const ov = props.data;
+    const load = props.load;
+    const offline = load === "offline" || !ov && load !== "loading";
+    const loading = load === "loading" && !ov;
+    const sections = ov && ov.sections;
+    const connected = !!(ov && ov.connected);
+    if (offline && !ov) {
+      return h(
+        "div",
+        { className: "mos__refl" },
+        h(ZoneEmpty, {
+          state: "unavailable",
+          icon: "notebook-pen",
+          title: "Reflexions-Projektion nicht erreichbar",
+          note: "Read-Modelle offline — Journal/Entscheidungen/Erkenntnisse erscheinen, sobald /reflexion/overview antwortet."
+        })
+      );
+    }
+    return h(
+      "div",
+      { className: "mos__refl" },
+      // Privacy banner — strictly private, no compose/send, no substitution.
+      h(
+        "div",
+        { className: "mos__kbanner mos__refl-banner" },
+        h(Icon, { name: "lock", size: 14 }),
+        h("span", null, "Strikt privat · nur lesen — kein Versand, keine Ersatzdaten aus mission.v2/Approvals."),
+        h("span", { className: "mos__kbanner-ro" }, h(Icon, { name: "eye", size: 12 }), "read-only")
+      ),
+      h(
+        "div",
+        { className: "mos__reflgrid" },
+        h(ReflexionCard, {
+          title: "Journal",
+          icon: "notebook-pen",
+          composer: true,
+          sub: sections && sections.journal,
+          loading,
+          emptyIcon: "notebook-pen",
+          emptyTitle: connected ? "Kein Eintrag" : "Kein Journal-Store angebunden"
+        }),
+        h(ReflexionCard, {
+          title: "Entscheidungsprotokoll",
+          icon: "list-checks",
+          sub: sections && sections.decisions,
+          loading,
+          emptyIcon: "list-checks",
+          emptyTitle: connected ? "Keine Entscheidungen erfasst" : "Kein Entscheidungs-Store"
+        }),
+        h(ReflexionCard, {
+          title: "Lernerkenntnisse",
+          icon: "lightbulb",
+          sub: sections && sections.insights,
+          loading,
+          emptyIcon: "sparkles",
+          emptyTitle: connected ? "Keine Erkenntnisse erfasst" : "Kein Erkenntnis-Store"
+        })
+      ),
+      ov && ov.note ? h(
+        "p",
+        { className: "mos__zsec-note mos__refl-note" },
+        h(Icon, { name: "circle-help", size: 13 }),
+        ov.note
+      ) : null
+    );
+  }
+  function parseRecovery(body) {
+    if (!body || body.state !== "fresh") return null;
+    const rows = Array.isArray(body.rows) ? body.rows : [];
+    const rec = rows.find((r) => /recovery/i.test(r.title || ""));
+    if (!rec || typeof rec.value !== "string") return null;
+    const m = /(\d+(?:\.\d+)?)/.exec(rec.value);
+    return m ? Number(m[1]) : null;
+  }
+  function Sparkline(props) {
+    const vals = props.values || [];
+    const W = 280, H2 = 66, pad = 7, n = vals.length;
+    const present = vals.filter((v) => v != null);
+    const x = (i) => n <= 1 ? W / 2 : pad + i * (W - 2 * pad) / (n - 1);
+    const y = (v) => H2 - pad - v / 100 * (H2 - 2 * pad);
+    let d = "", pen = false;
+    vals.forEach((v, i) => {
+      if (v == null) {
+        pen = false;
+        return;
+      }
+      d += (pen ? " L" : " M") + x(i).toFixed(1) + " " + y(v).toFixed(1);
+      pen = true;
+    });
+    return h(
+      "div",
+      { className: "mos__spark" },
+      h(
+        "svg",
+        { viewBox: "0 0 " + W + " " + H2, className: "mos__spark-svg", preserveAspectRatio: "none", "aria-hidden": "true" },
+        h("path", { d: d.trim(), className: "mos__spark-line", fill: "none" }),
+        vals.map((v, i) => v == null ? null : h("circle", { key: i, cx: x(i), cy: y(v), r: 2.6, className: "mos__spark-dot" }))
+      ),
+      h(
+        "div",
+        { className: "mos__spark-legend" },
+        present.length ? h("span", null, Math.round(Math.min.apply(null, present)) + "–" + Math.round(Math.max.apply(null, present)) + "%") : null,
+        h("span", null, present.length + " Tage")
+      )
+    );
+  }
+  function GesundheitTrend(props) {
+    const sub = props.sub || {};
+    const st = props.loading ? "loading" : sub.state || "unavailable";
+    const series = Array.isArray(sub.series) ? sub.series : [];
+    const pts = series.map((d) => typeof d.recoveryScore === "number" ? d.recoveryScore : null);
+    const hasData = pts.some((v) => v != null);
+    const bad = st === "unavailable" || st === "error";
+    return h(
+      "section",
+      { className: "mos__card mos__gestrend" },
+      h(
+        "header",
+        { className: "mos__card-head" },
+        h(Icon, { name: "trending-up", size: 16 }),
+        h("span", { className: "mos__card-title" }, "Recovery-Trend · 7 Tage"),
+        h(ZonePip, { state: st, observedAt: sub.observedAt, source: sub.source, note: sub.note })
+      ),
+      h(
+        "div",
+        { className: "mos__gestrend-body" },
+        props.loading ? h("div", { className: "mos__skrow" }) : hasData ? h(Sparkline, { values: pts }) : h(ZoneEmpty, {
+          state: bad ? st : "empty",
+          icon: "trending-up",
+          title: st === "partial" ? "Trend nur mit internem Token" : "Kein Trend verfügbar",
+          note: sub.note
+        })
+      )
+    );
+  }
+  function GesundheitSide(props) {
+    const sub = props.sub || {};
+    const st = props.loading ? "loading" : sub.state || "unavailable";
+    const bad = st === "unavailable" || st === "error";
+    return h(
+      "section",
+      { className: "mos__card mos__gesside" },
+      h(
+        "header",
+        { className: "mos__card-head" },
+        h(Icon, { name: props.icon, size: 16 }),
+        h("span", { className: "mos__card-title" }, props.title),
+        h(WorkspacePill, { workspace: "private" }),
+        h(ZonePip, { state: st, source: sub.source, note: sub.note })
+      ),
+      h(
+        "div",
+        { className: "mos__gesside-body" },
+        props.loading ? h("div", { className: "mos__skrow" }) : h(ZoneEmpty, {
+          state: bad ? "unavailable" : "empty",
+          icon: props.icon,
+          title: sub.summary || props.title + ": kein Connector",
+          note: sub.note
+        })
+      )
+    );
+  }
+  function GesundheitScene(props) {
+    const ov = props.data;
+    const load = props.load;
+    const offline = load === "offline" || !ov && load !== "loading";
+    const loading = load === "loading" && !ov;
+    const cards = ov && ov.cards;
+    const body = cards && cards.body;
+    const trend = cards && cards.trend;
+    const training = cards && cards.training;
+    const nutrition = cards && cards.nutrition;
+    if (offline && !ov) {
+      return h(
+        "div",
+        { className: "mos__ges" },
+        h(ZoneEmpty, {
+          state: "unavailable",
+          icon: "heart-pulse",
+          title: "Gesundheits-Projektion nicht erreichbar",
+          note: "Read-Modelle offline — WHOOP-Werte erscheinen, sobald /gesundheit/overview antwortet."
+        })
+      );
+    }
+    const bodyState = body ? body.state || "unavailable" : loading ? "loading" : "unavailable";
+    const bodyBad = bodyState === "unavailable" || bodyState === "error";
+    const rows = body && Array.isArray(body.rows) ? body.rows : [];
+    const recPct = parseRecovery(body);
+    const partial = bodyState === "partial";
+    return h(
+      "div",
+      { className: "mos__ges" },
+      // Honest partial banner — connected but detail values need the gated token.
+      partial ? h(
+        "div",
+        { className: "mos__kbanner mos__ges-banner" },
+        h(Icon, { name: "shield-check", size: 14 }),
+        h("span", null, body && body.note || "WHOOP verbunden — Detailwerte erst mit internem Token (gated). Keine erfundenen Werte."),
+        h("span", { className: "mos__kbanner-ro" }, h(Icon, { name: "eye", size: 12 }), "read-only")
+      ) : null,
+      h(
+        "div",
+        { className: "mos__gesgrid" },
+        // Hero — Recovery ring + honest stat rows (or connected-note under partial).
+        h(
+          "section",
+          { className: "mos__card mos__geshero" },
+          h(
+            "header",
+            { className: "mos__card-head" },
+            h(Icon, { name: "heart-pulse", size: 16 }),
+            h("span", { className: "mos__card-title" }, "Körper / WHOOP"),
+            h(WorkspacePill, { workspace: "private" }),
+            h(ZonePip, {
+              state: bodyState,
+              observedAt: body && body.observedAt,
+              source: body && body.source,
+              note: body && body.note
+            })
+          ),
+          loading ? h("div", { className: "mos__geshero-body" }, [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" }))) : bodyBad ? h(ZoneEmpty, { state: bodyState, icon: "heart-pulse", title: "WHOOP nicht erreichbar", note: body && body.note }) : h(
+            "div",
+            { className: "mos__geshero-body" },
+            h(
+              "div",
+              { className: "mos__geshero-ring" },
+              h(WhoopRing, { module: { _demo: false, _state: recPct != null ? "fresh" : "partial", _recovery: recPct } }),
+              body && body.summary ? h("span", { className: "mos__geshero-sum" }, body.summary) : null
+            ),
+            h(
+              "div",
+              { className: "mos__geshero-stats" },
+              rows.length ? rows.map((r, i) => h(FirmaMetric, { key: i, row: r })) : h(ZoneEmpty, { state: "empty", icon: "heart-pulse", title: "Keine Detailwerte", note: body && body.note })
+            )
+          )
+        ),
+        h(GesundheitTrend, { sub: trend, loading }),
+        h(GesundheitSide, { title: "Training", sub: training, loading, icon: "dumbbell" }),
+        h(GesundheitSide, { title: "Ernährung", sub: nutrition, loading, icon: "utensils" })
+      ),
+      h(
+        "footer",
+        { className: "mos__firma-foot mos__ges-foot" },
+        h(Icon, { name: "lock", size: 12 }),
+        h(
+          "span",
+          { className: "mos__firma-foot-t" },
+          "Quelle: WHOOP-Connector :18090 · privat" + (ov && ov.observedAt ? " · Stand " + (freshnessLabel(ov.observedAt) || "gerade") : "")
+        ),
+        h("span", { className: "mos__firma-foot-ro" }, "Nur lesen")
+      )
+    );
+  }
   function CockpitScene(props) {
     return h(
       "div",
@@ -3764,6 +4851,23 @@ var MikaelOSPlugin = function() {
         ),
         h(Icon, { name: "chevron-right", size: 18 })
       ),
+      // M3 area launch tiles (Wissen / Kommunikation / Sessions) — same peer screens.
+      h(
+        "nav",
+        { className: "mos__marealaunch", "aria-label": "Bereiche öffnen" },
+        M3_AREAS.map((a) => h(
+          "button",
+          {
+            key: a.id,
+            type: "button",
+            className: "mos__marealaunch-btn mos--" + a.accent,
+            onClick: () => props.onArea && props.onArea(a.id),
+            "aria-label": a.title + " öffnen"
+          },
+          h(Icon, { name: a.icon, size: 18 }),
+          h("span", null, a.title)
+        ))
+      ),
       // Agenda (Heute) — max 3.
       h(AgendaRailMobile, {
         workspace: props.workspace,
@@ -3828,6 +4932,19 @@ var MikaelOSPlugin = function() {
     const [firmaLoad, setFirmaLoad] = useState("loading");
     const [approvalDetails, setApprovalDetails] = useState({});
     const [approvalDetailLoading, setApprovalDetailLoading] = useState({});
+    const [wissenQuery, setWissenQuery] = useState("");
+    const [wissen, setWissen] = useState(null);
+    const [wissenLoad, setWissenLoad] = useState("idle");
+    const [komm, setKomm] = useState(null);
+    const [kommLoad, setKommLoad] = useState("loading");
+    const [sessions, setSessions] = useState(null);
+    const [sessionsLoad, setSessionsLoad] = useState("loading");
+    const [ziele, setZiele] = useState(null);
+    const [zieleLoad, setZieleLoad] = useState("loading");
+    const [reflexion, setReflexion] = useState(null);
+    const [reflexionLoad, setReflexionLoad] = useState("loading");
+    const [gesundheit, setGesundheit] = useState(null);
+    const [gesundheitLoad, setGesundheitLoad] = useState("loading");
     const [approvalsFlash, setApprovalsFlash] = useState(false);
     const approvalsRef = useRef(null);
     const [propose, setPropose] = useState(null);
@@ -3877,17 +4994,87 @@ var MikaelOSPlugin = function() {
         return prev;
       });
     }, []);
-    useEffect(() => {
-      loadOverview();
-      loadCockpit();
-      loadFirma();
-    }, [loadOverview, loadCockpit, loadFirma]);
+    const loadWissen = useCallback((term) => {
+      const q = (term || "").trim();
+      if (q.length < 2) return;
+      setWissenLoad("loading");
+      sdkGet(WISSEN_SEARCH_API + "?q=" + encodeURIComponent(q)).then((data) => {
+        setWissen(data);
+        setWissenLoad("ready");
+      }).catch(() => {
+        setWissen(null);
+        setWissenLoad("offline");
+      });
+    }, []);
+    const loadKomm = useCallback(() => {
+      setKommLoad((p) => p === "ready" ? "ready" : "loading");
+      sdkGet(KOMM_OVERVIEW_API).then((data) => {
+        setKomm(data);
+        setKommLoad("ready");
+      }).catch(() => {
+        setKommLoad((p) => p === "ready" ? "ready" : "offline");
+      });
+    }, []);
+    const loadSessions = useCallback(() => {
+      setSessionsLoad((p) => p === "ready" ? "ready" : "loading");
+      sdkGet(SESSIONS_OVERVIEW_API).then((data) => {
+        setSessions(data);
+        setSessionsLoad("ready");
+      }).catch(() => {
+        setSessionsLoad((p) => p === "ready" ? "ready" : "offline");
+      });
+    }, []);
+    const loadZiele = useCallback(() => {
+      setZieleLoad((p) => p === "ready" ? "ready" : "loading");
+      sdkGet(ZIELE_OVERVIEW_API).then((data) => {
+        setZiele(data);
+        setZieleLoad("ready");
+      }).catch(() => {
+        setZieleLoad((p) => p === "ready" ? "ready" : "offline");
+      });
+    }, []);
+    const loadReflexion = useCallback(() => {
+      setReflexionLoad((p) => p === "ready" ? "ready" : "loading");
+      sdkGet(REFLEXION_OVERVIEW_API).then((data) => {
+        setReflexion(data);
+        setReflexionLoad("ready");
+      }).catch(() => {
+        setReflexionLoad((p) => p === "ready" ? "ready" : "offline");
+      });
+    }, []);
+    const loadGesundheit = useCallback(() => {
+      setGesundheitLoad((p) => p === "ready" ? "ready" : "loading");
+      sdkGet(GESUNDHEIT_OVERVIEW_API).then((data) => {
+        setGesundheit(data);
+        setGesundheitLoad("ready");
+      }).catch(() => {
+        setGesundheitLoad((p) => p === "ready" ? "ready" : "offline");
+      });
+    }, []);
+    useEffect(
+      () => {
+        loadOverview();
+        loadCockpit();
+        loadFirma();
+        loadKomm();
+        loadSessions();
+        loadZiele();
+        loadReflexion();
+        loadGesundheit();
+      },
+      [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit]
+    );
     useEffect(() => {
       if (typeof window === "undefined") return;
       const reload = () => {
         loadOverview();
         loadCockpit();
         loadFirma();
+        loadKomm();
+        loadSessions();
+        loadZiele();
+        loadReflexion();
+        loadGesundheit();
       };
       window.addEventListener("online", reload);
       window.addEventListener("focus", reload);
@@ -3895,7 +5082,7 @@ var MikaelOSPlugin = function() {
         window.removeEventListener("online", reload);
         window.removeEventListener("focus", reload);
       };
-    }, [loadOverview, loadCockpit, loadFirma]);
+    }, [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit]);
     const liveById = useMemo(() => indexLive(live), [live]);
     const loadingModules = loadState === "loading";
     const viewModules = useMemo(
@@ -4306,6 +5493,13 @@ var MikaelOSPlugin = function() {
     const onScreenBack = useCallback(() => {
       setMobileScreen(null);
     }, []);
+    const onArea = useCallback((id) => {
+      if (isMobile) setMobileScreen(id);
+      else setScene(id);
+    }, [isMobile]);
+    const onWissenQuery = useCallback((v) => {
+      setWissenQuery(v);
+    }, []);
     if (isMobile) {
       return h(
         "div",
@@ -4351,7 +5545,23 @@ var MikaelOSPlugin = function() {
           firmaLoad,
           approvalDetails,
           approvalDetailLoading,
-          onLoadDetail: loadApprovalDetail
+          onLoadDetail: loadApprovalDetail,
+          onArea,
+          wissen,
+          wissenLoad,
+          wissenQuery,
+          onWissenQuery,
+          onWissenSearch: loadWissen,
+          komm,
+          kommLoad,
+          sessions,
+          sessionsLoad,
+          ziele,
+          zieleLoad,
+          reflexion,
+          reflexionLoad,
+          gesundheit,
+          gesundheitLoad
         }),
         h(ProposeFlow, {
           state: propose,
@@ -4437,7 +5647,7 @@ var MikaelOSPlugin = function() {
         h("span", { className: "mos__kbd" }, h(Icon, { name: "command", size: 12 }), "K · Kurzbefehle")
       )
     );
-    const isBackScene = scene === "firma" || scene === "approvals";
+    const isBackScene = scene === "firma" || scene === "approvals" || scene === "wissen" || scene === "kommunikation" || scene === "sessions" || scene === "ziele" || scene === "reflexion" || scene === "gesundheit";
     return h(
       "div",
       { className: "mos" + (scene === "timeline" ? " mos--timeline" : scene === "cockpit" ? " mos--cockpit" : isBackScene ? " mos--cockpit mos--" + scene : "") },
@@ -4460,6 +5670,7 @@ var MikaelOSPlugin = function() {
           React.Fragment,
           null,
           h(KpiBar, { cockpit, load: cockpitLoad, onGates }),
+          h(AreaLauncher, { onOpen: onArea }),
           h(
             "div",
             { className: "mos__stagewrap mos__stagewrap--ckpt" },
@@ -4520,6 +5731,107 @@ var MikaelOSPlugin = function() {
             detailLoading: approvalDetailLoading,
             onLoadDetail: loadApprovalDetail
           }),
+          h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false }))
+        ) : scene === "wissen" ? h(
+          "div",
+          { className: "mos__stagewrap mos__stagewrap--scene" },
+          h(
+            "div",
+            { className: "mos__scenehead" },
+            h(Icon, { name: "search", size: 20 }),
+            h(
+              "div",
+              { className: "mos__scenehead-t" },
+              h("h2", null, "Wissen & Suche"),
+              h("span", null, "Föderiert über unified-search :18055 · Workspace je Treffer sichtbar · nur lesen")
+            ),
+            h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")
+          ),
+          h(WissenScene, { data: wissen, load: wissenLoad, query: wissenQuery, onQuery: onWissenQuery, onSearch: loadWissen })
+        ) : scene === "kommunikation" ? h(
+          "div",
+          { className: "mos__stagewrap mos__stagewrap--scene" },
+          h(
+            "div",
+            { className: "mos__scenehead" },
+            h(Icon, { name: "radio-tower", size: 20 }),
+            h(
+              "div",
+              { className: "mos__scenehead-t" },
+              h("h2", null, "Kommunikation"),
+              h("span", null, "Telegram · Hermes-Vorschläge · FreeScout — nur Signale, Versand G7-gated")
+            ),
+            h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")
+          ),
+          h(KommunikationScene, { data: komm, load: kommLoad }),
+          h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false }))
+        ) : scene === "sessions" ? h(
+          "div",
+          { className: "mos__stagewrap mos__stagewrap--scene" },
+          h(
+            "div",
+            { className: "mos__scenehead" },
+            h(Icon, { name: "waypoints", size: 20 }),
+            h(
+              "div",
+              { className: "mos__scenehead-t" },
+              h("h2", null, "Sessions / Agenten"),
+              h("span", null, "mission.v2 + Session-Broker :18087 (inventory) · Steuern/Continue/Steer bleiben gated")
+            ),
+            h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")
+          ),
+          h(SessionsScene, { data: sessions, load: sessionsLoad }),
+          h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false }))
+        ) : scene === "ziele" ? h(
+          "div",
+          { className: "mos__stagewrap mos__stagewrap--scene" },
+          h(
+            "div",
+            { className: "mos__scenehead" },
+            h(Icon, { name: "target", size: 20 }),
+            h(
+              "div",
+              { className: "mos__scenehead-t" },
+              h("h2", null, "Ziele & Systeme"),
+              h("span", null, "Read-only Projektion · mission.v2 + task_priority_policy.yaml · keine neue Task-DB")
+            ),
+            h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")
+          ),
+          h(ZieleScene, { data: ziele, load: zieleLoad }),
+          h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false }))
+        ) : scene === "reflexion" ? h(
+          "div",
+          { className: "mos__stagewrap mos__stagewrap--scene" },
+          h(
+            "div",
+            { className: "mos__scenehead" },
+            h(Icon, { name: "notebook-pen", size: 20 }),
+            h(
+              "div",
+              { className: "mos__scenehead-t" },
+              h("h2", null, "Reflexion"),
+              h("span", null, "Journal · Entscheidungen · Lernerkenntnisse — strikt privat, nur lesen, kein Versand")
+            ),
+            h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Privat · nur lesen")
+          ),
+          h(ReflexionScene, { data: reflexion, load: reflexionLoad }),
+          h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false }))
+        ) : scene === "gesundheit" ? h(
+          "div",
+          { className: "mos__stagewrap mos__stagewrap--scene" },
+          h(
+            "div",
+            { className: "mos__scenehead" },
+            h(Icon, { name: "heart-pulse", size: 20 }),
+            h(
+              "div",
+              { className: "mos__scenehead-t" },
+              h("h2", null, "Gesundheit"),
+              h("span", null, "WHOOP-Connector :18090 · Recovery/Schlaf/HRV/Strain · privat, nur lesen")
+            ),
+            h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Privat · nur lesen")
+          ),
+          h(GesundheitScene, { data: gesundheit, load: gesundheitLoad }),
           h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false }))
         ) : scene === "timeline" ? h(
           "div",

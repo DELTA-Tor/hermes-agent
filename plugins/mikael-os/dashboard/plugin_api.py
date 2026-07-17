@@ -79,6 +79,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.error import URLError, HTTPError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 try:
@@ -258,6 +259,9 @@ STALE = {
     "firma_wartung": 26 * 3600,  # wartungs-radar snapshot regenerates ~01:30 daily
     "firma_dokumente": 6 * 3600, # Paperless intake is continuous
     "firma_runtime": 3600,       # systemd/backup health
+    # M3 area projections:
+    "kommunikation": 6 * 3600,   # bot-outbox / directives / freescout signals
+    "sessions": 300,             # broker inventory is a point-in-time snapshot
 }
 
 # ---------------------------------------------------------------------------
@@ -3397,6 +3401,487 @@ def firma_overview() -> Dict[str, Any]:
     }
 
 
+# ===========================================================================
+# M3 — three additive READ-ONLY area projections: wissen · kommunikation ·
+# sessions. Each carries a _prov envelope, the honest workspace, and degrades to
+# empty/partial/unavailable — never a fabricated value. No writes anywhere:
+# search is a GET; kommunikation is signals-only (no compose/send — G7-gated);
+# sessions expose only broker inventory + mission.v2 (steer/continue stay gated).
+# ===========================================================================
+
+# --- M3/wissen — federated read-only search over unified-search :18055 ------
+UNIFIED_SEARCH_BASE = os.environ.get("MIKAELOS_UNIFIED_SEARCH", "http://127.0.0.1:18055")
+# Workspace per backend from a FIXED, source-verified map — NEVER inferred from a
+# result's content. 'history' (agent session corpus) genuinely mixes private tax
+# work and company bookkeeping and has no clean split field, so it is tagged an
+# honest third state 'gemischt' with a visible warning — never silently shown as
+# private nor as company_signal (hard workspace-boundary rule).
+_WISSEN_WORKSPACE = {
+    "gbrain": "engineering",
+    "qdrant": "company_signal",
+    "docs": "company_signal",
+    "paperless": "company_signal",
+    "techniker": "company_signal",
+    "history": "gemischt",
+}
+_WISSEN_WS_LABEL = {
+    "engineering": "Engineering",
+    "company_signal": "Firma",
+    "gemischt": "Gemischt (privat+Firma)",
+    "private": "Privat",
+}
+_WISSEN_PERM = "Nur lesen (föderierte Suche · Workspace-Grenze je Treffer sichtbar)"
+
+
+def wissen_search(q: str = "", src: str = "") -> Dict[str, Any]:
+    """READ-ONLY federated search projection over unified-search :18055.
+
+    Every row is workspace-tagged from the fixed source-verified map above (never
+    inferred from content). 'history' rows carry workspace='gemischt' + a visible
+    warning; that corpus is not cleanly separable, so it is never silently shown
+    as private nor as company_signal. Degrades honestly:
+      empty query -> partial · service down -> unavailable · count 0 -> empty ·
+      partial backend errors -> keep the successful subset + note which failed.
+    """
+    query = (q or "").strip()
+    now = _now()
+    base_extra: Dict[str, Any] = {
+        "readOnly": True, "query": query,
+        "workspaces": ["engineering", "company_signal", "gemischt"],
+    }
+    if not query:
+        return _prov(
+            state="partial", source="unified-search :18055", source_kind="http",
+            workspace="mixed", permission=_WISSEN_PERM,
+            summary="Keine Suchanfrage", observed_at=now, stale_after=None,
+            note="Bitte einen Suchbegriff eingeben.", extra=base_extra)
+    # Health probe distinguishes 'service down' from 'reachable but 0 hits'.
+    _hc, health = _http_get_json(f"{UNIFIED_SEARCH_BASE}/health")
+    params = f"q={quote(query)}"
+    if (src or "").strip():
+        params += f"&src={quote(src.strip())}"
+    scode, data = _http_get_json(f"{UNIFIED_SEARCH_BASE}/search?{params}")
+    if scode is None or not isinstance(data, dict):
+        return _prov(
+            state="unavailable", source="unified-search :18055", source_kind="http",
+            workspace="mixed", permission=_WISSEN_PERM,
+            summary="Unified-Search nicht erreichbar", observed_at=now, stale_after=None,
+            note="GET /search auf 127.0.0.1:18055 fehlgeschlagen.", extra=base_extra)
+    results = data.get("results") if isinstance(data.get("results"), list) else []
+    errors = data.get("errors") if isinstance(data.get("errors"), list) else []
+    rows: List[Dict[str, Any]] = []
+    history_present = False
+    for r in results:
+        if not isinstance(r, dict):
+            continue
+        quelle = str(r.get("quelle") or "").strip() or "?"
+        ws = _WISSEN_WORKSPACE.get(quelle, "company_signal")
+        if quelle == "history":
+            history_present = True
+        rows.append({
+            "titel": str(r.get("titel") or "").strip() or "—",
+            "typ": r.get("typ"),
+            "quelle": quelle,
+            "workspace": ws,
+            "workspaceLabel": _WISSEN_WS_LABEL.get(ws, ws),
+            "snippet": r.get("snippet"),
+            "datum": r.get("datum"),
+            "link": r.get("link"),            # may be null (e.g. techniker rows)
+            "objektId": r.get("objekt_id"),
+            "paperlessId": r.get("paperless_id"),
+            "readOnly": True,
+        })
+    err_note = ("Teil-Backends nicht erreichbar: " + "; ".join(str(e) for e in errors)
+                if errors else None)
+    extra = {
+        **base_extra,
+        "count": len(rows),
+        "errors": errors,
+        "backendsHealthy": (health.get("backends") if isinstance(health, dict) else None),
+        "historyNote": ("„Sessions/history“ mischt privat+Firma und ist nicht sauber "
+                        "trennbar — als „gemischt“ markiert, nie still als privat/Firma."
+                        if history_present else None),
+    }
+    if not rows:
+        return _prov(
+            state="empty", source="unified-search :18055", source_kind="http",
+            workspace="mixed", permission=_WISSEN_PERM,
+            summary=f"Keine Treffer für „{query}“", observed_at=now, stale_after=None,
+            note=err_note, extra=extra)
+    return _prov(
+        state=("partial" if errors else "fresh"),
+        source="unified-search :18055 (gbrain+qdrant+docs+paperless+history+techniker)",
+        source_kind="http", workspace="mixed", permission=_WISSEN_PERM,
+        summary=f"{len(rows)} Treffer für „{query}“",
+        observed_at=now, stale_after=None, rows=rows, note=err_note, extra=extra)
+
+
+# --- M3/kommunikation — signals only (Telegram · Vorschläge · FreeScout) -----
+# READ-ONLY. No compose, no send — outbound mail/telegram is G7-gated and lives
+# nowhere in this surface. Three structurally separated row-groups; Telegram is
+# Mikael's single personal channel (workspace private), Vorschläge+FreeScout are
+# company_signal. Counts are never blended across the workspace boundary.
+BOT_OUTBOX_SENT = Path(os.environ.get(
+    "MIKAELOS_BOT_OUTBOX", "/srv/delta/data/bot/outbox/sent"))
+BOT_DIRECTIVES = Path(os.environ.get(
+    "MIKAELOS_BOT_DIRECTIVES", "/srv/delta/data/bot/directives/verarbeitet"))
+FREESCOUT_DB_HOST = os.environ.get("MIKAELOS_FREESCOUT_HOST", "127.0.0.1")
+FREESCOUT_DB_PORT = int(os.environ.get("MIKAELOS_FREESCOUT_PORT", "3306"))
+FREESCOUT_DB_NAME = os.environ.get("MIKAELOS_FREESCOUT_DB", "freescout")
+FREESCOUT_DB_USER = os.environ.get("MIKAELOS_FREESCOUT_USER", "freescout")
+_FREESCOUT_SECRET_REF = os.environ.get("MIKAELOS_FREESCOUT_SECRET_REF", "freescout/DB_PASSWORD")
+_KOMM_PERM = "Nur lesen (nur Signale · Versand G7-gated, hier nicht möglich)"
+
+
+def _parse_directive(path: Path) -> Optional[Dict[str, str]]:
+    """Minimal read of a processed Telegram directive markdown (both directions)."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    meta: Dict[str, str] = {}
+    for ln in lines:
+        s = ln.strip()
+        if s.startswith("- id:"):
+            meta["id"] = s[len("- id:"):].strip()
+        elif s.startswith("- received:"):
+            meta["received"] = s[len("- received:"):].strip()
+        elif s.startswith("- status:"):
+            meta["status"] = s[len("- status:"):].strip()
+    for i, ln in enumerate(lines):
+        if ln.strip() == "## Anweisung":
+            for nxt in lines[i + 1:]:
+                if nxt.strip():
+                    meta["anweisung"] = nxt.strip()
+                    break
+            break
+    return meta
+
+
+def _komm_telegram() -> Dict[str, Any]:
+    """Telegram Operator-Bot signals: outbox/sent (outbound) + directives (inbound).
+    Personal channel -> workspace 'private'. No 'unread' count is invented (Telegram
+    gives us no read-receipt). Signals only — never a send."""
+    base = {"workspace": "private",
+            "source": "bot outbox/sent + directives/verarbeitet",
+            "readOnly": True, "rows": []}
+    if not BOT_OUTBOX_SENT.exists() and not BOT_DIRECTIVES.exists():
+        return {**base, "state": "unavailable", "note": "Bot-Outbox/Directives nicht lesbar."}
+    rows: List[Dict[str, Any]] = []
+    newest: Optional[datetime] = None
+    for p in sorted(glob.glob(str(BOT_OUTBOX_SENT / "*.outbox.json")), reverse=True)[:6]:
+        try:
+            doc = json.loads(Path(p).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        dt = _parse_iso(doc.get("created_at"))
+        if dt and (newest is None or dt > newest):
+            newest = dt
+        first = next((ln for ln in str(doc.get("body") or "").splitlines() if ln.strip()), "")
+        rows.append({
+            "icon": "send", "accent": "cyan",
+            "title": (first[:80] or str(doc.get("event") or "Nachricht")),
+            "sub": f"ausgehend · {doc.get('kind') or doc.get('event') or 'bot'}",
+            "direction": "out", "datum": _iso(dt), "workspace": "private", "readOnly": True,
+        })
+    for p in sorted(glob.glob(str(BOT_DIRECTIVES / "*.md")), reverse=True)[:6]:
+        meta = _parse_directive(Path(p))
+        if not meta:
+            continue
+        dt = _parse_iso(meta.get("received"))
+        if dt and (newest is None or dt > newest):
+            newest = dt
+        rows.append({
+            "icon": "message-square", "accent": "amber",
+            "title": (meta.get("anweisung") or "Directive")[:80],
+            "sub": f"eingehend · {meta.get('status') or 'directive'}",
+            "direction": "in", "datum": _iso(dt), "workspace": "private", "readOnly": True,
+        })
+    rows.sort(key=lambda r: r.get("datum") or "", reverse=True)
+    if not rows:
+        return {**base, "state": "empty", "note": "Keine Telegram-Signale."}
+    return {**base, "state": _freshness_state(newest, STALE["kommunikation"]), "rows": rows[:8],
+            "note": ("Telegram = Mikaels persönlicher Kanal (privat). Kein „ungelesen“-Zähler "
+                     "— Telegram liefert keine Lesebestätigung; nicht erfunden.")}
+
+
+def _freescout_password() -> str:
+    """FreeScout DB password: env first, else sanctioned SOPS ``secret get``.
+    Never logged. Empty => the FreeScout block stays an honest partial."""
+    tok = (os.environ.get("MIKAELOS_FREESCOUT_PASSWORD") or "").strip()
+    if not tok and os.environ.get("MIKAELOS_FREESCOUT_SECRET", "1") != "0":
+        try:
+            proc = subprocess.run(["secret", "get", _FREESCOUT_SECRET_REF],
+                                  capture_output=True, text=True, timeout=6)
+            if proc.returncode == 0:
+                tok = (proc.stdout or "").strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return tok
+
+
+def _freescout_signals() -> Dict[str, Any]:
+    """FreeScout Büro-Tickets, read-only aggregate via MariaDB (SET SESSION
+    TRANSACTION READ ONLY). Counts + last N open conversations per mailbox. No
+    'Priorität' field is shown — the FreeScout core schema has none (never faked).
+    Honest degrade: no driver -> unavailable · no secret -> partial · DB down ->
+    unavailable."""
+    base = {"workspace": "company_signal", "source": "freescout (MariaDB ro)",
+            "readOnly": True, "rows": [], "byMailbox": {}, "open": 0}
+    try:
+        import pymysql  # dashboard runtime has it; other contexts may not
+    except Exception:
+        return {**base, "state": "unavailable",
+                "note": "MySQL-Treiber (pymysql) im Kontext nicht verfügbar."}
+    pw = _freescout_password()
+    if not pw:
+        return {**base, "state": "partial",
+                "note": "FreeScout-DB-Passwort (SOPS freescout/DB_PASSWORD) nicht verfügbar."}
+    try:
+        con = pymysql.connect(host=FREESCOUT_DB_HOST, port=FREESCOUT_DB_PORT,
+                              user=FREESCOUT_DB_USER, password=pw,
+                              database=FREESCOUT_DB_NAME, connect_timeout=3)
+    except Exception as exc:  # noqa: BLE001
+        return {**base, "state": "unavailable",
+                "note": f"MariaDB freescout nicht erreichbar: {type(exc).__name__}"}
+    try:
+        cur = con.cursor()
+        cur.execute("SET SESSION TRANSACTION READ ONLY")
+        cur.execute("SELECT m.name, COUNT(*) FROM conversations c "
+                    "JOIN mailboxes m ON m.id = c.mailbox_id "
+                    "WHERE c.status = 1 GROUP BY m.name")
+        by_mb = {str(n): int(c) for (n, c) in cur.fetchall()}
+        cur.execute("SELECT c.subject, m.name, c.last_reply_at, c.user_id, c.number "
+                    "FROM conversations c JOIN mailboxes m ON m.id = c.mailbox_id "
+                    "WHERE c.status = 1 ORDER BY c.last_reply_at DESC LIMIT 6")
+        recent = cur.fetchall()
+    except Exception as exc:  # noqa: BLE001
+        return {**base, "state": "error", "note": f"FreeScout-Lesefehler: {type(exc).__name__}"}
+    finally:
+        try:
+            con.close()
+        except Exception:  # noqa: BLE001
+            pass
+    open_total = sum(by_mb.values())
+    rows: List[Dict[str, Any]] = []
+    for (subject, mbname, last_reply, user_id, number) in recent:
+        lr = last_reply
+        if isinstance(lr, datetime) and lr.tzinfo is None:
+            lr = lr.replace(tzinfo=timezone.utc)
+        rows.append({
+            "icon": "inbox", "accent": "cyan",
+            "title": str(subject or f"#{number}")[:70],
+            "sub": f"{mbname} · {'zugewiesen' if user_id else 'nicht zugewiesen'}",
+            "wartetSeit": _iso(lr if isinstance(lr, datetime) else None),
+            "workspace": "company_signal", "readOnly": True,
+        })
+    return {**base, "state": ("fresh" if open_total else "empty"),
+            "rows": rows, "byMailbox": by_mb, "open": open_total,
+            "note": "FreeScout hat kein Prioritäts-Feld — keine „Priorität“-Anzeige (nicht erfunden)."}
+
+
+def module_kommunikation() -> Dict[str, Any]:
+    """READ-ONLY communication signals: Telegram (private) + Vorschläge/Approvals
+    (company_signal, reuses module_company — no second store) + FreeScout Büro-
+    Tickets (company_signal). Structurally separated row-groups; the workspace
+    boundary is visible per row and counts are never blended. Signals only —
+    sending is G7-gated and structurally absent here."""
+    tg = _komm_telegram()
+    company = module_company()  # reuse the existing approvals reader, no duplication
+    vorschlaege = {
+        "state": company.get("state"), "workspace": "company_signal",
+        "source": company.get("source"), "rows": company.get("rows") or [],
+        "pending": company.get("pending", 0), "readOnly": True,
+        "note": company.get("note"),
+    }
+    fs = _freescout_signals()
+    subs = [tg, vorschlaege, fs]
+    has_data = any(sub.get("rows") for sub in subs)
+    all_unavail = all(sub.get("state") == "unavailable" for sub in subs)
+    any_degraded = any(sub.get("state") in ("unavailable", "partial", "error") for sub in subs)
+    if all_unavail:
+        state = "unavailable"
+    elif has_data:
+        state = "partial" if any_degraded else "fresh"
+    else:
+        state = "empty"
+    rows: List[Dict[str, Any]] = []
+    for r in (tg.get("rows") or [])[:3]:
+        rows.append({**r, "group": "telegram", "workspace": "private"})
+    for r in (vorschlaege.get("rows") or [])[:3]:
+        rows.append({**r, "group": "vorschlaege", "workspace": "company_signal"})
+    for r in (fs.get("rows") or [])[:3]:
+        rows.append({**r, "group": "freescout", "workspace": "company_signal"})
+    summary = (f"{len(tg.get('rows') or [])} Telegram · "
+               f"{vorschlaege.get('pending', 0)} Vorschläge · "
+               f"{fs.get('open', 0)} FreeScout offen")
+    return _prov(
+        state=state,
+        source="bot-outbox+directives · /srv/hermes/approvals · freescout (MariaDB ro)",
+        source_kind="mixed", workspace="company_signal", permission=_KOMM_PERM,
+        summary=summary, observed_at=_now(), stale_after=STALE["kommunikation"], rows=rows,
+        note=("Nur Signale — Versand (Mail/Telegram) ist G7-gated und hier nicht möglich. "
+              "Telegram=privat, Vorschläge+FreeScout=Firma; Grenze je Zeile sichtbar."),
+        extra={"readOnly": True, "telegram": tg, "vorschlaege": vorschlaege, "freescout": fs,
+               "workspaces": ["private", "company_signal"]})
+
+
+# --- M3/sessions — 3 work-strands + mission.v2 job_projection (steer gated) --
+# READ-ONLY projection: Jarvis strand from mission.v2, Codex/Claude strands from
+# the Hermes agent-session broker :18087 (jarvis-ui actor, ONLY inventory). All
+# mutating ops (steer/continue/interrupt/bind) are gated and structurally absent.
+AGENT_BROKER_BASE = os.environ.get("MIKAELOS_AGENT_BROKER", "http://127.0.0.1:18087")
+AGENT_TOKEN_PATH = Path(os.environ.get(
+    "MIKAELOS_AGENT_TOKEN_PATH", "/run/user/1000/hermes-agent-sessions/jarvis-ui.token"))
+AGENT_ACTOR = os.environ.get("MIKAELOS_AGENT_ACTOR", "jarvis-ui")
+_BROKER_CWD_ROOTS = ["/srv/delta", "/srv/hermes", "/home/ubuntu/Dev"]
+
+
+def _agent_session_token() -> str:
+    """Broker Bearer token: env first, else the 0600 jarvis-ui token file (read at
+    call time, same pattern as _whoop_token). Never logged. Empty => strand stays
+    an honest partial/unavailable."""
+    tok = (os.environ.get("MIKAELOS_AGENT_TOKEN") or "").strip()
+    if tok:
+        return tok
+    try:
+        return AGENT_TOKEN_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def _broker_get(path: str, token: str) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
+    headers = {"Accept": "application/json", "Authorization": f"Bearer {token}",
+               "X-Hermes-Actor": AGENT_ACTOR}
+    try:
+        req = Request(f"{AGENT_BROKER_BASE}{path}", headers=headers, method="GET")
+        with urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 - fixed loopback base
+            return resp.status, json.loads(resp.read().decode("utf-8"))
+    except HTTPError as exc:
+        try:
+            return exc.code, json.loads(exc.read().decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return exc.code, None
+    except (URLError, OSError, ValueError, TimeoutError):
+        return None, None
+
+
+def _session_row(s: Dict[str, Any]) -> Dict[str, Any]:
+    started_ms = s.get("started_at")
+    started_iso = None
+    if isinstance(started_ms, (int, float)):
+        dt = _epoch_dt(started_ms / 1000.0)
+        started_iso = _iso(dt)
+    status = str(s.get("status") or "unknown")
+    return {
+        "icon": "terminal", "accent": ("emerald" if status == "running" else "cyan"),
+        "sessionId": s.get("session_id"),
+        "name": str(s.get("name") or "—")[:80],
+        "cwd": s.get("cwd"),
+        "status": status,
+        "turnId": s.get("turn_id"),
+        "controlMode": s.get("control_mode"),
+        "startedAt": started_iso,
+        "startedMs": started_ms if isinstance(started_ms, (int, float)) else None,
+        # Mutating controls are gated and never performed here:
+        "steerAvailable": False,
+        "readOnly": True,
+    }
+
+
+def _broker_strand(backend: str, token: str) -> Dict[str, Any]:
+    """Live agent sessions for one backend, merged over the allowed cwd roots.
+    inventory carries NO mission-binding/authority field, so this strand never
+    claims 'authority_attested' — that is honestly unavailable at this scope."""
+    if not token:
+        return {"state": "partial", "sessions": [],
+                "note": "Broker-Token (jarvis-ui) nicht lesbar — Sessions nicht abrufbar."}
+    seen: Dict[str, Dict[str, Any]] = {}
+    reachable = False
+    for root in _BROKER_CWD_ROOTS:
+        code, data = _broker_get(
+            f"/v1/agent-sessions/inventory?backend={backend}&cwd={quote(root)}&limit=50", token)
+        if code is None:
+            continue
+        reachable = True
+        if code != 200 or not isinstance(data, dict):
+            continue
+        for s in (data.get("sessions") or []):
+            if isinstance(s, dict) and s.get("session_id"):
+                seen[str(s["session_id"])] = s
+    if not reachable:
+        return {"state": "unavailable", "sessions": [],
+                "note": "Session-Broker :18087 nicht erreichbar."}
+    sessions = [_session_row(s) for s in seen.values()]
+    sessions.sort(key=lambda r: r.get("startedMs") or 0, reverse=True)
+    return {"state": ("fresh" if sessions else "empty"), "sessions": sessions,
+            "note": ("Bindung/Autorität (attested) ist auf Inventory-Ebene nicht enthalten "
+                     "— hier bewusst nicht behauptet." if sessions else
+                     "Keine aktiven Sessions für diesen Strang.")}
+
+
+def agent_sessions_overview() -> Dict[str, Any]:
+    """READ-ONLY 3-strand session overview + mission.v2 job list.
+      Jarvis  = mission.v2 (engineering workspace) — the honest Jarvis strand.
+      Codex   = broker inventory (backend=codex).
+      Claude  = broker inventory (backend=claude).
+    Steuern/Continue/Steer/Bind bleiben gated (propose-only) und sind hier nicht
+    ausführbar. Per-strand honest empty/partial/unavailable; a dead broker never
+    breaks the bundle."""
+    missions = _read_missions()
+    eng = [m for m in missions if str(m.get("workspace_type") or "") == "engineering"]
+    eng_sorted = sorted(eng, key=lambda m: str(m.get("updated_at") or ""), reverse=True)
+    _JAR_META = {"id": "jarvis", "title": "Jarvis (Frontdoor)", "icon": "sparkles",
+                 "workspace": "engineering", "permission": "Nur lesen",
+                 "source": "mission.v2 · /srv/hermes/missions", "sourceKind": "file",
+                 "readOnly": True}
+    if eng_sorted:
+        observed = max((_parse_iso(m.get("updated_at")) for m in eng),
+                       default=None,
+                       key=lambda d: d or datetime.min.replace(tzinfo=timezone.utc))
+        cur = eng_sorted[0]
+        jarvis = {**_JAR_META,
+                  "state": _freshness_state(observed, STALE["engineering"]),
+                  "observedAt": _iso(observed), "staleAfterSeconds": STALE["engineering"],
+                  "currentMission": {
+                      "goal": str(cur.get("goal") or cur.get("expected_result") or "Mission")[:120],
+                      "state": cur.get("state"), "updatedAt": cur.get("updated_at")},
+                  "rows": [{k: v for k, v in _mission_row(m).items() if k != "updatedAt"}
+                           for m in eng_sorted[:6]]}
+    else:
+        jarvis = {**_JAR_META, "state": "empty", "observedAt": _iso(_now()),
+                  "staleAfterSeconds": STALE["engineering"], "currentMission": None,
+                  "rows": [], "note": "Keine Engineering-Missionen (mission.v2)."}
+
+    token = _agent_session_token()
+    now = _now()
+    _CODEX_META = {"id": "codex", "title": "Codex (Bauer)", "icon": "terminal",
+                   "workspace": "engineering",
+                   "permission": "Nur lesen (steuern gated)",
+                   "source": "session-broker :18087 (jarvis-ui, inventory)",
+                   "sourceKind": "http", "observedAt": _iso(now),
+                   "staleAfterSeconds": STALE["sessions"], "readOnly": True}
+    _CLAUDE_META = {**_CODEX_META, "id": "claude",
+                    "title": "Claude (Steuerung/Review)", "icon": "bot"}
+    codex = {**_CODEX_META, **_broker_strand("codex", token)}
+    claude = {**_CLAUDE_META, **_broker_strand("claude", token)}
+
+    missions_rows = [{k: v for k, v in _mission_row(m).items() if k != "updatedAt"}
+                     for m in eng_sorted]
+    return {
+        "workspace": "engineering", "readOnly": True,
+        "strands": [jarvis, codex, claude],
+        "missions": missions_rows,
+        "observedAt": _iso(now),
+        "controls": {"steer": "gated", "continue": "gated", "bind": "gated",
+                     "note": "Nur über den propose-Weg (/actions, dry-run default) — "
+                             "hier nicht ausführbar."},
+        "note": ("Read-only Projektion: mission.v2 (Job-Wahrheit) + Session-Broker :18087 "
+                 "(jarvis-ui, nur inventory). Steuern/Continue/Steer/Bind bleiben gated und "
+                 "sind hier nicht verfügbar."),
+    }
+
+
 # --- Approval detail — full raw field projection (read-only, no decide) -----
 # Extends the schema-poor list (/cockpit/approvals) with EVERY raw field of one
 # card: intent/idempotency/payload/preconditions hashes, expected_effect,
@@ -3510,6 +3995,325 @@ def firma_approval_detail(card_id: str) -> Dict[str, Any]:
     }
 
 
+# ===========================================================================
+# M4 — three additive READ-ONLY area projections: ziele · reflexion ·
+# gesundheit. Each carries a _prov envelope, an honest workspace, and degrades
+# to empty/partial/unavailable — never a fabricated value. No writes anywhere.
+# No new store/DB is introduced:
+#   * ziele      = views over mission.v2 + task_priority_policy.yaml (no task DB).
+#                  Goal-hierarchy (year/quarter/week) and habits have NO source
+#                  in the stack -> honest empty (never illustrative numbers). The
+#                  'systems' board groups real missions by STATUS bucket, NOT by
+#                  an invented priority quadrant (that ranking is control-plane-
+#                  internal, not exposed as a read endpoint).
+#   * reflexion  = journal read-only IF a store exists; today none does, so it is
+#                  honestly empty/connect. mission.v2/approvals are NEVER used as
+#                  a substitute — those are engineering/company_signal, not privat.
+#   * gesundheit = the full WHOOP :18090 area (recovery card + 7-day trend), plus
+#                  Training/Ernährung as honest unavailable (no connector), never
+#                  faked. Honest partial when the internal token is absent.
+# ===========================================================================
+
+# Optional private journal store — none exists in the stack today. Env-overridable
+# so a future real store can be pointed at without a code change; until then the
+# reflexion area is honestly empty (never faked, never substituted by
+# mission.v2/approvals). The plugin would only ever READ this (no write/schema).
+JOURNAL_DIR = Path(os.environ.get("MIKAELOS_JOURNAL_DIR", "/srv/delta/data/journal"))
+
+# STALE windows for the M4 areas.
+STALE["ziele"] = 3600          # mission activity is near-live
+STALE["reflexion"] = 24 * 3600  # journal is sparse/human-driven
+STALE["gesundheit"] = 6 * 3600  # WHOOP recovery is a morning reading
+
+# Mission STATUS bucket -> German lane label for the 'systems' board. These are
+# STATUS buckets (from _MISSION_STATUS), deliberately NOT priority quadrants.
+_ZIELE_BUCKETS = [
+    ("running", "Läuft"),
+    ("waiting", "Wartet · Review · Freigabe"),
+    ("error", "Blockiert"),
+    ("verified", "Fertig"),
+]
+
+
+def goals_overview() -> Dict[str, Any]:
+    """READ-ONLY 'Ziele & Systeme'.
+
+    Real today: mission.v2 jobs grouped by STATUS bucket + the task-priority
+    policy provenance (version, sha, WIP-limit, display lanes). Honestly empty:
+    goal-hierarchy and habits (no source exists). No new task/todo DB is created.
+    """
+    missions = _read_missions()
+    policy = read_task_policy()
+
+    # --- policy provenance (real, from read_task_policy) --------------------
+    policy_block: Dict[str, Any] = (
+        {
+            "ok": True,
+            "version": policy.get("version"),
+            "policySha256": policy.get("policy_sha256"),
+            "wipLimitNow": policy.get("wip_limit_now"),
+            "displayLanes": policy.get("display_lanes"),
+        }
+        if policy.get("ok")
+        else {"ok": False}
+    )
+
+    # --- goal hierarchy: NO source (mission.v2 has no year/quarter/week) -----
+    goal_hierarchy = _prov(
+        state="empty", source="konzept", source_kind="konzept",
+        workspace="private", permission="—",
+        summary="Keine Ziel-Hierarchie-Quelle",
+        note=("mission.v2 kennt keine Jahres-/Quartals-/Wochenziel-Felder, und es "
+              "gibt keine andere Ziel-Hierarchie-Quelle im Stack. Kein Prozentwert "
+              "wird erfunden — ehrlicher Leerzustand."),
+    )
+
+    # --- habits: NO source (no habit/streak tracker exists) -----------------
+    habits = _prov(
+        state="empty", source="konzept", source_kind="konzept",
+        workspace="private", permission="—",
+        summary="Keine Habit-Quelle",
+        note=("Kein Habit-/Gewohnheits-/Streak-Tracker im Stack vorhanden. "
+              "Keine erfundenen Streaks."),
+    )
+
+    # --- systems: real missions grouped by STATUS bucket (not priority) -----
+    if not missions:
+        systems = _prov(
+            state="empty", source="mission.v2 · /srv/hermes/missions", source_kind="file",
+            workspace="private", permission="Nur lesen",
+            summary="Keine offenen Missionen", stale_after=STALE["ziele"],
+            note="Derzeit keine mission.v2-Missionen als Systeme/laufende Jobs.",
+            extra={"lanes": [], "counts": {b: 0 for b, _ in _ZIELE_BUCKETS}},
+        )
+    else:
+        by_bucket: Dict[str, List[Dict[str, Any]]] = {b: [] for b, _ in _ZIELE_BUCKETS}
+        for proj in missions:
+            row = _mission_row(proj)
+            bucket = str(row.get("status") or "waiting")
+            by_bucket.setdefault(bucket, []).append(row)
+        for rows in by_bucket.values():
+            rows.sort(key=lambda r: str(r.get("updatedAt") or ""), reverse=True)
+        observed = max(
+            (_parse_iso(m.get("updated_at")) for m in missions), default=None,
+            key=lambda d: d or datetime.min.replace(tzinfo=timezone.utc),
+        )
+        wip = policy.get("wip_limit_now") if policy.get("ok") else None
+        lanes = []
+        for bucket, label in _ZIELE_BUCKETS:
+            rows = by_bucket.get(bucket, [])
+            lanes.append({
+                "id": bucket,
+                "label": label,
+                "count": len(rows),
+                "wipLimit": wip if bucket == "running" else None,
+                "rows": [{k: v for k, v in r.items() if k != "updatedAt"} for r in rows[:8]],
+            })
+        n_run = len(by_bucket.get("running", []))
+        systems = _prov(
+            state=_freshness_state(observed, STALE["ziele"]),
+            source="mission.v2 (job_projection) · /srv/hermes/missions", source_kind="file",
+            workspace="private", permission="Nur lesen (Writes via Gates)",
+            summary=f"{len(missions)} Systeme · {n_run} laufen",
+            observed_at=observed, stale_after=STALE["ziele"],
+            rows=[],
+            note=("Spalten sind STATUS-Buckets (Läuft/Wartet/Blockiert/Fertig), NICHT "
+                  "Prioritäts-Quadranten — die feinkörnige Reihung (task_priority_preview) "
+                  "ist control-plane-eigen und nicht als Read-Endpunkt exponiert."),
+            extra={"lanes": lanes, "counts": {b: len(by_bucket.get(b, [])) for b, _ in _ZIELE_BUCKETS}},
+        )
+
+    return {
+        "workspace": "private",
+        "permission": "Nur lesen",
+        "observedAt": _iso(_now()),
+        "policy": policy_block,
+        "goalHierarchy": goal_hierarchy,
+        "habits": habits,
+        "systems": systems,
+        "note": ("Ziele & Systeme = reine read-only Projektion auf mission.v2 + "
+                 "task_priority_policy.yaml. Keine neue Task-/Todo-DB. Ziel-Hierarchie "
+                 "und Habits haben keine Quelle → ehrlich leer."),
+    }
+
+
+def _reflexion_section(kind_label: str, note: str) -> Dict[str, Any]:
+    """One honestly-empty reflexion panel (journal/decisions/insights).
+
+    A store may be pointed at via MIKAELOS_JOURNAL_DIR; today none exists, so the
+    state is empty (nothing captured / not connected) — never a substitute source.
+    """
+    connected = JOURNAL_DIR.exists()
+    return _prov(
+        state="empty",
+        source=(f"Journal-Store {JOURNAL_DIR}" if connected else "konzept"),
+        source_kind=("file" if connected else "konzept"),
+        workspace="private", permission="Nur lesen",
+        summary=f"{kind_label}: kein Eintrag" if connected else f"{kind_label}: keine Quelle angebunden",
+        stale_after=STALE["reflexion"],
+        rows=[],
+        note=note,
+        extra={"connected": connected, "store": str(JOURNAL_DIR)},
+    )
+
+
+def reflexion_overview() -> Dict[str, Any]:
+    """READ-ONLY 'Reflexion' — journal / Entscheidungen / Lernerkenntnisse.
+
+    No journal store exists in the stack today, so all three panels are honestly
+    empty (or 'connect' once MIKAELOS_JOURNAL_DIR is set). mission.v2/approvals are
+    NEVER surfaced here as a fake decision log — that would cross the private
+    boundary into engineering/company_signal.
+    """
+    connected = JOURNAL_DIR.exists()
+    substitution_note = ("Kein Ersatz aus mission.v2/Approvals — das wären "
+                         "engineering/company_signal-Objekte, nicht privat.")
+    return {
+        "workspace": "private",
+        "permission": "Nur lesen",
+        "observedAt": _iso(_now()),
+        "connected": connected,
+        "sections": {
+            "journal": _reflexion_section(
+                "Journal",
+                "Journal ist strikt privat und noch ohne Read-Store. Andockpunkt offen "
+                "(Operator-Entscheidung). " + substitution_note),
+            "decisions": _reflexion_section(
+                "Entscheidungsprotokoll",
+                "Kein Entscheidungs-Store (Entscheidung/Datum/Warum/Reversibel) angebunden. "
+                + substitution_note),
+            "insights": _reflexion_section(
+                "Lernerkenntnisse",
+                "Kein Erkenntnis-/Insight-Store angebunden. " + substitution_note),
+        },
+        "note": ("Reflexion = strikt privat, nur lesen, kein Compose/Versand. Kein "
+                 "Journal-Store vorhanden → ehrlicher Leer-/Connect-Zustand statt "
+                 "erfundener Einträge. Setze MIKAELOS_JOURNAL_DIR, um einen echten "
+                 "read-only Store anzubinden."),
+    }
+
+
+def body_trend(days: int = 7) -> Dict[str, Any]:
+    """READ-ONLY 7-day WHOOP recovery trend via /internal/data?kind=recovery.
+
+    Honest partial when the internal token is absent (never a fabricated line),
+    unavailable when the connector is down/disconnected, real day-series otherwise.
+    Missing days stay gaps — no interpolated point is invented.
+    """
+    try:
+        days = max(1, min(int(days or 7), 30))
+    except (TypeError, ValueError):
+        days = 7
+    status_code, health = _http_get_json(f"{WHOOP_BASE}/healthz")
+    if status_code is None or not isinstance(health, dict):
+        return _prov(
+            state="unavailable", source="WHOOP-Connector :18090", source_kind="http",
+            workspace="private", permission="Nur lesen (privat)",
+            summary="WHOOP-Connector nicht erreichbar", stale_after=STALE["gesundheit"],
+            note="GET /healthz auf 127.0.0.1:18090 fehlgeschlagen.",
+        )
+    if not bool(health.get("connected")):
+        return _prov(
+            state="unavailable", source="WHOOP-Connector :18090", source_kind="http",
+            workspace="private", permission="Nur lesen (privat)",
+            summary="WHOOP nicht verbunden", stale_after=STALE["gesundheit"],
+            note="Kein WHOOP-OAuth-Token hinterlegt (connected=false).",
+        )
+    token = _whoop_token()
+    if not token:
+        return _prov(
+            state="partial", source="WHOOP-Connector :18090 (/healthz)", source_kind="http",
+            workspace="private", permission="Nur lesen (privat)",
+            summary="Verbunden · Trend nur mit internem Token",
+            stale_after=STALE["gesundheit"],
+            note=("7-Tage-Recovery-Trend über /internal/data?kind=recovery; der "
+                  "Plugin-Kontext hält kein WHOOP_INTERNAL_TOKEN (gated Operator-Schritt, "
+                  "docs/RUNBOOK-whoop-token.md). Keine erfundene Trendlinie."),
+            extra={"series": [], "scopes": health.get("scopes")},
+        )
+    code, data = _http_get_json(
+        f"{WHOOP_BASE}/internal/data?kind=recovery&days={days}&limit={days}", token=token)
+    result = data.get("result") if isinstance(data, dict) else None
+    inner = result.get("data") if isinstance(result, dict) else None
+    records = inner.get("records") if isinstance(inner, dict) else None
+    if code != 200 or not isinstance(records, list):
+        return _prov(
+            state="unavailable", source="WHOOP · /internal/data?kind=recovery", source_kind="http",
+            workspace="private", permission="Nur lesen (privat)",
+            summary="Trend-Endpunkt nicht lesbar", stale_after=STALE["gesundheit"],
+            note="/internal/data lieferte keine lesbaren Recovery-Records.",
+        )
+    series: List[Dict[str, Any]] = []
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        score = rec.get("score") if isinstance(rec.get("score"), dict) else {}
+        val = score.get("recovery_score")
+        series.append({
+            "date": rec.get("created_at") or rec.get("updated_at"),
+            "recoveryScore": val if isinstance(val, (int, float)) and not isinstance(val, bool) else None,
+        })
+    series.sort(key=lambda r: str(r.get("date") or ""))
+    observed = _parse_iso(records[0].get("created_at")) if records and isinstance(records[0], dict) else None
+    if not series:
+        return _prov(
+            state="empty", source="WHOOP · /internal/data?kind=recovery", source_kind="http",
+            workspace="private", permission="Nur lesen (privat)",
+            summary="Keine Recovery-Tage im Fenster", stale_after=STALE["gesundheit"],
+            note=f"Keine Recovery-Records in den letzten {days} Tagen.",
+            extra={"series": [], "days": days},
+        )
+    return _prov(
+        state=_freshness_state(observed, STALE["gesundheit"]),
+        source="WHOOP · /internal/data?kind=recovery", source_kind="http",
+        workspace="private", permission="Nur lesen (privat)",
+        summary=f"{len(series)}-Tage-Recovery-Trend",
+        observed_at=observed, stale_after=STALE["gesundheit"],
+        rows=[],
+        extra={"series": series, "days": days, "scopes": health.get("scopes")},
+    )
+
+
+def _gesundheit_unavailable(title: str, connector: str, icon: str) -> Dict[str, Any]:
+    """An honestly-unavailable side card (Training/Ernährung): no connector exists,
+    so no value is shown — never a faked number."""
+    return _prov(
+        state="unavailable", source="konzept", source_kind="konzept",
+        workspace="private", permission="—",
+        summary=f"{title}: kein Connector",
+        stale_after=STALE["gesundheit"],
+        rows=[],
+        note=(f"{connector} ist nicht angebunden (keine Secrets, kein Connector). "
+              f"WHOOP liefert dies nicht — keine erfundenen Werte."),
+        extra={"icon": icon},
+    )
+
+
+def gesundheit_overview() -> Dict[str, Any]:
+    """READ-ONLY 'Gesundheit' area — full WHOOP surface.
+
+    body = recovery/sleep/HRV/RHR/strain (honest partial without token); trend =
+    7-day recovery series; training/ernaehrung = honest unavailable (no connector).
+    Reuses module_body() so the two WHOOP cards stay consistent. No writes.
+    """
+    return {
+        "workspace": "private",
+        "permission": "Nur lesen (privat)",
+        "observedAt": _iso(_now()),
+        "cards": {
+            "body": module_body(),
+            "trend": body_trend(days=7),
+            "training": _gesundheit_unavailable(
+                "Training", "TrainingPeaks (geplante nächste Einheit)", "dumbbell"),
+            "nutrition": _gesundheit_unavailable(
+                "Ernährung", "MyFitnessPal (Protein/Wasser/Koffein)", "utensils"),
+        },
+        "note": ("Gesundheit = privat, nur lesen. WHOOP-Connector :18090 ist die einzige "
+                 "reale Quelle; ohne WHOOP_INTERNAL_TOKEN ehrlich partial. Training und "
+                 "Ernährung sind mangels Connector ehrlich 'nicht verfügbar' — nie erfunden."),
+    }
+
+
 # ---------------------------------------------------------------------------
 # HTTP surface. GET reads are zero-write. The single POST route is propose-only:
 # dry-run previews with no network; a live submit hands the intent to the gated
@@ -3577,6 +4381,60 @@ def firma_approval_detail_route(id: str = "") -> Dict[str, Any]:
     status). Emits absent fields as explicit null/[]. Never calls /approvals/decide
     — the decision is Operator-only; this only shows the gated path."""
     return firma_approval_detail(card_id=id)
+
+
+@router.get("/wissen/search")
+def wissen_search_route(q: str = "", src: str = "") -> Dict[str, Any]:
+    """READ-ONLY föderierte Suche über unified-search :18055. Jeder Treffer trägt
+    Herkunft (quelle) + Workspace-Grenze (workspace: engineering|company_signal|
+    gemischt) aus einer fixen, quell-verifizierten Map — nie aus dem Inhalt geraten.
+    'history' ist ehrlich 'gemischt' (privat+Firma nicht trennbar). Ehrlich
+    partial (leere Query) / unavailable (Dienst weg) / empty (0 Treffer)."""
+    return wissen_search(q=q, src=src)
+
+
+@router.get("/kommunikation/overview")
+def kommunikation_overview_route() -> Dict[str, Any]:
+    """READ-ONLY Kommunikations-Signale: Telegram (privat) · Vorschläge/Approvals
+    (Firma) · FreeScout-Tickets (Firma). NUR lesen — kein Compose/Versand (G7-
+    gated, hier strukturell nicht vorhanden). Workspace-Grenze je Zeile sichtbar,
+    Zähler nie geblendet. Ehrlich empty/partial/unavailable je Kanal."""
+    return module_kommunikation()
+
+
+@router.get("/agent-sessions/overview")
+def agent_sessions_overview_route() -> Dict[str, Any]:
+    """READ-ONLY 3 Arbeitsstränge (Jarvis=mission.v2 · Codex/Claude=Session-Broker
+    :18087 inventory) + mission.v2 Job-Liste. Steuern/Continue/Steer/Bind bleiben
+    gated (propose-only) und sind hier nicht ausführbar. Ehrlich empty/partial/
+    unavailable je Strang; toter Broker bricht das Bundle nie."""
+    return agent_sessions_overview()
+
+
+@router.get("/ziele/overview")
+def ziele_overview_route() -> Dict[str, Any]:
+    """READ-ONLY 'Ziele & Systeme': views on mission.v2 + task_priority_policy.yaml.
+    No new task/todo DB. Real: policy provenance (version/sha/WIP/lanes) + missions
+    grouped by STATUS bucket (nicht Prioritäts-Quadrant). Ehrlich empty:
+    Ziel-Hierarchie (Jahr/Quartal/Woche) + Habits (keine Quelle im Stack)."""
+    return goals_overview()
+
+
+@router.get("/reflexion/overview")
+def reflexion_overview_route() -> Dict[str, Any]:
+    """READ-ONLY 'Reflexion' (strikt privat): Journal · Entscheidungen ·
+    Lernerkenntnisse. Kein Journal-Store im Stack → ehrlich empty/connect
+    (MIKAELOS_JOURNAL_DIR anbindbar). Kein Ersatz aus mission.v2/Approvals
+    (Workspace-Grenze). Nur lesen, kein Compose/Versand."""
+    return reflexion_overview()
+
+
+@router.get("/gesundheit/overview")
+def gesundheit_overview_route() -> Dict[str, Any]:
+    """READ-ONLY 'Gesundheit': voller WHOOP :18090 Bereich (Recovery-Karte +
+    7-Tage-Trend) + Training/Ernährung ehrlich 'kein Connector'. Ohne
+    WHOOP_INTERNAL_TOKEN ehrlich partial (nie erfundene Werte). Nur lesen (privat)."""
+    return gesundheit_overview()
 
 
 @router.get("/review/session")
@@ -3663,6 +4521,13 @@ def health() -> Dict[str, Any]:
             "sqliteMode": "ro",
             "overview": "GET /firma/overview (6 Karten, read-only)",
             "approvalDetail": "GET /firma/approvals/detail?id=<card> (read-only, kein decide)",
+        },
+        "m4": {
+            "ziele": "GET /ziele/overview (mission.v2 + task_priority_policy, keine neue DB)",
+            "reflexion": "GET /reflexion/overview (journal read-only oder ehrlich empty)",
+            "gesundheit": "GET /gesundheit/overview (WHOOP :18090, ehrlich partial ohne Token)",
+            "journal_dir": str(JOURNAL_DIR),
+            "journal_dir_present": JOURNAL_DIR.exists(),
         },
         "coach": {
             "countdown": "GET /study/plan (exams.json × Anki, read-only)",

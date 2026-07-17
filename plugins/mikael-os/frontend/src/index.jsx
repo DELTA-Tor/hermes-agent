@@ -366,6 +366,25 @@ const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
 // /approvals/decide code path at all.
 const FIRMA_OVERVIEW_API = PLUGIN_API + "/firma/overview";
 const FIRMA_APPROVAL_DETAIL_API = PLUGIN_API + "/firma/approvals/detail";
+// M3 — three additive read-only Bereichs-Szenen. All GET-only, zero-write; each
+// carries the honest _prov envelope from plugin_api.py. WISSEN federates over
+// unified-search :18055 (every row workspace-tagged from a fixed source-verified
+// map, never guessed); KOMMUNIKATION reads Telegram/Vorschläge/FreeScout SIGNALS
+// only (no compose/send — outbound is G7-gated and structurally absent here);
+// SESSIONS projects mission.v2 + the agent-session broker :18087 (inventory only;
+// steer/continue/bind stay gated and are never executed from this surface).
+const WISSEN_SEARCH_API = PLUGIN_API + "/wissen/search";
+const KOMM_OVERVIEW_API = PLUGIN_API + "/kommunikation/overview";
+const SESSIONS_OVERVIEW_API = PLUGIN_API + "/agent-sessions/overview";
+// M4 — three more additive read-only Bereichs-Szenen. ZIELE projects mission.v2 +
+// task_priority_policy.yaml (NO new task/todo DB; goal-hierarchy + habits are
+// honestly empty — no source exists). REFLEXION reads an optional journal store
+// (honest empty/connect when none is wired; NEVER substitutes mission/approvals).
+// GESUNDHEIT reads the WHOOP connector :18090 (honest partial without the internal
+// token; Training/Ernährung honestly unavailable — no connector). All read-only.
+const ZIELE_OVERVIEW_API = PLUGIN_API + "/ziele/overview";
+const REFLEXION_OVERVIEW_API = PLUGIN_API + "/reflexion/overview";
+const GESUNDHEIT_OVERVIEW_API = PLUGIN_API + "/gesundheit/overview";
 const POS = MODULES.reduce((acc, m) => { acc[m.id] = m.pos; return acc; }, {});
 
 // SDK-aware POST/GET. Prefer the host's authed transport; fall back to window
@@ -1486,7 +1505,7 @@ function MobileHome(props) {
       byId: props.byId, workspace: props.workspace || "private", load: props.loadState,
       cockpit: props.cockpit || {}, cockpitLoad: props.cockpitLoad,
       onGoJarvis: props.onGoJarvis, onGoTimeline: props.onGoTimeline,
-      onGoApprovals: props.onGoApprovals, onGoFirma: props.onGoFirma,
+      onGoApprovals: props.onGoApprovals, onGoFirma: props.onGoFirma, onArea: props.onArea,
     }),
     h(
       "div",
@@ -1863,23 +1882,47 @@ function MobileSheet(props) {
 // Full mobile screen for the two M2 drill-downs (FIRMA · Entscheidungen). Pushed
 // ABOVE the tab content — covering the tab bar + command dock — with a top-left
 // back-chevron, reusing the tab-suppression precedent rather than a bottom-sheet.
+const MSCREEN_META = {
+  firma:         { title: "Firma / Rise-L",     sub: "read-only Projektion · Deep-Links ins FSM" },
+  approvals:     { title: "Entscheidungen",     sub: "Entscheidung nur durch dich (Operator)" },
+  wissen:        { title: "Wissen & Suche",     sub: "föderiert · Workspace je Treffer · nur lesen" },
+  kommunikation: { title: "Kommunikation",      sub: "nur Signale · Versand G7-gated" },
+  sessions:      { title: "Sessions / Agenten", sub: "mission.v2 + Broker · Steuern gated" },
+  ziele:         { title: "Ziele & Systeme",    sub: "mission.v2 + Policy · keine neue Task-DB" },
+  reflexion:     { title: "Reflexion",          sub: "strikt privat · nur lesen · kein Versand" },
+  gesundheit:    { title: "Gesundheit",         sub: "WHOOP :18090 · privat · nur lesen" },
+};
 function MobileScreen(props) {
-  const isFirma = props.kind === "firma";
-  return h("div", { className: "mos__mscreen", role: "region",
-      "aria-label": isFirma ? "Firma / Rise-L" : "Entscheidungen" },
+  const kind = props.kind;
+  const meta = MSCREEN_META[kind] || MSCREEN_META.firma;
+  let body;
+  if (kind === "firma") {
+    body = h(FirmaScene, { firma: props.firma, load: props.firmaLoad });
+  } else if (kind === "approvals") {
+    body = h(ApprovalsScene, { approvals: props.approvals, load: props.cockpitLoad,
+      details: props.details, detailLoading: props.detailLoading, onLoadDetail: props.onLoadDetail });
+  } else if (kind === "wissen") {
+    body = h(WissenScene, { data: props.wissen, load: props.wissenLoad, query: props.wissenQuery,
+      onQuery: props.onWissenQuery, onSearch: props.onWissenSearch });
+  } else if (kind === "kommunikation") {
+    body = h(KommunikationScene, { data: props.komm, load: props.kommLoad });
+  } else if (kind === "sessions") {
+    body = h(SessionsScene, { data: props.sessions, load: props.sessionsLoad });
+  } else if (kind === "ziele") {
+    body = h(ZieleScene, { data: props.ziele, load: props.zieleLoad });
+  } else if (kind === "reflexion") {
+    body = h(ReflexionScene, { data: props.reflexion, load: props.reflexionLoad });
+  } else if (kind === "gesundheit") {
+    body = h(GesundheitScene, { data: props.gesundheit, load: props.gesundheitLoad });
+  }
+  return h("div", { className: "mos__mscreen mos__mscreen--" + kind, role: "region", "aria-label": meta.title },
     h("header", { className: "mos__mscreen-top" },
       h("button", { type: "button", className: "mos__mscreen-back", onClick: props.onBack, "aria-label": "Zurück zum Cockpit" },
         h(Icon, { name: "chevron-left", size: 22 })),
       h("span", { className: "mos__mscreen-titles" },
-        h("span", { className: "mos__mscreen-title" }, isFirma ? "Firma / Rise-L" : "Entscheidungen"),
-        h("span", { className: "mos__mscreen-sub" },
-          h(Icon, { name: "lock", size: 11 }),
-          isFirma ? "read-only Projektion · Deep-Links ins FSM" : "Entscheidung nur durch dich (Operator)"))),
-    h("main", { className: "mos__mscreen-body" },
-      isFirma
-        ? h(FirmaScene, { firma: props.firma, load: props.firmaLoad })
-        : h(ApprovalsScene, { approvals: props.approvals, load: props.cockpitLoad,
-            details: props.details, detailLoading: props.detailLoading, onLoadDetail: props.onLoadDetail })));
+        h("span", { className: "mos__mscreen-title" }, meta.title),
+        h("span", { className: "mos__mscreen-sub" }, h(Icon, { name: "lock", size: 11 }), meta.sub))),
+    h("main", { className: "mos__mscreen-body" }, body));
 }
 
 function MobileShell(props) {
@@ -1890,6 +1933,12 @@ function MobileShell(props) {
       firma: props.firma, firmaLoad: props.firmaLoad,
       approvals: props.cockpit && props.cockpit.approvals, cockpitLoad: props.cockpitLoad,
       details: props.approvalDetails, detailLoading: props.approvalDetailLoading, onLoadDetail: props.onLoadDetail,
+      wissen: props.wissen, wissenLoad: props.wissenLoad, wissenQuery: props.wissenQuery,
+      onWissenQuery: props.onWissenQuery, onWissenSearch: props.onWissenSearch,
+      komm: props.komm, kommLoad: props.kommLoad, sessions: props.sessions, sessionsLoad: props.sessionsLoad,
+      ziele: props.ziele, zieleLoad: props.zieleLoad,
+      reflexion: props.reflexion, reflexionLoad: props.reflexionLoad,
+      gesundheit: props.gesundheit, gesundheitLoad: props.gesundheitLoad,
     });
   }
   // The command pill belongs to the Jarvis tab; the Timeline is a read view
@@ -1926,7 +1975,7 @@ function MobileShell(props) {
       workspace: props.workspace, loadState: props.loadState,
       cockpit: props.cockpit, cockpitLoad: props.cockpitLoad,
       onChip: props.onChip, onGoTimeline: props.onGoTimeline,
-      onGoApprovals: props.onGoApprovals, onGoFirma: props.onGoFirma,
+      onGoApprovals: props.onGoApprovals, onGoFirma: props.onGoFirma, onArea: props.onArea,
     });
   }
   return h(
@@ -2823,6 +2872,10 @@ const WS_TAG = {
   private:        { label: "Privat", tone: "cyan" },
   company_signal: { label: "Firma",  tone: "neutral" },
   engineering:    { label: "Eng",    tone: "violet" },
+  // M3/wissen — the session/history corpus mixes private + company work and is
+  // NOT cleanly separable, so it gets its own honest fourth tone (amber, striped)
+  // and is never silently shown as cyan-private nor neutral-company.
+  gemischt:       { label: "Gemischt", tone: "amber" },
 };
 
 // Approval gate-class → CATEGORY. Pure categorisation per UI-SPEC §5/§6 — NEVER
@@ -3456,6 +3509,681 @@ function ApprovalsScene(props) {
         details: props.details, detailLoading: props.detailLoading, onLoadDetail: props.onLoadDetail })));
 }
 
+// ===========================================================================
+// M3 — three additive read-only Bereichs-Szenen (peers of Firma/Entscheidungen).
+// Every value comes from the honest backend projection; a missing/failed source
+// renders a real loading/empty/partial/unavailable state — never a fabricated
+// number, message or answer. No writes, no compose, no steer from any of them.
+// ===========================================================================
+
+// The three area launch tiles (shared by desktop cockpit + mobile home). Each
+// opens a peer scene; they never carry a live count they can't prove.
+const M3_AREAS = [
+  { id: "wissen",        icon: "search",      accent: "cyan",   title: "Wissen & Suche",
+    sub: "Föderiert · Workspace je Treffer" },
+  { id: "kommunikation", icon: "radio-tower", accent: "violet", title: "Kommunikation",
+    sub: "Telegram · Hermes · FreeScout" },
+  { id: "sessions",      icon: "waypoints",   accent: "cyan",   title: "Sessions / Agenten",
+    sub: "Stränge · mission.v2 · steuern gated" },
+  // M4 peers (same launch mechanism, same read-only peer-scene contract).
+  { id: "ziele",         icon: "target",      accent: "emerald", title: "Ziele & Systeme",
+    sub: "mission.v2 + Policy · keine neue Task-DB" },
+  { id: "reflexion",     icon: "notebook-pen", accent: "violet", title: "Reflexion",
+    sub: "Journal · Entscheidungen · Erkenntnisse" },
+  { id: "gesundheit",    icon: "heart-pulse", accent: "emerald", title: "Gesundheit",
+    sub: "WHOOP · Recovery · Schlaf · Strain" },
+];
+function AreaLauncher(props) {
+  return h("nav", { className: "mos__arealaunch", "aria-label": "Bereiche öffnen" },
+    M3_AREAS.map((a) =>
+      h("button", { key: a.id, type: "button", className: "mos__arealaunch-btn mos--" + a.accent,
+        onClick: () => props.onOpen(a.id), "aria-label": a.title + " öffnen" },
+        h("span", { className: "mos__arealaunch-ico" }, h(Icon, { name: a.icon, size: 18 })),
+        h("span", { className: "mos__arealaunch-body" },
+          h("span", { className: "mos__arealaunch-title" }, a.title),
+          h("span", { className: "mos__arealaunch-sub" }, a.sub)),
+        h(Icon, { name: "arrow-up-right", size: 15, className: "mos__arealaunch-go" }))));
+}
+
+// A workspace pill honest per the fixed map (private/Firma/Eng/Gemischt) — the
+// gemischt tone is deliberately distinct so a mixed corpus never reads as clean.
+function WorkspacePill(props) {
+  const ws = props.workspace;
+  const tag = WS_TAG[ws] || { label: props.label || ws || "—", tone: "neutral" };
+  return h("span", { className: "mos__wtag mos__wtag--" + tag.tone, title: props.title || ws || "" },
+    ws === "gemischt" ? h(Icon, { name: "eye-off", size: 10 }) : null,
+    props.label || tag.label);
+}
+
+// ---- WISSEN & SUCHE --------------------------------------------------------
+// A federated search surface: search bar → GET /wissen/search?q=. Each result
+// row carries a source badge + a workspace pill (from the fixed source-verified
+// map). history rows are amber "Gemischt" with a visible caption; techniker rows
+// have no deep-link (honestly disabled). States loading/empty/partial/error real.
+const WISSEN_SOURCE = {
+  gbrain:    { icon: "brain",       label: "gbrain" },
+  qdrant:    { icon: "database",    label: "Mail" },
+  docs:      { icon: "file-text",   label: "Dokumente" },
+  paperless: { icon: "folder-open", label: "Paperless" },
+  history:   { icon: "history",     label: "Sessions" },
+  techniker: { icon: "wrench",      label: "Technik-Wissen" },
+};
+function WissenResult(props) {
+  const r = props.row;
+  const src = WISSEN_SOURCE[r.quelle] || { icon: "circle", label: r.quelle || "?" };
+  const hasLink = r.link && typeof r.link === "string";
+  return h("li", { className: "mos__wres" },
+    h("span", { className: "mos__wres-ico" }, h(Icon, { name: src.icon, size: 16 })),
+    h("div", { className: "mos__wres-body" },
+      h("div", { className: "mos__wres-head" },
+        h("span", { className: "mos__wres-title" }, r.titel || "—"),
+        r.datum ? h("span", { className: "mos__wres-datum" }, r.datum) : null),
+      r.snippet ? h("p", { className: "mos__wres-snippet" }, String(r.snippet).slice(0, 220)) : null,
+      h("div", { className: "mos__wres-tags" },
+        h("span", { className: "mos__wres-src" }, h(Icon, { name: src.icon, size: 11 }), src.label),
+        h(WorkspacePill, { workspace: r.workspace, label: r.workspaceLabel }),
+        r.typ ? h("span", { className: "mos__wres-typ" }, r.typ) : null,
+        hasLink
+          ? h("a", { className: "mos__wres-open", href: r.link, target: "_blank", rel: "noopener noreferrer",
+              title: "Quelle öffnen (neuer Tab)" }, h(Icon, { name: "external-link", size: 12 }), "öffnen")
+          : h("span", { className: "mos__wres-nolink", title: "Kein direkter Link (z. B. Technik-Wissen aus dem Vektorindex)" },
+              h(Icon, { name: "lock", size: 11 }), "kein Link"))));
+}
+function WissenScene(props) {
+  const ov = props.data;
+  const load = props.load;         // idle | loading | ready | offline
+  const q = props.query || "";
+  const st = ov ? (ov.state || "empty") : (load === "loading" ? "loading" : (load === "offline" ? "unavailable" : "idle"));
+  const rows = (ov && Array.isArray(ov.rows)) ? ov.rows : [];
+  // Debounced live search (≥2 chars, 320ms) — the shoot harness types + waits.
+  const onSearch = props.onSearch;
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) return undefined;
+    const t = setTimeout(() => onSearch(term), 320);
+    return () => clearTimeout(t);
+  }, [q, onSearch]);
+  const errs = (ov && Array.isArray(ov.errors)) ? ov.errors : [];
+  let body;
+  if (st === "idle" || (!ov && load === "idle")) {
+    body = h(ZoneEmpty, { state: "empty", icon: "search",
+      title: "Über alle Wissensquellen suchen",
+      note: "gbrain · Mail · Dokumente · Paperless · Sessions · Technik-Wissen — jeder Treffer zeigt seinen Workspace." });
+  } else if (load === "loading" || st === "loading") {
+    body = h("ul", { className: "mos__wres-list" }, [0, 1, 2, 3].map((i) => h("li", { key: i, className: "mos__skrow" })));
+  } else if (st === "unavailable" || st === "error" || load === "offline") {
+    body = h(ZoneEmpty, { state: "unavailable", icon: "search-x",
+      title: "Unified-Search nicht erreichbar",
+      note: (ov && ov.note) || "Die föderierte Suche (:18055) antwortet nicht — bitte später erneut." });
+  } else if (st === "partial" && !rows.length) {
+    body = h(ZoneEmpty, { state: "empty", icon: "search",
+      title: (ov && ov.summary) || "Suchbegriff eingeben", note: ov && ov.note });
+  } else if (!rows.length) {
+    body = h(ZoneEmpty, { state: "empty", icon: "search-x",
+      title: (ov && ov.summary) || "Keine Treffer",
+      note: (ov && ov.note) || "Andere Begriffe probieren." });
+  } else {
+    body = h("ul", { className: "mos__wres-list" }, rows.map((r, i) => h(WissenResult, { key: i, row: r })));
+  }
+  const historyNote = ov && ov.historyNote;
+  return h("div", { className: "mos__wissen" },
+    h("form", { className: "mos__wsearch", role: "search",
+      onSubmit: (e) => { if (e && e.preventDefault) e.preventDefault(); if (q.trim().length >= 2) onSearch(q.trim()); } },
+      h("span", { className: "mos__wsearch-ico" }, h(Icon, { name: "search", size: 18 })),
+      h("input", { className: "mos__wsearch-input", type: "search", value: q,
+        placeholder: "Suche über alle Wissensquellen …", "aria-label": "Wissenssuche",
+        autoComplete: "off", onChange: (e) => props.onQuery(e.target.value) }),
+      ov && rows.length ? h("span", { className: "mos__wsearch-count" }, rows.length + " Treffer") : null),
+    // Honest per-query banners: partial backend errors + the gemischt caption.
+    (st === "partial" && errs.length)
+      ? h("div", { className: "mos__wbanner mos__wbanner--warn" },
+          h(Icon, { name: "triangle-alert", size: 14 }),
+          h("span", null, "Teil-Backends nicht erreichbar: " + errs.join("; ")))
+      : null,
+    historyNote
+      ? h("div", { className: "mos__wbanner mos__wbanner--mixed" },
+          h(Icon, { name: "eye-off", size: 14 }),
+          h("span", null, historyNote))
+      : null,
+    body);
+}
+
+// ---- KOMMUNIKATION ---------------------------------------------------------
+// Three structurally separated signal columns. SIGNALS ONLY — there is no
+// compose/send affordance anywhere; outbound mail/telegram is G7-gated and lives
+// nowhere in this surface. Each column keeps its own honest state; the workspace
+// boundary is visible per column and counts are never blended.
+function KommRow(props) {
+  const r = props.row;
+  const dirIcon = r.direction === "in" ? "chevron-left" : r.direction === "out" ? "arrow-up-right" : (r.icon || "circle");
+  return h("li", { className: "mos__krow mos--" + (r.accent || "cyan") },
+    h("span", { className: "mos__krow-ico" }, h(Icon, { name: r.icon || dirIcon, size: 15 })),
+    h("div", { className: "mos__krow-body" },
+      h("span", { className: "mos__krow-title" }, r.title || "—"),
+      r.sub ? h("span", { className: "mos__krow-sub" }, r.sub) : null),
+    (r.wartetSeit || r.datum)
+      ? h("span", { className: "mos__krow-when" }, freshnessLabel(r.wartetSeit || r.datum) || "")
+      : (r.statusLabel ? h("span", { className: "mos__status mos__status--" + (r.status || "waiting") }, r.statusLabel) : null));
+}
+function KommColumn(props) {
+  const sub = props.sub || {};
+  const st = sub.state || (props.load === "loading" ? "loading" : "unavailable");
+  const rows = Array.isArray(sub.rows) ? sub.rows : [];
+  const bad = st === "unavailable" || st === "error";
+  return h("section", { className: "mos__card mos__kcol" },
+    h("header", { className: "mos__card-head" },
+      h(Icon, { name: props.icon, size: 16 }),
+      h("span", { className: "mos__card-title" }, props.title),
+      h(WorkspacePill, { workspace: props.workspace }),
+      h(ZonePip, { state: st, source: sub.source, note: sub.note })),
+    h("div", { className: "mos__kcol-body" },
+      props.load === "loading" && !props.sub
+        ? [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" }))
+        : (bad || !rows.length)
+          ? h(ZoneEmpty, { state: bad ? st : (st === "partial" ? "partial" : "empty"),
+              icon: props.emptyIcon || "inbox",
+              title: bad ? (props.badTitle || "Quelle nicht erreichbar") : (props.emptyTitle || "Keine Signale"),
+              note: sub.note })
+          : [
+              // Optional mailbox tally (FreeScout).
+              props.byMailbox && sub.byMailbox
+                ? h("div", { key: "mb", className: "mos__kcol-mb" },
+                    Object.keys(sub.byMailbox).map((mb) =>
+                      h("span", { key: mb, className: "mos__kcol-mbchip" },
+                        h("b", null, sub.byMailbox[mb]), mb)))
+                : null,
+              h("ul", { key: "rows", className: "mos__krow-list" }, rows.map((r, i) => h(KommRow, { key: i, row: r }))),
+            ]),
+    sub.note && rows.length
+      ? h("footer", { className: "mos__firma-foot mos__kcol-foot" },
+          h(Icon, { name: "lock", size: 12 }),
+          h("span", { className: "mos__firma-foot-t", title: sub.note }, sub.note))
+      : null);
+}
+function KommunikationScene(props) {
+  const ov = props.data;
+  const load = props.load;
+  const offline = load === "offline" || (!ov && load !== "loading");
+  const tg = ov && ov.telegram, vs = ov && ov.vorschlaege, fs = ov && ov.freescout;
+  const fsOpen = fs && typeof fs.open === "number" ? fs.open : null;
+  const vsPending = vs && typeof vs.pending === "number" ? vs.pending : null;
+  return h("div", { className: "mos__komm" },
+    // The permanent, honest gate banner — no compose button exists in this scene.
+    h("div", { className: "mos__kbanner" },
+      h(Icon, { name: "lock", size: 14 }),
+      h("span", null, "Nur Signale — Versand (Mail/Telegram) ist freigabepflichtig (G7) und hier nicht möglich."),
+      h("span", { className: "mos__kbanner-ro" }, h(Icon, { name: "eye", size: 12 }), "read-only")),
+    offline && !ov
+      ? h(ZoneEmpty, { state: "unavailable", icon: "radio-tower",
+          title: "Kommunikations-Projektion nicht erreichbar",
+          note: "Signale offline — die Spalten erscheinen, sobald /kommunikation/overview antwortet." })
+      : h("div", { className: "mos__kgrid" },
+          h(KommColumn, { title: "Telegram", icon: "send", workspace: "private", load: load, sub: tg,
+            emptyIcon: "send", emptyTitle: "Keine Telegram-Signale" }),
+          h(KommColumn, { title: (vsPending != null ? "Hermes-Vorschläge · " + vsPending : "Hermes-Vorschläge"),
+            icon: "shield-check", workspace: "company_signal", load: load, sub: vs,
+            emptyIcon: "shield-check", emptyTitle: "Keine offenen Vorschläge" }),
+          h(KommColumn, { title: (fsOpen != null ? "FreeScout · " + fsOpen + " offen" : "FreeScout"),
+            icon: "inbox", workspace: "company_signal", load: load, sub: fs, byMailbox: true,
+            emptyIcon: "inbox", emptyTitle: "Keine offenen Tickets",
+            badTitle: "FreeScout-DB nicht erreichbar" })));
+}
+
+// ---- SESSIONS / AGENTEN ----------------------------------------------------
+// Three work-strand cards (Jarvis / Codex / Claude) + the mission.v2 job list.
+// steer/continue/bind are GATED — the öffnen/verfolgen affordances render only as
+// visibly disabled buttons (never live). Codex/Claude strands come from the
+// broker inventory; the "attested"/authority badge is honestly absent (inventory
+// does not carry it), never inferred from status alone.
+function SessionRow(props) {
+  const s = props.session;
+  const running = s.status === "running";
+  return h("li", { className: "mos__sess mos--" + (running ? "emerald" : "cyan") },
+    h("span", { className: "mos__sess-ico" }, h(Icon, { name: s.icon || "terminal", size: 15 })),
+    h("div", { className: "mos__sess-body" },
+      h("span", { className: "mos__sess-name" }, s.name || "—"),
+      h("span", { className: "mos__sess-meta" },
+        h("span", { className: "mos__status mos__status--" + (running ? "verified" : "waiting") },
+          running ? h(Icon, { name: "circle-check-big", size: 12 }) : h(Icon, { name: "clock", size: 12 }),
+          s.status || "—"),
+        s.cwd ? h("span", { className: "mos__sess-cwd", title: s.cwd }, s.cwd) : null,
+        s.startedAt ? h("span", { className: "mos__sess-when" }, freshnessLabel(s.startedAt) || "") : null)),
+    // Gated controls — sichtbar-aber-gesperrt, never a working steer/continue.
+    h("span", { className: "mos__sess-acts" },
+      h("button", { type: "button", disabled: true, "aria-disabled": "true", className: "mos__sess-act is-gated",
+        title: "Öffnen/Steuern nur über den propose-Weg (gated) — hier nicht ausführbar." },
+        h(Icon, { name: "eye", size: 12 }), "öffnen"),
+      h("button", { type: "button", disabled: true, "aria-disabled": "true", className: "mos__sess-act is-gated",
+        title: "Verfolgen/Steer bleibt gated (propose-only) — hier nicht ausführbar." },
+        h(Icon, { name: "waypoints", size: 12 }), "verfolgen", h(Icon, { name: "lock", size: 11 }))));
+}
+function StrandCard(props) {
+  const s = props.strand || {};
+  const st = s.state || (props.load === "loading" ? "loading" : "unavailable");
+  const sessions = Array.isArray(s.sessions) ? s.sessions : null;   // codex/claude
+  const rows = Array.isArray(s.rows) ? s.rows : null;                // jarvis missions
+  const bad = st === "unavailable" || st === "error";
+  const cur = s.currentMission;
+  return h("section", { className: "mos__card mos__strand" },
+    h("header", { className: "mos__card-head" },
+      h(Icon, { name: s.icon || "bot", size: 16 }),
+      h("span", { className: "mos__card-title" }, s.title || s.id),
+      h(ZonePip, { state: st, observedAt: s.observedAt, source: s.source, note: s.note })),
+    h("div", { className: "mos__strand-body" },
+      cur
+        ? h("div", { className: "mos__strand-cur" },
+            h("span", { className: "mos__strand-cur-k" }, "Aktuelle Mission"),
+            h("span", { className: "mos__strand-cur-goal" }, cur.goal),
+            cur.state ? h("span", { className: "mos__strand-cur-state" }, cur.state) : null)
+        : (s.id !== "jarvis" ? null : h("div", { className: "mos__strand-cur is-none" },
+            h(Icon, { name: "circle", size: 12 }), "Keine Mission zugeordnet")),
+      props.load === "loading" && !props.strand
+        ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" }))
+        : bad
+          ? h(ZoneEmpty, { state: st, icon: "unplug",
+              title: s.id === "jarvis" ? "mission.v2 nicht lesbar" : "Session-Broker :18087 nicht erreichbar",
+              note: s.note })
+          : sessions != null
+            ? (sessions.length
+                ? h("ul", { className: "mos__sess-list" }, sessions.map((x, i) => h(SessionRow, { key: i, session: x })))
+                : h(ZoneEmpty, { state: st === "partial" ? "partial" : "empty", icon: "terminal",
+                    title: st === "partial" ? "Broker erreichbar — Token/Scope fehlt" : "Keine aktiven Sessions",
+                    note: s.note }))
+            : rows != null
+              ? (rows.length
+                  ? h("div", { className: "mos__strand-rows" }, rows.map((r, i) => h(LensRow, { key: i, row: r, index: i + 1 })))
+                  : h(ZoneEmpty, { state: "empty", icon: "sparkles", title: "Keine Engineering-Missionen", note: s.note }))
+              : h(ZoneEmpty, { state: "empty", icon: "circle", title: "Keine Daten" })),
+    h("footer", { className: "mos__firma-foot mos__strand-foot" },
+      h(Icon, { name: "lock", size: 12 }),
+      h("span", { className: "mos__firma-foot-t" },
+        (s.source ? s.source : "read-only") + " · steuern gated"),
+      h("span", { className: "mos__firma-foot-ro" }, "Nur lesen")));
+}
+function SessionsScene(props) {
+  const ov = props.data;
+  const load = props.load;
+  const offline = load === "offline" || (!ov && load !== "loading");
+  const strands = (ov && Array.isArray(ov.strands)) ? ov.strands : [];
+  const missions = (ov && Array.isArray(ov.missions)) ? ov.missions : [];
+  if (offline && !ov) {
+    return h("div", { className: "mos__sessions" },
+      h(ZoneEmpty, { state: "unavailable", icon: "waypoints",
+        title: "Session-Projektion nicht erreichbar",
+        note: "Read-Modelle offline — Stränge + mission.v2 erscheinen, sobald /agent-sessions/overview antwortet." }));
+  }
+  return h("div", { className: "mos__sessions" },
+    h("div", { className: "mos__sgrid" },
+      (strands.length ? strands : [{ id: "jarvis" }, { id: "codex" }, { id: "claude" }]).map((s) =>
+        h(StrandCard, { key: s.id, strand: (ov ? s : null), load: load }))),
+    h("section", { className: "mos__card mos__slist" },
+      h("header", { className: "mos__card-head" },
+        h(Icon, { name: "list-checks", size: 16 }),
+        h("span", { className: "mos__card-title" }, "mission.v2 · Job-Liste"),
+        missions.length ? h("span", { className: "mos__appc-count" }, missions.length) : null,
+        h(ZonePip, { state: ov ? (missions.length ? "fresh" : "empty") : (load === "loading" ? "loading" : "unavailable"),
+          source: "mission.v2", note: ov && ov.note })),
+      h("div", { className: "mos__slist-body" },
+        load === "loading" && !ov
+          ? [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" }))
+          : missions.length
+            ? missions.map((r, i) => h(LensRow, { key: i, row: r, index: i + 1 }))
+            : h(ZoneEmpty, { state: "empty", icon: "list-checks", title: "Keine Missionen", note: ov && ov.note }))),
+    // The gated-controls caption — steer/continue/bind never execute from here.
+    h("div", { className: "mos__kbanner mos__kbanner--sessions" },
+      h(Icon, { name: "lock", size: 14 }),
+      h("span", null, (ov && ov.controls && ov.controls.note)
+        || "Steuern/Continue/Steer/Bind bleiben gated (propose-only) — hier nicht ausführbar.")));
+}
+
+// ===========================================================================
+// M4 — three more additive read-only Bereichs-Szenen (Ziele / Reflexion /
+// Gesundheit), peers of the M3 scenes. Every value comes from the honest backend
+// projection; a missing/failed/absent source renders a real loading/empty/
+// partial/unavailable state — never a fabricated number, streak, entry or reading.
+// No writes, no compose/send, no steer from any of them.
+// ===========================================================================
+
+// ---- ZIELE & SYSTEME -------------------------------------------------------
+// Read-only projection on mission.v2 + task_priority_policy.yaml — NO new task/
+// todo DB. The three goal rings and the habit chips are honestly EMPTY: no goal-
+// hierarchy or habit source exists in the stack, so no percentage or streak is
+// ever invented. The WIP board groups REAL missions by STATUS bucket (Läuft/
+// Wartet/Blockiert/Fertig) — explicitly STATUS, not the policy's priority
+// quadrants (that per-mission mapping is control-plane-internal, not exposed).
+// The policy's five display-lanes (real, from the YAML) show as a reference strip
+// carrying the real WIP-limit — no mission is faked into a priority lane.
+const ZIELE_RINGS = [
+  { id: "jahr",    label: "Jahresziel",    icon: "target" },
+  { id: "quartal", label: "Quartalsziel",  icon: "calendar-days" },
+  { id: "woche",   label: "Wochenziel",    icon: "circle-check-big" },
+];
+const ZIELE_HABITS = [
+  { id: "deepwork", label: "Deep Work", icon: "brain" },
+  { id: "sport",    label: "Sport",     icon: "footprints" },
+  { id: "lesen",    label: "Lesen",     icon: "book-open" },
+  { id: "schlaf",   label: "Schlaf",    icon: "moon" },
+];
+const ZIELE_LANE_ACCENT = { running: "emerald", waiting: "amber", error: "red", verified: "cyan" };
+const ZIELE_POLICY_ORDER = ["now", "today", "planned", "waiting", "later"];
+
+// An empty goal ring — a muted, dashed full ring with no arc + no percentage
+// (reuses the WhoopRing "connected/no-value" visual so a missing goal never reads
+// as a rendering error, and no fabricated progress is ever drawn).
+function ZieleRing(props) {
+  const C = 2 * Math.PI * 52;
+  return h("div", { className: "mos__whoop-ring mos__zring is-connected" },
+    h("svg", { viewBox: "0 0 120 120", "aria-hidden": "true" },
+      h("circle", { cx: 60, cy: 60, r: 52, className: "mos__whoop-track" }),
+      h("circle", { cx: 60, cy: 60, r: 52, className: "mos__whoop-arc",
+        style: { strokeDasharray: C + " " + C, strokeDashoffset: C * 0.25,
+          transform: "rotate(-90deg)", transformOrigin: "60px 60px" } })),
+    h("span", { className: "mos__whoop-center" },
+      h(Icon, { name: props.icon || "target", size: 20 }),
+      h("b", { className: "mos__zring-dash" }, "—")));
+}
+
+function ZieleScene(props) {
+  const ov = props.data;
+  const load = props.load;
+  const offline = load === "offline" || (!ov && load !== "loading");
+  const loading = load === "loading" && !ov;
+  const policy = ov && ov.policy;
+  const systems = ov && ov.systems;
+  const gh = ov && ov.goalHierarchy;
+  const habits = ov && ov.habits;
+  const lanes = (systems && Array.isArray(systems.lanes)) ? systems.lanes : [];
+  const displayLanes = (policy && policy.ok && policy.displayLanes) ? policy.displayLanes : null;
+  const wip = policy && policy.ok ? policy.wipLimitNow : null;
+  const sysState = systems ? (systems.state || "empty") : (loading ? "loading" : "unavailable");
+  const sysBad = sysState === "unavailable" || sysState === "error";
+  if (offline && !ov) {
+    return h("div", { className: "mos__ziele" },
+      h(ZoneEmpty, { state: "unavailable", icon: "target",
+        title: "Ziele-Projektion nicht erreichbar",
+        note: "Read-Modelle offline — mission.v2 + Policy erscheinen, sobald /ziele/overview antwortet." }));
+  }
+  return h("div", { className: "mos__ziele" },
+    // Section 1 — goal-hierarchy rings (honestly empty: no source in the stack).
+    h("section", { className: "mos__zsec" },
+      h("div", { className: "mos__zsec-head" },
+        h(Icon, { name: "target", size: 15 }),
+        h("span", { className: "mos__zsec-title" }, "Ziel-Hierarchie"),
+        h(ZonePip, { state: gh ? (gh.state || "empty") : (loading ? "loading" : "empty"),
+          source: gh && gh.source, note: gh && gh.note })),
+      h("div", { className: "mos__zrings" },
+        ZIELE_RINGS.map((r) => h("div", { key: r.id, className: "mos__card mos__zringcard" },
+          h(ZieleRing, { icon: r.icon }),
+          h("span", { className: "mos__zringcard-label" }, r.label),
+          h("span", { className: "mos__zringcard-empty" }, "Keine Quelle")))),
+      gh && gh.note ? h("p", { className: "mos__zsec-note" },
+        h(Icon, { name: "circle-help", size: 13 }), gh.note) : null),
+    // Section 2 — habit streak chips (honestly empty: no tracker in the stack).
+    h("section", { className: "mos__zsec" },
+      h("div", { className: "mos__zsec-head" },
+        h(Icon, { name: "flame", size: 15 }),
+        h("span", { className: "mos__zsec-title" }, "Gewohnheiten"),
+        h(ZonePip, { state: habits ? (habits.state || "empty") : (loading ? "loading" : "empty"),
+          source: habits && habits.source, note: habits && habits.note })),
+      h("div", { className: "mos__zhabits" },
+        ZIELE_HABITS.map((hb) => h("div", { key: hb.id, className: "mos__zhabit" },
+          h("span", { className: "mos__zhabit-ico" }, h(Icon, { name: hb.icon, size: 15 })),
+          h("span", { className: "mos__zhabit-label" }, hb.label),
+          h("span", { className: "mos__zhabit-streak" }, "—"),
+          h("span", { className: "mos__zhabit-unit" }, "kein Tracker")))),
+      habits && habits.note ? h("p", { className: "mos__zsec-note" },
+        h(Icon, { name: "circle-help", size: 13 }), habits.note) : null),
+    // Section 3 — Systeme / WIP board (real mission.v2 status buckets + policy).
+    h("section", { className: "mos__zsec mos__zsec--wip" },
+      h("div", { className: "mos__zsec-head" },
+        h(Icon, { name: "list-checks", size: 15 }),
+        h("span", { className: "mos__zsec-title" }, "Systeme · WIP"),
+        systems && systems.summary && !sysBad ? h("span", { className: "mos__zsec-sum" }, systems.summary) : null,
+        h(ZonePip, { state: sysState, observedAt: systems && systems.observedAt,
+          source: systems && systems.source, note: systems && systems.note })),
+      // Policy priority-lane reference strip (real display_lanes from the YAML).
+      displayLanes ? h("div", { className: "mos__zpolicy" },
+        h("span", { className: "mos__zpolicy-k" }, "Prioritäts-Lanes (Policy)"),
+        ZIELE_POLICY_ORDER.filter((k) => displayLanes[k]).map((k) =>
+          h("span", { key: k, className: "mos__zpolicy-lane" + (k === "now" ? " is-now" : "") },
+            displayLanes[k],
+            k === "now" && wip != null ? h("b", { className: "mos__zpolicy-wip" }, "WIP " + wip) : null)),
+        h("span", { className: "mos__zpolicy-note",
+          title: "Die feinkörnige Prioritäts-Zuordnung ist control-plane-intern und nicht als Read-Endpunkt exponiert." },
+          h(Icon, { name: "lock", size: 11 }), "Zuordnung gated")) : null,
+      // Real WIP board — missions grouped by STATUS bucket (not priority).
+      loading
+        ? h("div", { className: "mos__zboard" }, [0, 1, 2, 3].map((i) =>
+            h("div", { key: i, className: "mos__card mos__zlane" }, h("div", { className: "mos__skrow" }))))
+        : sysBad
+          ? h(ZoneEmpty, { state: sysState, icon: "list-checks", title: "mission.v2 nicht lesbar", note: systems && systems.note })
+          : lanes.length
+            ? h("div", { className: "mos__zboard" }, lanes.map((ln) =>
+                h("div", { key: ln.id, className: "mos__card mos__zlane mos--" + (ZIELE_LANE_ACCENT[ln.id] || "cyan") },
+                  h("header", { className: "mos__zlane-head" },
+                    h("span", { className: "mos__zlane-title" }, ln.label),
+                    h("span", { className: "mos__zlane-count" }, ln.count),
+                    ln.wipLimit != null ? h("span", { className: "mos__zlane-wip" }, "WIP " + ln.wipLimit) : null),
+                  h("div", { className: "mos__zlane-body" },
+                    (ln.rows && ln.rows.length)
+                      ? ln.rows.map((r, i) => h(LensRow, { key: i, row: r, index: i + 1 }))
+                      : h("div", { className: "mos__zlane-none" }, h(Icon, { name: "circle", size: 12 }), "leer")))))
+            : h(ZoneEmpty, { state: "empty", icon: "list-checks",
+                title: (systems && systems.summary) || "Keine Systeme", note: systems && systems.note }),
+      h("footer", { className: "mos__firma-foot mos__zsec-foot" },
+        h(Icon, { name: "lock", size: 12 }),
+        h("span", { className: "mos__firma-foot-t" },
+          (systems && systems.source ? "Quelle: " + systems.source : "mission.v2 + Policy")
+          + (policy && policy.ok && policy.version ? " · Policy " + policy.version : "")
+          + (policy && policy.ok && policy.policySha256 ? " · sha " + String(policy.policySha256).slice(0, 8) : "")),
+        h("span", { className: "mos__firma-foot-ro" }, "Nur lesen"))));
+}
+
+// ---- REFLEXION -------------------------------------------------------------
+// Strictly private, read-only. There is no journal/decision/insight store in the
+// stack today, so all three panels are honestly EMPTY (or "connect" once
+// MIKAELOS_JOURNAL_DIR is wired). mission.v2/Approvals are NEVER surfaced here as
+// a substitute — that would cross the private boundary into engineering/company.
+// The journal composer is deliberately inert: no compose/send, no write path.
+function ReflexionCard(props) {
+  const sub = props.sub || {};
+  const st = props.loading ? "loading" : (sub.state || "empty");
+  const rows = Array.isArray(sub.rows) ? sub.rows : [];
+  const bad = st === "unavailable" || st === "error";
+  return h("section", { className: "mos__card mos__reflcard" + (props.composer ? " mos__reflcard--journal" : "") },
+    h("header", { className: "mos__card-head" },
+      h(Icon, { name: props.icon, size: 16 }),
+      h("span", { className: "mos__card-title" }, props.title),
+      h(WorkspacePill, { workspace: "private" }),
+      h(ZonePip, { state: st, observedAt: sub.observedAt, source: sub.source, note: sub.note })),
+    h("div", { className: "mos__reflcard-body" },
+      props.loading
+        ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" }))
+        : (rows.length
+            ? h("div", { className: "mos__strand-rows" }, rows.map((r, i) => h(LensRow, { key: i, row: r, index: i + 1 })))
+            : h(ZoneEmpty, { state: bad ? st : "empty", icon: props.emptyIcon || "inbox",
+                title: props.emptyTitle, note: sub.note })),
+      props.composer && !props.loading
+        ? h("div", { className: "mos__reflcompose" },
+            h("button", { type: "button", className: "mos__reflcompose-mic", disabled: true, "aria-disabled": "true",
+              title: "Spracheingabe erst mit angebundenem Journal-Store — hier inaktiv." },
+              h(Icon, { name: "mic", size: 16 })),
+            h("input", { type: "text", className: "mos__reflcompose-input", disabled: true, "aria-disabled": "true",
+              placeholder: "Journal-Eintrag … (erst mit angebundenem Store)", "aria-label": "Journal-Eintrag (inaktiv)" }),
+            h("span", { className: "mos__reflcompose-hint" }, h(Icon, { name: "lock", size: 11 }), "kein Schreibpfad"))
+        : null));
+}
+function ReflexionScene(props) {
+  const ov = props.data;
+  const load = props.load;
+  const offline = load === "offline" || (!ov && load !== "loading");
+  const loading = load === "loading" && !ov;
+  const sections = ov && ov.sections;
+  const connected = !!(ov && ov.connected);
+  if (offline && !ov) {
+    return h("div", { className: "mos__refl" },
+      h(ZoneEmpty, { state: "unavailable", icon: "notebook-pen",
+        title: "Reflexions-Projektion nicht erreichbar",
+        note: "Read-Modelle offline — Journal/Entscheidungen/Erkenntnisse erscheinen, sobald /reflexion/overview antwortet." }));
+  }
+  return h("div", { className: "mos__refl" },
+    // Privacy banner — strictly private, no compose/send, no substitution.
+    h("div", { className: "mos__kbanner mos__refl-banner" },
+      h(Icon, { name: "lock", size: 14 }),
+      h("span", null, "Strikt privat · nur lesen — kein Versand, keine Ersatzdaten aus mission.v2/Approvals."),
+      h("span", { className: "mos__kbanner-ro" }, h(Icon, { name: "eye", size: 12 }), "read-only")),
+    h("div", { className: "mos__reflgrid" },
+      h(ReflexionCard, { title: "Journal", icon: "notebook-pen", composer: true,
+        sub: sections && sections.journal, loading: loading, emptyIcon: "notebook-pen",
+        emptyTitle: connected ? "Kein Eintrag" : "Kein Journal-Store angebunden" }),
+      h(ReflexionCard, { title: "Entscheidungsprotokoll", icon: "list-checks",
+        sub: sections && sections.decisions, loading: loading, emptyIcon: "list-checks",
+        emptyTitle: connected ? "Keine Entscheidungen erfasst" : "Kein Entscheidungs-Store" }),
+      h(ReflexionCard, { title: "Lernerkenntnisse", icon: "lightbulb",
+        sub: sections && sections.insights, loading: loading, emptyIcon: "sparkles",
+        emptyTitle: connected ? "Keine Erkenntnisse erfasst" : "Kein Erkenntnis-Store" })),
+    ov && ov.note ? h("p", { className: "mos__zsec-note mos__refl-note" },
+      h(Icon, { name: "circle-help", size: 13 }), ov.note) : null);
+}
+
+// ---- GESUNDHEIT ------------------------------------------------------------
+// Private, read-only WHOOP surface (:18090). Recovery hero + sleep/HRV/strain
+// rows are REAL with the internal token, honestly PARTIAL without it (a "Verbunden"
+// ring + a banner, never a fabricated %). The 7-day recovery trend is a real day-
+// series (gaps stay gaps — no interpolated point). Training/Ernährung are honestly
+// UNAVAILABLE — no TrainingPeaks/MyFitnessPal connector exists. No write path.
+function parseRecovery(body) {
+  if (!body || body.state !== "fresh") return null;
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  const rec = rows.find((r) => /recovery/i.test(r.title || ""));
+  if (!rec || typeof rec.value !== "string") return null;
+  const m = /(\d+(?:\.\d+)?)/.exec(rec.value);
+  return m ? Number(m[1]) : null;
+}
+// Small recovery sparkline — a broken polyline over the 0–100 recovery band.
+// null days create a gap (no fabricated point); dots mark real readings.
+function Sparkline(props) {
+  const vals = props.values || [];
+  const W = 280, H = 66, pad = 7, n = vals.length;
+  const present = vals.filter((v) => v != null);
+  const x = (i) => (n <= 1 ? W / 2 : pad + (i * (W - 2 * pad)) / (n - 1));
+  const y = (v) => H - pad - (v / 100) * (H - 2 * pad);
+  let d = "", pen = false;
+  vals.forEach((v, i) => {
+    if (v == null) { pen = false; return; }
+    d += (pen ? " L" : " M") + x(i).toFixed(1) + " " + y(v).toFixed(1);
+    pen = true;
+  });
+  return h("div", { className: "mos__spark" },
+    h("svg", { viewBox: "0 0 " + W + " " + H, className: "mos__spark-svg", preserveAspectRatio: "none", "aria-hidden": "true" },
+      h("path", { d: d.trim(), className: "mos__spark-line", fill: "none" }),
+      vals.map((v, i) => (v == null ? null :
+        h("circle", { key: i, cx: x(i), cy: y(v), r: 2.6, className: "mos__spark-dot" })))),
+    h("div", { className: "mos__spark-legend" },
+      present.length
+        ? h("span", null, Math.round(Math.min.apply(null, present)) + "–" + Math.round(Math.max.apply(null, present)) + "%")
+        : null,
+      h("span", null, present.length + " Tage")));
+}
+function GesundheitTrend(props) {
+  const sub = props.sub || {};
+  const st = props.loading ? "loading" : (sub.state || "unavailable");
+  const series = Array.isArray(sub.series) ? sub.series : [];
+  const pts = series.map((d) => (typeof d.recoveryScore === "number" ? d.recoveryScore : null));
+  const hasData = pts.some((v) => v != null);
+  const bad = st === "unavailable" || st === "error";
+  return h("section", { className: "mos__card mos__gestrend" },
+    h("header", { className: "mos__card-head" },
+      h(Icon, { name: "trending-up", size: 16 }),
+      h("span", { className: "mos__card-title" }, "Recovery-Trend · 7 Tage"),
+      h(ZonePip, { state: st, observedAt: sub.observedAt, source: sub.source, note: sub.note })),
+    h("div", { className: "mos__gestrend-body" },
+      props.loading
+        ? h("div", { className: "mos__skrow" })
+        : hasData
+          ? h(Sparkline, { values: pts })
+          : h(ZoneEmpty, { state: bad ? st : "empty", icon: "trending-up",
+              title: st === "partial" ? "Trend nur mit internem Token" : "Kein Trend verfügbar",
+              note: sub.note })));
+}
+function GesundheitSide(props) {
+  const sub = props.sub || {};
+  const st = props.loading ? "loading" : (sub.state || "unavailable");
+  const bad = st === "unavailable" || st === "error";
+  return h("section", { className: "mos__card mos__gesside" },
+    h("header", { className: "mos__card-head" },
+      h(Icon, { name: props.icon, size: 16 }),
+      h("span", { className: "mos__card-title" }, props.title),
+      h(WorkspacePill, { workspace: "private" }),
+      h(ZonePip, { state: st, source: sub.source, note: sub.note })),
+    h("div", { className: "mos__gesside-body" },
+      props.loading
+        ? h("div", { className: "mos__skrow" })
+        : h(ZoneEmpty, { state: bad ? "unavailable" : "empty", icon: props.icon,
+            title: sub.summary || (props.title + ": kein Connector"), note: sub.note })));
+}
+function GesundheitScene(props) {
+  const ov = props.data;
+  const load = props.load;
+  const offline = load === "offline" || (!ov && load !== "loading");
+  const loading = load === "loading" && !ov;
+  const cards = ov && ov.cards;
+  const body = cards && cards.body;
+  const trend = cards && cards.trend;
+  const training = cards && cards.training;
+  const nutrition = cards && cards.nutrition;
+  if (offline && !ov) {
+    return h("div", { className: "mos__ges" },
+      h(ZoneEmpty, { state: "unavailable", icon: "heart-pulse",
+        title: "Gesundheits-Projektion nicht erreichbar",
+        note: "Read-Modelle offline — WHOOP-Werte erscheinen, sobald /gesundheit/overview antwortet." }));
+  }
+  const bodyState = body ? (body.state || "unavailable") : (loading ? "loading" : "unavailable");
+  const bodyBad = bodyState === "unavailable" || bodyState === "error";
+  const rows = (body && Array.isArray(body.rows)) ? body.rows : [];
+  const recPct = parseRecovery(body);
+  const partial = bodyState === "partial";
+  return h("div", { className: "mos__ges" },
+    // Honest partial banner — connected but detail values need the gated token.
+    partial
+      ? h("div", { className: "mos__kbanner mos__ges-banner" },
+          h(Icon, { name: "shield-check", size: 14 }),
+          h("span", null, (body && body.note)
+            || "WHOOP verbunden — Detailwerte erst mit internem Token (gated). Keine erfundenen Werte."),
+          h("span", { className: "mos__kbanner-ro" }, h(Icon, { name: "eye", size: 12 }), "read-only"))
+      : null,
+    h("div", { className: "mos__gesgrid" },
+      // Hero — Recovery ring + honest stat rows (or connected-note under partial).
+      h("section", { className: "mos__card mos__geshero" },
+        h("header", { className: "mos__card-head" },
+          h(Icon, { name: "heart-pulse", size: 16 }),
+          h("span", { className: "mos__card-title" }, "Körper / WHOOP"),
+          h(WorkspacePill, { workspace: "private" }),
+          h(ZonePip, { state: bodyState, observedAt: body && body.observedAt,
+            source: body && body.source, note: body && body.note })),
+        loading
+          ? h("div", { className: "mos__geshero-body" }, [0, 1, 2].map((i) => h("div", { key: i, className: "mos__skrow" })))
+          : bodyBad
+            ? h(ZoneEmpty, { state: bodyState, icon: "heart-pulse", title: "WHOOP nicht erreichbar", note: body && body.note })
+            : h("div", { className: "mos__geshero-body" },
+                h("div", { className: "mos__geshero-ring" },
+                  h(WhoopRing, { module: { _demo: false, _state: recPct != null ? "fresh" : "partial", _recovery: recPct } }),
+                  (body && body.summary) ? h("span", { className: "mos__geshero-sum" }, body.summary) : null),
+                h("div", { className: "mos__geshero-stats" },
+                  rows.length
+                    ? rows.map((r, i) => h(FirmaMetric, { key: i, row: r }))
+                    : h(ZoneEmpty, { state: "empty", icon: "heart-pulse", title: "Keine Detailwerte", note: body && body.note })))),
+      h(GesundheitTrend, { sub: trend, loading: loading }),
+      h(GesundheitSide, { title: "Training", sub: training, loading: loading, icon: "dumbbell" }),
+      h(GesundheitSide, { title: "Ernährung", sub: nutrition, loading: loading, icon: "utensils" })),
+    h("footer", { className: "mos__firma-foot mos__ges-foot" },
+      h(Icon, { name: "lock", size: 12 }),
+      h("span", { className: "mos__firma-foot-t" },
+        "Quelle: WHOOP-Connector :18090 · privat"
+        + (ov && ov.observedAt ? " · Stand " + (freshnessLabel(ov.observedAt) || "gerade") : "")),
+      h("span", { className: "mos__firma-foot-ro" }, "Nur lesen")));
+}
+
 // --- Cockpit desktop assembly (3-column grid) ---------------------------------
 function CockpitScene(props) {
   return h("div", { className: "mos__ckpt" },
@@ -3497,6 +4225,13 @@ function MobileCockpit(props) {
         h("span", { className: "mos__mckpt-jline" },
           topHint ? topHint.title : (props.cockpitLoad === "loading" ? "Lädt Zustand …" : "Kein offener Hinweis."))),
       h(Icon, { name: "chevron-right", size: 18 })),
+    // M3 area launch tiles (Wissen / Kommunikation / Sessions) — same peer screens.
+    h("nav", { className: "mos__marealaunch", "aria-label": "Bereiche öffnen" },
+      M3_AREAS.map((a) =>
+        h("button", { key: a.id, type: "button", className: "mos__marealaunch-btn mos--" + a.accent,
+          onClick: () => props.onArea && props.onArea(a.id), "aria-label": a.title + " öffnen" },
+          h(Icon, { name: a.icon, size: 18 }),
+          h("span", null, a.title)))),
     // Agenda (Heute) — max 3.
     h(AgendaRailMobile, { workspace: props.workspace, todayModule: props.byId.today,
       engineeringModule: props.byId.engineering, load: props.load, onMore: props.onGoTimeline }),
@@ -3560,6 +4295,26 @@ function MikaelOS() {
   const [firmaLoad, setFirmaLoad] = useState("loading"); // loading | ready | offline
   const [approvalDetails, setApprovalDetails] = useState({});      // id -> detail payload
   const [approvalDetailLoading, setApprovalDetailLoading] = useState({}); // id -> bool
+  // M3 — the three additive Bereichs-Szenen. WISSEN is query-driven (search on
+  // demand); KOMMUNIKATION + SESSIONS are point-in-time GET projections loaded
+  // when entered (and re-read on reconnect). Any failure leaves the honest
+  // offline/unavailable state — never a fabricated value.
+  const [wissenQuery, setWissenQuery] = useState("");
+  const [wissen, setWissen] = useState(null);
+  const [wissenLoad, setWissenLoad] = useState("idle"); // idle | loading | ready | offline
+  const [komm, setKomm] = useState(null);
+  const [kommLoad, setKommLoad] = useState("loading"); // loading | ready | offline
+  const [sessions, setSessions] = useState(null);
+  const [sessionsLoad, setSessionsLoad] = useState("loading"); // loading | ready | offline
+  // M4 — the three further additive Bereichs-Szenen (Ziele / Reflexion /
+  // Gesundheit). Point-in-time GET projections loaded on mount + re-read on
+  // reconnect. Any failure leaves the honest offline/unavailable state.
+  const [ziele, setZiele] = useState(null);
+  const [zieleLoad, setZieleLoad] = useState("loading"); // loading | ready | offline
+  const [reflexion, setReflexion] = useState(null);
+  const [reflexionLoad, setReflexionLoad] = useState("loading"); // loading | ready | offline
+  const [gesundheit, setGesundheit] = useState(null);
+  const [gesundheitLoad, setGesundheitLoad] = useState("loading"); // loading | ready | offline
   // Focus flash for the Approval-Center when the Gates-KPI is clicked (§6).
   const [approvalsFlash, setApprovalsFlash] = useState(false);
   const approvalsRef = useRef(null);
@@ -3624,16 +4379,64 @@ function MikaelOS() {
       return prev;
     });
   }, []);
-  useEffect(() => { loadOverview(); loadCockpit(); loadFirma(); }, [loadOverview, loadCockpit, loadFirma]);
+  // M3 — WISSEN federated search. Query-driven: only fires with a real term, and
+  // an empty/failed response leaves an honest state (offline on reject). The
+  // backend itself returns partial/empty/unavailable — the UI never invents rows.
+  const loadWissen = useCallback((term) => {
+    const q = (term || "").trim();
+    if (q.length < 2) return;
+    setWissenLoad("loading");
+    sdkGet(WISSEN_SEARCH_API + "?q=" + encodeURIComponent(q))
+      .then((data) => { setWissen(data); setWissenLoad("ready"); })
+      .catch(() => { setWissen(null); setWissenLoad("offline"); });
+  }, []);
+  // M3 — KOMMUNIKATION signals bundle (Telegram/Vorschläge/FreeScout). Read-only.
+  const loadKomm = useCallback(() => {
+    setKommLoad((p) => (p === "ready" ? "ready" : "loading"));
+    sdkGet(KOMM_OVERVIEW_API)
+      .then((data) => { setKomm(data); setKommLoad("ready"); })
+      .catch(() => { setKommLoad((p) => (p === "ready" ? "ready" : "offline")); });
+  }, []);
+  // M3 — SESSIONS overview (mission.v2 + broker inventory). Read-only.
+  const loadSessions = useCallback(() => {
+    setSessionsLoad((p) => (p === "ready" ? "ready" : "loading"));
+    sdkGet(SESSIONS_OVERVIEW_API)
+      .then((data) => { setSessions(data); setSessionsLoad("ready"); })
+      .catch(() => { setSessionsLoad((p) => (p === "ready" ? "ready" : "offline")); });
+  }, []);
+  // M4 — ZIELE (mission.v2 + policy), REFLEXION (journal read-only or empty),
+  // GESUNDHEIT (WHOOP :18090). Same honesty contract: any error → honest offline.
+  const loadZiele = useCallback(() => {
+    setZieleLoad((p) => (p === "ready" ? "ready" : "loading"));
+    sdkGet(ZIELE_OVERVIEW_API)
+      .then((data) => { setZiele(data); setZieleLoad("ready"); })
+      .catch(() => { setZieleLoad((p) => (p === "ready" ? "ready" : "offline")); });
+  }, []);
+  const loadReflexion = useCallback(() => {
+    setReflexionLoad((p) => (p === "ready" ? "ready" : "loading"));
+    sdkGet(REFLEXION_OVERVIEW_API)
+      .then((data) => { setReflexion(data); setReflexionLoad("ready"); })
+      .catch(() => { setReflexionLoad((p) => (p === "ready" ? "ready" : "offline")); });
+  }, []);
+  const loadGesundheit = useCallback(() => {
+    setGesundheitLoad((p) => (p === "ready" ? "ready" : "loading"));
+    sdkGet(GESUNDHEIT_OVERVIEW_API)
+      .then((data) => { setGesundheit(data); setGesundheitLoad("ready"); })
+      .catch(() => { setGesundheitLoad((p) => (p === "ready" ? "ready" : "offline")); });
+  }, []);
+  useEffect(() => { loadOverview(); loadCockpit(); loadFirma(); loadKomm(); loadSessions();
+    loadZiele(); loadReflexion(); loadGesundheit(); },
+    [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit]);
   // Reconnect: on regained focus / online, re-read the models so a returning
   // session sees the live state at once (no stale snapshot lingering).
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const reload = () => { loadOverview(); loadCockpit(); loadFirma(); };
+    const reload = () => { loadOverview(); loadCockpit(); loadFirma(); loadKomm(); loadSessions();
+      loadZiele(); loadReflexion(); loadGesundheit(); };
     window.addEventListener("online", reload);
     window.addEventListener("focus", reload);
     return () => { window.removeEventListener("online", reload); window.removeEventListener("focus", reload); };
-  }, [loadOverview, loadCockpit, loadFirma]);
+  }, [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit]);
 
   const liveById = useMemo(() => indexLive(live), [live]);
   const loadingModules = loadState === "loading";
@@ -4014,6 +4817,12 @@ function MikaelOS() {
   const onGoApprovals = useCallback(() => { setMobileScreen("approvals"); }, []);
   const onGoFirma = useCallback(() => { setMobileScreen("firma"); }, []);
   const onScreenBack = useCallback(() => { setMobileScreen(null); }, []);
+  // M3 — the three area launch tiles. Desktop opens a peer scene; mobile pushes a
+  // full screen (same mechanism as Firma/Approvals).
+  const onArea = useCallback((id) => {
+    if (isMobile) setMobileScreen(id); else setScene(id);
+  }, [isMobile]);
+  const onWissenQuery = useCallback((v) => { setWissenQuery(v); }, []);
 
   // iOS shell — a distinct vertical scene stack (not a shrunken desktop). All
   // state (focusId, stateIndex, command, live read-models) is shared, so opening
@@ -4041,6 +4850,11 @@ function MikaelOS() {
         mobileScreen: mobileScreen, onScreenBack: onScreenBack,
         firma: firma, firmaLoad: firmaLoad,
         approvalDetails: approvalDetails, approvalDetailLoading: approvalDetailLoading, onLoadDetail: loadApprovalDetail,
+        onArea: onArea,
+        wissen: wissen, wissenLoad: wissenLoad, wissenQuery: wissenQuery, onWissenQuery: onWissenQuery, onWissenSearch: loadWissen,
+        komm: komm, kommLoad: kommLoad, sessions: sessions, sessionsLoad: sessionsLoad,
+        ziele: ziele, zieleLoad: zieleLoad, reflexion: reflexion, reflexionLoad: reflexionLoad,
+        gesundheit: gesundheit, gesundheitLoad: gesundheitLoad,
       }),
       h(ProposeFlow, {
         state: propose, onObjective: proposeObjective, onPreview: proposePreview,
@@ -4110,7 +4924,9 @@ function MikaelOS() {
     ),
   );
 
-  const isBackScene = scene === "firma" || scene === "approvals";
+  const isBackScene = scene === "firma" || scene === "approvals"
+    || scene === "wissen" || scene === "kommunikation" || scene === "sessions"
+    || scene === "ziele" || scene === "reflexion" || scene === "gesundheit";
   return h(
     "div",
     { className: "mos" + (scene === "timeline" ? " mos--timeline" : scene === "cockpit" ? " mos--cockpit" : isBackScene ? " mos--cockpit mos--" + scene : "") },
@@ -4128,6 +4944,7 @@ function MikaelOS() {
             React.Fragment,
             null,
             h(KpiBar, { cockpit: cockpit, load: cockpitLoad, onGates: onGates }),
+            h(AreaLauncher, { onOpen: onArea }),
             h("div", { className: "mos__stagewrap mos__stagewrap--ckpt" },
               h(CockpitScene, {
                 byId: enrichedById, workspace: workspace, onWorkspace: setWorkspace,
@@ -4157,6 +4974,65 @@ function MikaelOS() {
               h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Operator-only")),
             h(ApprovalsScene, { approvals: cockpit.approvals, load: cockpitLoad,
               details: approvalDetails, detailLoading: approvalDetailLoading, onLoadDetail: loadApprovalDetail }),
+            h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
+        : scene === "wissen"
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
+            h("div", { className: "mos__scenehead" },
+              h(Icon, { name: "search", size: 20 }),
+              h("div", { className: "mos__scenehead-t" },
+                h("h2", null, "Wissen & Suche"),
+                h("span", null, "Föderiert über unified-search :18055 · Workspace je Treffer sichtbar · nur lesen")),
+              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")),
+            h(WissenScene, { data: wissen, load: wissenLoad, query: wissenQuery, onQuery: onWissenQuery, onSearch: loadWissen }))
+        : scene === "kommunikation"
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
+            h("div", { className: "mos__scenehead" },
+              h(Icon, { name: "radio-tower", size: 20 }),
+              h("div", { className: "mos__scenehead-t" },
+                h("h2", null, "Kommunikation"),
+                h("span", null, "Telegram · Hermes-Vorschläge · FreeScout — nur Signale, Versand G7-gated")),
+              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")),
+            h(KommunikationScene, { data: komm, load: kommLoad }),
+            h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
+        : scene === "sessions"
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
+            h("div", { className: "mos__scenehead" },
+              h(Icon, { name: "waypoints", size: 20 }),
+              h("div", { className: "mos__scenehead-t" },
+                h("h2", null, "Sessions / Agenten"),
+                h("span", null, "mission.v2 + Session-Broker :18087 (inventory) · Steuern/Continue/Steer bleiben gated")),
+              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")),
+            h(SessionsScene, { data: sessions, load: sessionsLoad }),
+            h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
+        : scene === "ziele"
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
+            h("div", { className: "mos__scenehead" },
+              h(Icon, { name: "target", size: 20 }),
+              h("div", { className: "mos__scenehead-t" },
+                h("h2", null, "Ziele & Systeme"),
+                h("span", null, "Read-only Projektion · mission.v2 + task_priority_policy.yaml · keine neue Task-DB")),
+              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")),
+            h(ZieleScene, { data: ziele, load: zieleLoad }),
+            h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
+        : scene === "reflexion"
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
+            h("div", { className: "mos__scenehead" },
+              h(Icon, { name: "notebook-pen", size: 20 }),
+              h("div", { className: "mos__scenehead-t" },
+                h("h2", null, "Reflexion"),
+                h("span", null, "Journal · Entscheidungen · Lernerkenntnisse — strikt privat, nur lesen, kein Versand")),
+              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Privat · nur lesen")),
+            h(ReflexionScene, { data: reflexion, load: reflexionLoad }),
+            h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
+        : scene === "gesundheit"
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
+            h("div", { className: "mos__scenehead" },
+              h(Icon, { name: "heart-pulse", size: 20 }),
+              h("div", { className: "mos__scenehead-t" },
+                h("h2", null, "Gesundheit"),
+                h("span", null, "WHOOP-Connector :18090 · Recovery/Schlaf/HRV/Strain · privat, nur lesen")),
+              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Privat · nur lesen")),
+            h(GesundheitScene, { data: gesundheit, load: gesundheitLoad }),
             h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
         : scene === "timeline"
         ? h("div", { className: "mos__stagewrap mos__stagewrap--tl" },
