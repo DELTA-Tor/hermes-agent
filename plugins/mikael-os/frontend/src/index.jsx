@@ -107,7 +107,7 @@ function Icon(props) {
 // clear of the (lowered, smaller) core so no card ever overlaps the orb.
 const MODULES = [
   { id: "tasks", title: "Aufgaben & Ziele", icon: "list-todo", accent: "amber", meta: "7 aktiv · 3 heute", metric: "7", metricSub: "aktiv · 3 heute", pos: { x: 47, y: 9 } },
-  { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "3 Lektionen fällig", metric: "3", metricSub: "Lektionen fällig", pos: { x: 67, y: 14 } },
+  { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "Anki-Sync bereit", metric: "—", metricSub: "Karten fällig", pos: { x: 67, y: 14 } },
   { id: "risel", title: "Rise-L Prozesse", icon: "server", accent: "blue", meta: "5 Workflows aktiv", metric: "5", metricSub: "Workflows aktiv", pos: { x: 86, y: 22 } },
   { id: "travel", title: "Reisen", icon: "plane", accent: "cyan", meta: "Rom · 18. Jun", metric: "3 T", metricSub: "bis Rom", pos: { x: 89, y: 41 } },
   { id: "nutrition", title: "Ernährung", icon: "leaf", accent: "emerald", meta: "2.105 kcal", metric: "2.105", metricSub: "kcal heute", pos: { x: 89, y: 58 } },
@@ -190,12 +190,12 @@ const LENS = {
     ],
   },
   learning: {
-    icon: "graduation-cap", accent: "violet", title: "Lernplan", sub: "3 Lektionen fällig",
-    source: "Lern-Skills", freshness: "vor 1 Std", permission: "Nur lesen",
+    icon: "graduation-cap", accent: "violet", title: "Lernplan", sub: "Spaced Repetition · Anki",
+    source: "anki-sync (read-only)", freshness: "—", permission: "Nur lesen (mode=ro)",
     rows: [
-      { icon: "book-open", accent: "violet", title: "Deep Work Playbook", sub: "Fortschritt", status: "running", statusLabel: "Läuft", value: "68 %" },
-      { icon: "graduation-cap", accent: "cyan", title: "Nächste Lektion", sub: "Heute · 20 Min", value: "—" },
-      { icon: "sparkles", accent: "violet", title: "Wiederholung: Systemdenken", sub: "Fällig", value: "—" },
+      { icon: "graduation-cap", accent: "violet", title: "Fällig heute", sub: "Anki-Karten", value: "—" },
+      { icon: "target", accent: "cyan", title: "Retention", sub: "letzte 30 Tage", value: "—" },
+      { icon: "flame", accent: "violet", title: "Streak", sub: "Lern-Tage in Folge", value: "—" },
     ],
   },
   risel: {
@@ -450,6 +450,8 @@ function deriveMetric(base, L) {
     const firma = L.firmaCount || 0;
     return firma > 0 ? priv + "+" + firma : String(priv);
   }
+  // Lernplan: the fällig-count is the tile headline; empty (not-yet-synced) stays "—".
+  if (base.id === "learning") return L.due != null ? String(L.due) : "—";
   if (L.active != null) return String(L.active);
   if (L.count != null) return String(L.count);
   if (L.services && L.services.active != null) return String(L.services.active);
@@ -461,6 +463,10 @@ function deriveMetricSub(base, L) {
   if (base.id === "kalender") return "nächster Termin · privat";
   if (base.id === "today") {
     return (L.firmaCount || 0) > 0 ? "privat + Dispo (Firma-Signal)" : "Termine · privat";
+  }
+  if (base.id === "learning") {
+    if (L.due == null) return "Anki-Sync bereit";
+    return "fällig" + (L.retentionPct ? " · " + L.retentionPct + " Retention" : "");
   }
   if (base.id === "tasks" && L.active != null) return "aktiv · " + (L.count || 0) + " gesamt";
   if (base.id === "engineering" && L.count != null) return "Missionen aktiv";

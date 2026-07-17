@@ -7,6 +7,7 @@ var MikaelOSPlugin = function() {
     "calendar-days": '<path d="M8 2v4" /> <path d="M16 2v4" /> <rect width="18" height="18" x="3" y="4" rx="2" /> <path d="M3 10h18" /> <path d="M8 14h.01" /> <path d="M12 14h.01" /> <path d="M16 14h.01" /> <path d="M8 18h.01" /> <path d="M12 18h.01" /> <path d="M16 18h.01" />',
     "circle-check-big": '<path d="M21.801 10A10 10 0 1 1 17 3.335" /> <path d="m9 11 3 3L22 4" />',
     "target": '<circle cx="12" cy="12" r="10" /> <circle cx="12" cy="12" r="6" /> <circle cx="12" cy="12" r="2" />',
+    "flame": '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />',
     "code-xml": '<path d="m18 16 4-4-4-4" /> <path d="m6 8-4 4 4 4" /> <path d="m14.5 4-5 16" />',
     "server": '<rect width="20" height="8" x="2" y="2" rx="2" ry="2" /> <rect width="20" height="8" x="2" y="14" rx="2" ry="2" /> <line x1="6" x2="6.01" y1="6" y2="6" /> <line x1="6" x2="6.01" y1="18" y2="18" />',
     "notebook-pen": '<path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4" /> <path d="M2 6h4" /> <path d="M2 10h4" /> <path d="M2 14h4" /> <path d="M2 18h4" /> <path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z" />',
@@ -124,7 +125,7 @@ var MikaelOSPlugin = function() {
   }
   const MODULES = [
     { id: "tasks", title: "Aufgaben & Ziele", icon: "list-todo", accent: "amber", meta: "7 aktiv · 3 heute", metric: "7", metricSub: "aktiv · 3 heute", pos: { x: 47, y: 9 } },
-    { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "3 Lektionen fällig", metric: "3", metricSub: "Lektionen fällig", pos: { x: 67, y: 14 } },
+    { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "Anki-Sync bereit", metric: "—", metricSub: "Karten fällig", pos: { x: 67, y: 14 } },
     { id: "risel", title: "Rise-L Prozesse", icon: "server", accent: "blue", meta: "5 Workflows aktiv", metric: "5", metricSub: "Workflows aktiv", pos: { x: 86, y: 22 } },
     { id: "travel", title: "Reisen", icon: "plane", accent: "cyan", meta: "Rom · 18. Jun", metric: "3 T", metricSub: "bis Rom", pos: { x: 89, y: 41 } },
     { id: "nutrition", title: "Ernährung", icon: "leaf", accent: "emerald", meta: "2.105 kcal", metric: "2.105", metricSub: "kcal heute", pos: { x: 89, y: 58 } },
@@ -204,14 +205,14 @@ var MikaelOSPlugin = function() {
       icon: "graduation-cap",
       accent: "violet",
       title: "Lernplan",
-      sub: "3 Lektionen fällig",
-      source: "Lern-Skills",
-      freshness: "vor 1 Std",
-      permission: "Nur lesen",
+      sub: "Spaced Repetition · Anki",
+      source: "anki-sync (read-only)",
+      freshness: "—",
+      permission: "Nur lesen (mode=ro)",
       rows: [
-        { icon: "book-open", accent: "violet", title: "Deep Work Playbook", sub: "Fortschritt", status: "running", statusLabel: "Läuft", value: "68 %" },
-        { icon: "graduation-cap", accent: "cyan", title: "Nächste Lektion", sub: "Heute · 20 Min", value: "—" },
-        { icon: "sparkles", accent: "violet", title: "Wiederholung: Systemdenken", sub: "Fällig", value: "—" }
+        { icon: "graduation-cap", accent: "violet", title: "Fällig heute", sub: "Anki-Karten", value: "—" },
+        { icon: "target", accent: "cyan", title: "Retention", sub: "letzte 30 Tage", value: "—" },
+        { icon: "flame", accent: "violet", title: "Streak", sub: "Lern-Tage in Folge", value: "—" }
       ]
     },
     risel: {
@@ -448,6 +449,7 @@ var MikaelOSPlugin = function() {
       const firma = L.firmaCount || 0;
       return firma > 0 ? priv + "+" + firma : String(priv);
     }
+    if (base.id === "learning") return L.due != null ? String(L.due) : "—";
     if (L.active != null) return String(L.active);
     if (L.count != null) return String(L.count);
     if (L.services && L.services.active != null) return String(L.services.active);
@@ -459,6 +461,10 @@ var MikaelOSPlugin = function() {
     if (base.id === "kalender") return "nächster Termin · privat";
     if (base.id === "today") {
       return (L.firmaCount || 0) > 0 ? "privat + Dispo (Firma-Signal)" : "Termine · privat";
+    }
+    if (base.id === "learning") {
+      if (L.due == null) return "Anki-Sync bereit";
+      return "fällig" + (L.retentionPct ? " · " + L.retentionPct + " Retention" : "");
     }
     if (base.id === "tasks" && L.active != null) return "aktiv · " + (L.count || 0) + " gesamt";
     if (base.id === "engineering" && L.count != null) return "Missionen aktiv";

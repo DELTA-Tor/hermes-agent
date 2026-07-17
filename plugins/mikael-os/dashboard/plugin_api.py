@@ -116,6 +116,21 @@ APPROVALS_DIR = Path(os.environ.get("MIKAELOS_APPROVALS_DIR", str(HERMES_ROOT / 
 WHOOP_BASE = os.environ.get("MIKAELOS_WHOOP_BASE", "http://127.0.0.1:18090")
 HTTP_TIMEOUT = float(os.environ.get("MIKAELOS_HTTP_TIMEOUT", "2.5"))
 
+# Lernplan — L-1: Anki-Sync-Server collection, opened STRICTLY read-only (mode=ro).
+# The Rust anki-sync-server keeps one collection per user under a per-user
+# subfolder (created on first sync), file ``collection.anki2`` (legacy scheduler)
+# or ``collection.anki21`` (v2/v3 scheduler). MIKAEL OS reads this as a learning
+# SIGNAL only — Anki stays the single spaced-repetition truth; we NEVER write and
+# never open AnkiConnect (archived). No second SR store is ever created here.
+ANKI_COLLECTION_DIR = Path(os.environ.get(
+    "MIKAELOS_ANKI_DIR", "/srv/delta/data/study/anki-collection"))
+ANKI_SOURCE = "anki-sync (collection.anki2 read-only)"
+# Known Anki schema (col.ver) values we understand. Anki 2.1.x (legacy sched) = 11;
+# the v2/v3 backend reports 11 in the .anki2 export too and adds side tables — we
+# also accept 18 (some rust-exported collections). Anything else = honest
+# "Schema unbekannt" rather than a guess. Table presence is the real guard.
+_ANKI_KNOWN_VERS = {11, 18}
+
 # Kalender/Heute — calendar-evidence projection (read-only SQLite; built every
 # 30 min by calendar-evidence-index.timer via a real Google-Calendar-API
 # read-only OAuth read, atomic replace, authority DERIVED_EVIDENCE_ONLY).
@@ -183,6 +198,7 @@ STALE = {
     "risel": 3600,
     "company": 24 * 3600,   # approval cards linger until decided
     "calendar": 2 * 3600,   # 30-min mirror timer + generous slack
+    "learning": 14 * 24 * 3600,  # Anki-Sync ist gelegentlich (Gerät-getrieben) — großzügig
 }
 
 # ---------------------------------------------------------------------------
@@ -911,14 +927,295 @@ def _fixture(module_id: str, *, workspace: str, summary: str, rows: List[Dict[st
     )
 
 
+# ---------------------------------------------------------------------------
+# Lernplan (L-1) — read-only Anki-Sync-Server collection projection.
+#   * Collection file is discovered by glob (per-user subfolder appears on first
+#     sync); until then the module is honestly ``empty`` ("noch nicht
+#     synchronisiert"), never faked.
+#   * Opened URI ``mode=ro`` — zero writes, never AnkiConnect.
+#   * Schema is verified (col+cards+revlog tables, col.ver known) before any
+#     count; an unknown/foreign schema yields ``unavailable`` ("Schema
+#     unbekannt"), never a crash and never invented numbers.
+# ---------------------------------------------------------------------------
+_ANKI_PERM = "Nur lesen (Anki collection.anki2, mode=ro)"
+
+
+def _find_anki_collection() -> Optional[Path]:
+    """Newest real ``*collection*.anki2*`` under the sync dir, sidecars excluded.
+
+    A per-user subfolder is created on first sync, so we glob recursively. WAL/SHM
+    /journal sidecars are dropped; ``.anki21`` (newer scheduler) is preferred over
+    ``.anki2``, then most-recently-modified wins. Returns ``None`` when nothing
+    is synced yet (the honest current state)."""
+    try:
+        matches = glob.glob(str(ANKI_COLLECTION_DIR / "**" / "*collection*.anki2*"), recursive=True)
+    except OSError:
+        return None
+    files = [
+        m for m in matches
+        if os.path.isfile(m) and not m.endswith(("-wal", "-shm", "-journal"))
+    ]
+    if not files:
+        return None
+
+    def _key(p: str) -> Tuple[int, float]:
+        try:
+            mtime = os.path.getmtime(p)
+        except OSError:
+            mtime = 0.0
+        return (1 if p.endswith(".anki21") else 0, mtime)
+
+    files.sort(key=_key, reverse=True)
+    return Path(files[0])
+
+
+def _anki_today_number(crt: int) -> int:
+    """Anki 'today' as an integer day count since collection creation (``crt``,
+    epoch seconds). Defensive/approximate (ignores the configurable rollover hour
+    — fine for a due-count signal); never negative."""
+    if crt <= 0:
+        return 0
+    now = int(_now().timestamp())
+    return max(0, (now - crt) // 86400)
+
+
+def _anki_streak(con: "sqlite3.Connection", crt: int, today: int) -> int:
+    """Consecutive study-day streak from the revlog. A day counts if any review
+    row falls in it; the streak is anchored to today (or yesterday, if today's
+    reviews aren't in yet) and walked backwards while days stay contiguous."""
+    days = set()
+    try:
+        for (d,) in con.execute(
+            "SELECT DISTINCT CAST((id/1000 - ?) / 86400 AS INTEGER) FROM revlog", (crt,)
+        ):
+            if d is not None:
+                days.add(int(d))
+    except sqlite3.Error:
+        return 0
+    if not days:
+        return 0
+    if today in days:
+        start = today
+    elif (today - 1) in days:
+        start = today - 1
+    else:
+        return 0
+    streak = 0
+    d = start
+    while d in days:
+        streak += 1
+        d -= 1
+    return streak
+
+
+def _anki_decks(con: "sqlite3.Connection", decks_json: Any, tables: set, today: int) -> List[Dict[str, Any]]:
+    """Deck names + per-deck due counts. Deck metadata lives either in the legacy
+    ``col.decks`` JSON blob or (newer schema) a ``decks`` table; try both. The
+    'Default' deck is dropped when it carries nothing meaningful."""
+    named: List[Tuple[str, str]] = []
+    if decks_json:
+        try:
+            obj = json.loads(decks_json)
+            if isinstance(obj, dict):
+                for did, meta in obj.items():
+                    name = str(meta.get("name") or "").strip() if isinstance(meta, dict) else ""
+                    if name and name.lower() != "default":
+                        named.append((str(did), name))
+        except (ValueError, TypeError):
+            pass
+    if not named and "decks" in tables:
+        try:
+            for did, name in con.execute("SELECT id, name FROM decks"):
+                nm = str(name or "").strip()
+                if nm and nm.lower() != "default":
+                    named.append((str(did), nm))
+        except sqlite3.Error:
+            pass
+    out: List[Dict[str, Any]] = []
+    for did, name in named[:6]:
+        try:
+            cnt = con.execute(
+                "SELECT COUNT(*) FROM cards WHERE did = ? AND "
+                "((queue = 2 AND due <= ?) OR queue IN (1, 3))",
+                (int(did), today),
+            ).fetchone()[0]
+        except (sqlite3.Error, ValueError):
+            cnt = 0
+        out.append({"id": did, "name": name, "due": int(cnt or 0)})
+    return out
+
+
+def _read_anki(path: Path) -> Dict[str, Any]:
+    """Read the collection read-only and return a plain dict of counts. ``ok`` is
+    False with a ``reason`` (``open`` | ``schema`` | ``read``) on any failure —
+    the caller maps that to an honest state; nothing is ever fabricated."""
+    out: Dict[str, Any] = {
+        "ok": False, "reason": None, "error": None, "ver": None,
+        "due_today": 0, "total_cards": 0, "learned_today": 0,
+        "streak": 0, "retention": None, "decks": [],
+    }
+    try:
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1.5)
+    except sqlite3.Error as exc:
+        out["reason"], out["error"] = "open", type(exc).__name__
+        return out
+    try:
+        tables = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if not {"col", "cards", "revlog"} <= tables:
+            out["reason"], out["error"] = "schema", "col/cards/revlog fehlt"
+            return out
+        col_row = con.execute("SELECT crt, ver, decks FROM col LIMIT 1").fetchone()
+        if not col_row:
+            out["reason"], out["error"] = "schema", "col-Tabelle leer"
+            return out
+        crt = int(col_row[0] or 0)
+        ver = int(col_row[1] or 0)
+        decks_json = col_row[2]
+        out["ver"] = ver
+        if ver not in _ANKI_KNOWN_VERS:
+            out["reason"], out["error"] = "schema", f"ver={ver} unbekannt"
+            return out
+
+        today = _anki_today_number(crt)
+        out["due_today"] = int(con.execute(
+            "SELECT COUNT(*) FROM cards WHERE (queue = 2 AND due <= ?) OR queue IN (1, 3)",
+            (today,),
+        ).fetchone()[0] or 0)
+        out["total_cards"] = int(con.execute(
+            "SELECT COUNT(*) FROM cards").fetchone()[0] or 0)
+
+        day_start_ms = (crt + today * 86400) * 1000
+        out["learned_today"] = int(con.execute(
+            "SELECT COUNT(*) FROM revlog WHERE id >= ?", (day_start_ms,)
+        ).fetchone()[0] or 0)
+
+        out["streak"] = _anki_streak(con, crt, today)
+
+        # True-ish retention over the trailing 30 anki-days: share of review-type
+        # (type=1) answers that were not "Again" (ease > 1).
+        cutoff_ms = (crt + max(0, today - 30) * 86400) * 1000
+        rrow = con.execute(
+            "SELECT COUNT(*), SUM(CASE WHEN ease > 1 THEN 1 ELSE 0 END) "
+            "FROM revlog WHERE type = 1 AND id >= ?", (cutoff_ms,)
+        ).fetchone()
+        total_rev = int(rrow[0] or 0)
+        passed = int(rrow[1] or 0)
+        out["retention"] = (passed / total_rev) if total_rev else None
+
+        out["decks"] = _anki_decks(con, decks_json, tables, today)
+    except sqlite3.Error as exc:
+        out["reason"], out["error"] = "read", type(exc).__name__
+        return out
+    finally:
+        con.close()
+    out["ok"] = True
+    return out
+
+
 def module_learning() -> Dict[str, Any]:
-    return _fixture(
-        "learning", workspace="private", summary="3 Lektionen fällig (Konzept)",
-        rows=[
-            {"icon": "book-open", "accent": "violet", "title": "Deep Work Playbook", "sub": "Fortschritt", "status": "running", "statusLabel": "Läuft", "value": "68 %"},
-            {"icon": "graduation-cap", "accent": "cyan", "title": "Nächste Lektion", "sub": "Heute · 20 Min", "value": "—"},
-        ],
-        note="Lern-Skills-Fortschritt noch nicht als Read-Modell exponiert.",
+    path = _find_anki_collection()
+    if path is None:
+        # Honest current state: sync server is up but no device has synced yet, so
+        # no per-user collection file exists. Never a fake "3 fällig".
+        return _prov(
+            state="empty", source=ANKI_SOURCE, source_kind="file",
+            workspace="private", permission=_ANKI_PERM,
+            summary="Noch nicht synchronisiert — Anki-Sync bereit",
+            stale_after=STALE["learning"],
+            note=("Anki-Collection noch nicht synchronisiert. Der Anki-Sync-Server "
+                  "ist bereit — sobald das erste Gerät synchronisiert, erscheinen "
+                  "hier fällige Karten, Retention und Streak (read-only, Anki bleibt "
+                  "das Lern-Wahrheitssystem)."),
+            extra={"anki": {"collection": None, "syncReady": True}},
+        )
+
+    try:
+        observed = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        observed = None
+
+    data = _read_anki(path)
+    if not data["ok"]:
+        if data["reason"] == "schema":
+            return _prov(
+                state="unavailable", source=ANKI_SOURCE, source_kind="file",
+                workspace="private", permission=_ANKI_PERM,
+                summary="Anki-Schema unbekannt",
+                observed_at=observed, stale_after=STALE["learning"],
+                note=("Schema unbekannt — die gefundene Collection passt nicht zum "
+                      f"erwarteten Anki-Format ({data['error']}). Keine Zahlen "
+                      "geraten; Datei prüfen."),
+                extra={"anki": {"collection": str(path), "schemaOk": False,
+                                "ver": data["ver"]}},
+            )
+        return _prov(
+            state="unavailable", source=ANKI_SOURCE, source_kind="file",
+            workspace="private", permission=_ANKI_PERM,
+            summary="Anki-Collection nicht lesbar",
+            observed_at=observed, stale_after=STALE["learning"],
+            note=(f"Collection gefunden, aber nicht lesbar ({data['reason']}: "
+                  f"{data['error']}). Read-only — nichts wird verändert."),
+            extra={"anki": {"collection": str(path), "schemaOk": False}},
+        )
+
+    if data["total_cards"] == 0:
+        return _prov(
+            state="empty", source=ANKI_SOURCE, source_kind="file",
+            workspace="private", permission=_ANKI_PERM,
+            summary="Collection synchronisiert — noch keine Karten",
+            observed_at=observed, stale_after=STALE["learning"],
+            note=("Anki-Collection ist da, enthält aber noch keine Karten. "
+                  "Sobald Decks/Karten synchronisiert sind, erscheinen fällige "
+                  "Karten, Retention und Streak."),
+            extra={"anki": {"collection": str(path), "schemaOk": True,
+                            "totalCards": 0}},
+        )
+
+    due = data["due_today"]
+    streak = data["streak"]
+    ret = data["retention"]
+    ret_pct = f"{round(ret * 100)} %" if ret is not None else "—"
+
+    rows: List[Dict[str, Any]] = [
+        {"icon": "graduation-cap", "accent": "violet", "title": "Fällig heute",
+         "sub": f"{data['total_cards']} Karten gesamt",
+         "status": ("running" if due > 0 else "verified"),
+         "statusLabel": ("Zu lernen" if due > 0 else "Alles gelernt"),
+         "value": str(due)},
+        {"icon": "target", "accent": "cyan", "title": "Retention (30 T)",
+         "sub": "Review-Antworten ohne „Nochmal“", "value": ret_pct},
+        {"icon": "flame", "accent": "violet", "title": "Streak",
+         "sub": f"{data['learned_today']} heute gelernt",
+         "value": f"{streak} T"},
+    ]
+    for d in data["decks"]:
+        rows.append({
+            "icon": "book-open", "accent": "violet", "title": d["name"],
+            "sub": "Deck", "value": (f"{d['due']} fällig" if d["due"] else "—"),
+        })
+
+    summary = f"{due} fällig · {ret_pct} Retention · {streak} T Streak"
+    state = _freshness_state(observed, STALE["learning"])
+    return _prov(
+        state=state, source=ANKI_SOURCE, source_kind="file",
+        workspace="private", permission=_ANKI_PERM,
+        summary=summary, observed_at=observed, stale_after=STALE["learning"],
+        rows=rows,
+        note=("Read-only-Projektion der Anki-Sync-Collection (mode=ro). Anki bleibt "
+              "das alleinige Spaced-Repetition-Wahrheitssystem — MIKAEL OS liest nur, "
+              "kein AnkiConnect, keine zweite SR-DB."),
+        extra={
+            "anki": {"collection": str(path), "schemaOk": True, "ver": data["ver"]},
+            "due": due,
+            "count": due,               # generic tile metric (deriveMetric)
+            "retention": ret,
+            "retentionPct": ret_pct,
+            "streak": streak,
+            "learnedToday": data["learned_today"],
+            "totalCards": data["total_cards"],
+            "decks": data["decks"],
+        },
     )
 
 
