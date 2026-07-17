@@ -86,6 +86,7 @@ try:
     from fastapi import APIRouter
     from fastapi import HTTPException
     from fastapi import Body
+    from fastapi.responses import Response  # PWA static files (manifest/sw/shell)
 except Exception:  # pragma: no cover - allow import/unit use without FastAPI
     class HTTPException(Exception):  # type: ignore
         def __init__(self, status_code: int = 404, detail: str = "") -> None:
@@ -102,6 +103,12 @@ except Exception:  # pragma: no cover - allow import/unit use without FastAPI
 
     def Body(default=None, **_kwargs):  # type: ignore
         return default
+
+    class Response:  # type: ignore
+        def __init__(self, content="", media_type="text/plain", headers=None, **_kw):
+            self.content = content
+            self.media_type = media_type
+            self.headers = headers or {}
 
 
 router = APIRouter()
@@ -4314,6 +4321,451 @@ def gesundheit_overview() -> Dict[str, Any]:
     }
 
 
+# ===========================================================================
+# M5 — BETRIEB (24/7 · Anzeige / Mac-Steuerung / Drei-Frontdoor).
+#
+# Additive, READ-ONLY peer scene. Three honest blocks:
+#   1. displayMode  — the runtime display mode (Kiosk/PWA-standalone/Browser-Tab)
+#      is CLIENT-detected (matchMedia display-mode, navigator.standalone, onLine,
+#      visibilityState); the backend cannot know it, so it says so and only ships
+#      the PWA endpoint metadata + an honest note about the host-side limit.
+#   2. macControl   — four TYPED, PROPOSE-ONLY Mac actions. The plugin NEVER opens
+#      ssh/shell/exec and NEVER executes on the Mac. Each action builds a
+#      deterministic typed intent (pure, no free-text shell) and — even on a live
+#      click — only returns a dry-run preview + honest "Ausführung folgt/deferred"
+#      (needs a Control-Plane capability + scoped proxy, Operator/gated). There is
+#      NO code path here that reaches the device.
+#   3. frontdoors   — the honest three-frontdoor shared context (Dashboard=reader,
+#      Telegram=writer, Hermes-App=not observed in code) over the ONE shared job
+#      truth (mission.v2) + Approval-Cards, with the real gaps named, not hidden.
+# ===========================================================================
+
+# The four typed Mac actions. `params` is deliberately empty/whitelisted — never
+# free-text shell. Every one is PROPOSE-ONLY and its execution is DEFERRED: it
+# needs a typed DEVICE_ACTIONS capability (delta-ops) + Operator-go before it can
+# ever run through the gated scoped proxy. `greenCapability` names the existing
+# typed delta-ops capability this action maps toward (honest: "capability exists,
+# but this surface is not wired to fire it") — or None where none is typed yet.
+_MAC_ACTIONS = [
+    {
+        "id": "focus_window", "action": "focus_window", "icon": "app-window",
+        "label": "Fenster / App fokussieren",
+        "target": "cockpit-browser",
+        "reason": "Cockpit-Browserfenster in den Vordergrund holen",
+        "greenCapability": "delta-ops:device_action · browser_focus",
+        "detail": ("Zielt auf die bestehende grüne, typisierte Capability "
+                   "browser_focus (osascript, kein Modelltext im Shell-String). "
+                   "Diese Fläche ist NICHT verdrahtet, sie auszulösen."),
+    },
+    {
+        "id": "open_surface", "action": "open_surface", "icon": "monitor",
+        "label": "Definierte Fläche öffnen",
+        "target": "cockpit:/abrechnung",
+        "reason": "Cockpit-Abrechnungsfläche auf dem Mac öffnen",
+        "greenCapability": None,
+        "detail": ("Kein typisiertes Äquivalent + URL-Whitelist vorhanden — "
+                   "braucht eine neue grüne DEVICE_ACTIONS-Zeile (delta-ops PR)."),
+    },
+    {
+        "id": "arrange_widgets", "action": "arrange_widgets", "icon": "layout-grid",
+        "label": "Widgets ordnen",
+        "target": "layout:fokus",
+        "reason": "Fenster-/Widget-Layout auf ein definiertes Preset bringen",
+        "greenCapability": None,
+        "detail": ("Kein Capability-Äquivalent — müsste als typisiertes Layout-"
+                   "Preset neu definiert werden (kein Freitext-Layout-Kommando)."),
+    },
+    {
+        "id": "show_file", "action": "show_file", "icon": "file-text",
+        "label": "Datei / Ansicht zeigen",
+        "target": "file:letzter-beleg",
+        "reason": "Zuletzt verarbeiteten Beleg auf dem Mac anzeigen",
+        "greenCapability": "delta-ops:device_file_read (nur Lesepfad, kein aktives Zeigen)",
+        "detail": ("Lesen einer Datei existiert als Allowlist; ein aktiver Anzeige-/"
+                   "UI-Akt auf dem Mac ist NICHT typisiert — deferred."),
+    },
+]
+_MAC_ACTION_BY_ID = {a["id"]: a for a in _MAC_ACTIONS}
+_MAC_PROPOSE_ROUTE = "/api/plugins/mikael-os/betrieb/mac/propose"
+
+
+def _mac_intent(action_def: Dict[str, Any]) -> Dict[str, Any]:
+    """Deterministic, pure (no I/O) typed device intent for one Mac action.
+
+    Whitelisted shape only — `params` is empty; there is NO free-text/shell field.
+    The idempotency key is a stable sha256 over device|action|target."""
+    device = "mac"
+    action = action_def["action"]
+    target = action_def["target"]
+    key = hashlib.sha256(f"{device}|{action}|{target}".encode("utf-8")).hexdigest()
+    is_green = bool(action_def.get("greenCapability")
+                    and "device_action" in str(action_def.get("greenCapability")))
+    required_cap = "delta-ops:device_action" if is_green else "delta-ops:propose_device_exec"
+    required_gate = "device_green" if is_green else "device_propose"
+    return {
+        "device": device,
+        "action": action,
+        "target": target,
+        "params": {},                       # whitelisted / empty — NEVER free shell
+        "reason": action_def.get("reason") or "",
+        "requiredCapabilities": [required_cap],
+        "requiredGate": required_gate,
+        "idempotencyKey": key,
+        "provenance": {
+            "plugin": "mikael-os",
+            "surface": "betrieb-mac",
+            "proposeOnly": True,
+            "createdUtc": _iso(_now()),
+        },
+    }
+
+
+def _mac_predicted_gate(action_def: Dict[str, Any]) -> Dict[str, Any]:
+    """The gate this typed device intent is EXPECTED to hit. Prediction only — the
+    real decision is made server-side by the gated lane, never by this plugin.
+    Every action is execution-DEFERRED here: no capability is wired to this
+    surface, so the honest expected outcome is a pending Approval-Card."""
+    green = action_def.get("greenCapability")
+    return {
+        "gateClass": "device_green" if (green and "device_action" in str(green)) else "device_propose",
+        "expectedOutcome": "require_approval",
+        "execution": "deferred",
+        "human": ("Ausführung über Control-Plane-Capability folgt — diese Fläche "
+                  "schlägt nur vor (typisiert), sie führt nichts aus."),
+        "note": ("Das Plugin öffnet keine ssh/shell/exec. Echte Ausführung braucht "
+                 "eine typisierte DEVICE_ACTIONS-Capability + scoped Proxy "
+                 "(Operator/gated) — hier bewusst deferred."),
+    }
+
+
+def mac_action_propose(action_id: str, dry_run: bool = True) -> Dict[str, Any]:
+    """PROPOSE-ONLY typed Mac action. Builds a dry-run preview of the typed device
+    intent and returns it. It has NO execution path: the plugin never opens
+    ssh/shell/exec, never posts a device action to the control-plane, and even a
+    live click (dryRun=false) returns the SAME honest deferred preview — execution
+    is a separate gated lane (scoped proxy) that this surface cannot reach."""
+    action_def = _MAC_ACTION_BY_ID.get((action_id or "").strip())
+    if not action_def:
+        return {"ok": False, "status": "invalid",
+                "note": "Unbekannte Mac-Aktion (nur typisierte, gewhitelistete Aktionen)."}
+    intent = _mac_intent(action_def)
+    gate = _mac_predicted_gate(action_def)
+    # Honest reachability probe ONLY (read-only GET /healthz) so the card can say
+    # whether the gated lane is up — this never sends the device action anywhere.
+    cp = control_plane_status()
+    plan = {
+        "objective": action_def["label"],
+        "device": "mac",
+        "target": intent["target"],
+        "workspaceLabel": "Mac-Steuerung (privat)",
+        "capabilities": intent["requiredCapabilities"],
+        "requiredGate": intent["requiredGate"],
+        "gateHuman": gate["human"],
+        "greenCapability": action_def.get("greenCapability"),
+        "capabilityDetail": action_def.get("detail"),
+    }
+    return {
+        "ok": True,
+        "mode": "dry_run",                    # ALWAYS dry-run — no live device path
+        "status": "vorschau",
+        "willFire": False,
+        "proposeOnly": True,
+        "execution": "deferred",
+        "requestedLive": bool(dry_run is False),  # honest: even if asked live -> deferred
+        "intent": intent,
+        "plan": plan,
+        "predictedGate": gate,
+        "controlPlane": cp,
+        "note": ("Nur Vorschau — es wurde NICHTS ausgeführt und NICHTS an ein Gerät "
+                 "gesendet. Mac-Steuerung ist ausschließlich typisiert + propose-only; "
+                 "die Ausführung folgt über eine Control-Plane-Capability + scoped Proxy "
+                 "(Operator/gated). Kein Shell-Autopilot."),
+    }
+
+
+def _read_approval_cards() -> Tuple[List[Dict[str, Any]], bool]:
+    """Read Approval-Cards raw (id/status/text/source/route/task_id/gate). Returns
+    (cards, dir_present). Read-only; never decides."""
+    if not APPROVALS_DIR.exists():
+        return [], False
+    out: List[Dict[str, Any]] = []
+    for path in sorted(glob.glob(str(APPROVALS_DIR / "appr_*.json"))):
+        try:
+            c = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        out.append(c)
+    return out, True
+
+
+def betrieb_overview() -> Dict[str, Any]:
+    """READ-ONLY 'Betrieb' bundle: display-mode metadata (client-detected), the
+    four typed propose-only Mac actions, and the honest three-frontdoor shared
+    context over mission.v2 + Approval-Cards. No writes, no device access."""
+    now = _now()
+
+    # --- (1) Display-Mode: honestly client-detected -------------------------
+    display_mode = {
+        "detected": None,                 # backend cannot know — the client fills this
+        "detectionSide": "client",
+        "modes": [
+            {"id": "standalone", "label": "Installiert / Kiosk",
+             "hint": "display-mode: standalone (Dock-App / Kiosk-Fenster)"},
+            {"id": "fullscreen", "label": "Vollbild-Kiosk",
+             "hint": "display-mode: fullscreen"},
+            {"id": "browser", "label": "Browser-Tab",
+             "hint": "normaler Tab (kein installiertes Fenster)"},
+        ],
+        "pwa": {
+            "manifest": "/api/plugins/mikael-os/pwa/manifest.webmanifest",
+            "serviceWorker": "/api/plugins/mikael-os/pwa/sw.js",
+            "offlineShell": "/api/plugins/mikael-os/pwa/offline.html",
+            "swScope": "/",
+            "installableFromPlugin": False,
+            "note": ("Das Plugin liefert Manifest + minimalen Service-Worker/Offline-"
+                     "Shell und hängt den Manifest-Link zur Laufzeit selbst in den "
+                     "<head> (soweit im Plugin machbar). Ein vollständig installierbares "
+                     "PWA/echter Kiosk-Offline-Betrieb braucht zusätzlich einen "
+                     "Host-<link rel=manifest> + root-scoped Service-Worker in "
+                     "nous-hermes-agent (index.html) — außerhalb des Plugins, im Runbook "
+                     "dokumentiert."),
+        },
+        "note": ("Anzeigemodus wird clientseitig erkannt (matchMedia display-mode, "
+                 "navigator.standalone, onLine, visibilityState) — der Server kennt ihn "
+                 "nicht und rät ihn nicht."),
+        "_prov": {"state": "partial", "workspace": "private", "readOnly": True,
+                  "source": "client-detection + Plugin-PWA-Endpunkte",
+                  "sourceKind": "konzept", "observedAt": _iso(now)},
+    }
+
+    # --- (2) Reconnect: read-model reachability probe -----------------------
+    cp = control_plane_status()
+    whoop_code, _wh = _http_get_json(f"{WHOOP_BASE}/healthz")
+    sources = [
+        {"id": "controlPlane", "label": "Control-Plane :18083", "reachable": bool(cp.get("reachable"))},
+        {"id": "whoop", "label": "WHOOP-Connector :18090", "reachable": whoop_code == 200},
+        {"id": "missions", "label": "mission.v2 · /srv/hermes/missions", "reachable": MISSIONS_DIR.exists()},
+        {"id": "approvals", "label": "Approval-Cards · /srv/hermes/approvals", "reachable": APPROVALS_DIR.exists()},
+    ]
+    reconnect = {
+        "strategy": ["online", "focus", "visibilitychange"],
+        "sources": sources,
+        "reachableCount": sum(1 for s in sources if s["reachable"]),
+        "total": len(sources),
+        "note": ("Bei Reconnect (online/focus/visibilitychange) liest die Fläche alle "
+                 "Read-Modelle sofort neu; der Zustand erscheint ohne manuelles Neuladen. "
+                 "visibilitychange deckt den Kiosk-Fall ab (Fenster verliert nie den Fokus)."),
+        "_prov": {"state": "fresh", "workspace": "private", "readOnly": True,
+                  "source": "Reachability-Probe (read-only)", "sourceKind": "http",
+                  "observedAt": _iso(now)},
+    }
+
+    # --- (3) Mac-Steuerung: four typed propose-only actions -----------------
+    mac_actions_out = []
+    for a in _MAC_ACTIONS:
+        intent = _mac_intent(a)
+        gate = _mac_predicted_gate(a)
+        mac_actions_out.append({
+            "id": a["id"], "action": a["action"], "target": a["target"],
+            "label": a["label"], "icon": a["icon"], "reason": a["reason"],
+            "requiredCapabilities": intent["requiredCapabilities"],
+            "requiredGate": intent["requiredGate"],
+            "idempotencyKey": intent["idempotencyKey"],
+            "greenCapability": a.get("greenCapability"),
+            "capabilityDetail": a.get("detail"),
+            "execution": "deferred",
+            "predictedGate": gate,
+        })
+    mac_control = {
+        "proposeRoute": _MAC_PROPOSE_ROUTE,
+        "proposeOnly": True,
+        "actions": mac_actions_out,
+        "controlPlane": cp,
+        "safety": ("Das Plugin führt NIE selbst etwas auf dem Mac aus, ruft KEIN "
+                   "Shell/exec, öffnet KEINE ssh-/Geräte-Verbindung. Jede Aktion ist "
+                   "eine typisierte Vorschlagskarte (dry-run). Ausführung folgt über "
+                   "Control-Plane-Capability + scoped Proxy (Operator/gated)."),
+        "_prov": {"state": "fresh", "workspace": "private", "readOnly": True,
+                  "source": "typisierte Mac-Aktionen (propose-only)",
+                  "sourceKind": "konzept", "observedAt": _iso(now)},
+    }
+
+    # --- (4) Drei-Frontdoor: honest shared context --------------------------
+    missions = _read_missions()
+    cards, appr_present = _read_approval_cards()
+    pending = [c for c in cards if str(c.get("status") or "").lower() in ("pending", "")]
+    # channel_correlations per mission (if the projection carries it — else empty).
+    correlated = 0
+    mission_sample: List[Dict[str, Any]] = []
+    for proj in missions:
+        cc = proj.get("channel_correlations")
+        cc_list = cc if isinstance(cc, list) else []
+        if cc_list:
+            correlated += 1
+        if len(mission_sample) < 6:
+            mission_sample.append({
+                "goal": str(proj.get("goal") or proj.get("expected_result") or "Mission")[:80],
+                "state": proj.get("state"),
+                "owner": proj.get("owner_agent") or proj.get("assigned_agent"),
+                "channelCorrelations": cc_list,
+                "approvalRef": proj.get("approval_ref"),
+            })
+    # honest linkage gap: approval_ref set on a mission but no matching card id.
+    card_ids = {str(c.get("id")) for c in cards if c.get("id")}
+    unlinked_refs = 0
+    for proj in missions:
+        ref = proj.get("approval_ref")
+        if ref and str(ref) not in card_ids:
+            unlinked_refs += 1
+    channels = [
+        {"id": "dashboard", "label": "Dashboard (MIKAEL OS)", "role": "reader", "icon": "monitor",
+         "observed": True,
+         "detail": ("Liest mission.v2 + Approval-Cards read-only (dashboard/plugin_api.py). "
+                    "Schreibt keine Job-Wahrheit.")},
+        {"id": "telegram", "label": "Telegram (Operator-Bot / Jarvis)", "role": "writer", "icon": "send",
+         "observed": True,
+         "detail": ("Echter Writer: bot/executor/jarvis_frontdoor.py ruft "
+                    "MissionStore.create()/transition()/bind_task()/correlate_channel() — "
+                    "legt/bindet dieselbe Mission.")},
+        {"id": "hermes_app", "label": "Hermes-App", "role": "unknown", "icon": "help-circle",
+         "observed": False,
+         "detail": ("Im gelesenen Code nicht als eigener Consumer/Writer beobachtet — "
+                    "hier ehrlich als 'nicht beobachtet' ausgewiesen, nicht als "
+                    "symmetrisch angebunden behauptet.")},
+    ]
+    gaps = [
+        {"id": "approval_mission_link",
+         "text": ("Approval-Cards tragen kein mission_id (nur task_id) — "
+                  "job_projection.approval_ref wird nicht gegen die Card gematcht."),
+         "count": unlinked_refs},
+        {"id": "channel_correlations_hidden",
+         "text": ("channel_correlations wird von mission.v2 geführt, ist aber sonst "
+                  "nirgends exponiert — hier erstmals sichtbar gemacht."),
+         "count": correlated},
+        {"id": "hermes_app_unobserved",
+         "text": "Hermes-App taucht im Code als eigener Akteur nicht auf.",
+         "count": None},
+    ]
+    frontdoors = {
+        "channels": channels,
+        "shared": {
+            "missions": len(missions),
+            "approvalsPending": len(pending),
+            "approvalsTotal": len(cards),
+            "missionsWithCorrelation": correlated,
+            "note": ("Eine Mission ist eine Mission — die Job-Wahrheit (mission.v2) ist "
+                     "über Dashboard (Leser) und Telegram (Schreiber) faktisch geteilt, "
+                     "keine zweite Wahrheit."),
+        },
+        "gaps": gaps,
+        "missionsSample": mission_sample,
+        "meta": {"dashboard": "reader", "telegram": "writer (jarvis_frontdoor.py)",
+                 "hermes_app": "unknown/not observed in code"},
+        "_prov": {
+            "state": ("fresh" if (missions or appr_present) else "empty"),
+            "workspace": "engineering", "readOnly": True,
+            "source": "mission.v2 · /srv/hermes/missions + /srv/hermes/approvals",
+            "sourceKind": "file", "observedAt": _iso(now)},
+    }
+
+    return {
+        "workspace": "private",
+        "permission": "Nur lesen · Mac-Steuerung propose-only",
+        "observedAt": _iso(now),
+        "displayMode": display_mode,
+        "reconnect": reconnect,
+        "macControl": mac_control,
+        "frontdoors": frontdoors,
+        "note": ("Betrieb = 24/7-Fläche: Anzeigemodus (clientseitig erkannt), typisierte "
+                 "propose-only Mac-Steuerung (kein Shell/keine Ausführung) und der ehrlich "
+                 "geteilte Drei-Frontdoor-Kontext (Dashboard=Leser, Telegram=Schreiber, "
+                 "Hermes-App=nicht beobachtet). Nur lesen; Ausführung bleibt gated."),
+    }
+
+
+# --- PWA static payloads (served by the plugin; installable/offline as far as a
+# --- plugin can go — the honest limit is documented in the runbook). ---------
+_PWA_MANIFEST = {
+    "id": "/mikael-os",
+    "name": "MIKAEL OS",
+    "short_name": "MIKAEL OS",
+    "description": "Mikaels persönliches 24/7-Command-Center (read-only Projektionen).",
+    "start_url": "/mikael-os",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#0b1020",
+    "theme_color": "#0b1020",
+    "icons": [
+        {"src": "/api/plugins/mikael-os/pwa/icon.svg", "sizes": "any",
+         "type": "image/svg+xml", "purpose": "any maskable"},
+    ],
+}
+
+_PWA_SW_JS = """/* MIKAEL OS — minimal offline shell service worker (plugin-served).
+ * Read-only app-shell caching so a returning Kiosk/Dock window shows the shell
+ * immediately after reconnect. It caches ONLY GET responses and never touches
+ * any write/propose route. Honest scope: the plugin ships this as far as a
+ * plugin can; a fully installable PWA still needs the host <link rel=manifest>. */
+const CACHE = "mikael-os-shell-v1";
+const OFFLINE = "/api/plugins/mikael-os/pwa/offline.html";
+self.addEventListener("install", (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll([OFFLINE])).then(() => self.skipWaiting()));
+});
+self.addEventListener("activate", (e) => {
+  e.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+self.addEventListener("fetch", (e) => {
+  const req = e.request;
+  if (req.method !== "GET") return; // never cache/replay writes or propose POSTs
+  e.respondWith(
+    fetch(req).then((res) => {
+      if (res && res.ok && (req.url.indexOf("/mikael-os") !== -1 || req.destination === "script" || req.destination === "style")) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+      }
+      return res;
+    }).catch(() =>
+      caches.match(req).then((hit) => hit || (req.mode === "navigate" ? caches.match(OFFLINE) : Response.error()))
+    )
+  );
+});
+"""
+
+_PWA_OFFLINE_HTML = """<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIKAEL OS — offline</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:#0b1020; color:#e8ecff; font:16px/1.5 system-ui,-apple-system,sans-serif; }
+  .card { max-width:30rem; padding:2rem; text-align:center; }
+  h1 { font-size:1.3rem; margin:0 0 .5rem; }
+  p { opacity:.8; margin:.4rem 0; }
+  .dot { width:.6rem;height:.6rem;border-radius:50%;background:#f5a623;display:inline-block;margin-right:.4rem; }
+  @media (prefers-reduced-motion: no-preference) { .dot { animation: pulse 2s ease-in-out infinite; } }
+  @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+</style></head>
+<body><div class="card">
+  <h1><span class="dot"></span>Offline</h1>
+  <p>MIKAEL OS ist gerade nicht erreichbar.</p>
+  <p>Sobald die Verbindung zurück ist, lädt der aktuelle Zustand automatisch neu — es wird nichts Erfundenes angezeigt.</p>
+</div></body></html>
+"""
+
+_PWA_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<rect width="512" height="512" rx="96" fill="#0b1020"/>
+<circle cx="256" cy="256" r="150" fill="none" stroke="#5b8cff" stroke-width="20" opacity="0.35"/>
+<circle cx="256" cy="256" r="88" fill="#5b8cff"/>
+<circle cx="256" cy="256" r="40" fill="#0b1020"/>
+</svg>
+"""
+
+
 # ---------------------------------------------------------------------------
 # HTTP surface. GET reads are zero-write. The single POST route is propose-only:
 # dry-run previews with no network; a live submit hands the intent to the gated
@@ -4435,6 +4887,63 @@ def gesundheit_overview_route() -> Dict[str, Any]:
     7-Tage-Trend) + Training/Ernährung ehrlich 'kein Connector'. Ohne
     WHOOP_INTERNAL_TOKEN ehrlich partial (nie erfundene Werte). Nur lesen (privat)."""
     return gesundheit_overview()
+
+
+@router.get("/betrieb/overview")
+def betrieb_overview_route() -> Dict[str, Any]:
+    """READ-ONLY 'Betrieb' (24/7): Anzeigemodus (clientseitig erkannt) + PWA-
+    Endpunkte, vier TYPISIERTE propose-only Mac-Aktionen (kein Shell/exec/ssh,
+    Ausführung deferred) und der ehrlich geteilte Drei-Frontdoor-Kontext
+    (Dashboard=Leser · Telegram=Schreiber · Hermes-App=nicht beobachtet) über
+    mission.v2 + Approval-Cards. Nur lesen; Ausführung bleibt gated."""
+    return betrieb_overview()
+
+
+@router.post("/betrieb/mac/propose")
+def betrieb_mac_propose_route(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """PROPOSE-ONLY typisierte Mac-Aktion. Body: ``{action, dryRun}``. Baut eine
+    Dry-Run-Vorschau des typisierten Geräte-Intents und gibt sie zurück. KEIN
+    Ausführungspfad: das Plugin öffnet nie ssh/shell/exec, sendet nie eine
+    Geräte-Aktion an die Control-Plane, und selbst ein Live-Klick (dryRun:false)
+    liefert dieselbe ehrliche deferred-Vorschau — Ausführung ist eine separate
+    gated Lane (scoped Proxy), die diese Fläche nicht erreicht."""
+    if not isinstance(payload, dict):
+        payload = {}
+    action_id = str(payload.get("action") or payload.get("id") or "").strip()
+    dry_run = payload.get("dryRun", payload.get("dry_run", True))
+    return mac_action_propose(action_id, dry_run=bool(dry_run))
+
+
+@router.get("/pwa/manifest.webmanifest")
+def pwa_manifest_route() -> Response:
+    """PWA web app manifest (plugin-served). Enables Dock/Kiosk install as far as
+    a plugin can — the honest host-side limit is documented in the runbook."""
+    return Response(content=json.dumps(_PWA_MANIFEST, ensure_ascii=False),
+                    media_type="application/manifest+json",
+                    headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/pwa/sw.js")
+def pwa_sw_route() -> Response:
+    """Minimal offline-shell service worker (plugin-served). Service-Worker-Allowed
+    widens the scope to '/' so a returning Kiosk window can show the shell after
+    reconnect. Caches GET only — never a write/propose route."""
+    return Response(content=_PWA_SW_JS, media_type="application/javascript",
+                    headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
+
+
+@router.get("/pwa/offline.html")
+def pwa_offline_route() -> Response:
+    """Minimal offline app-shell (plugin-served). Honest: reconnect reloads the
+    real state; nothing fabricated is shown."""
+    return Response(content=_PWA_OFFLINE_HTML, media_type="text/html; charset=utf-8")
+
+
+@router.get("/pwa/icon.svg")
+def pwa_icon_route() -> Response:
+    """PWA/tab icon (SVG, plugin-served)."""
+    return Response(content=_PWA_ICON_SVG, media_type="image/svg+xml",
+                    headers={"Cache-Control": "max-age=86400"})
 
 
 @router.get("/review/session")

@@ -3254,3 +3254,120 @@ button.mos__deeplink.is-gated .mos__icon:last-child { color: #a8bce0; opacity: 0
 .mos__mckpt-jarvis > .mos__icon { color: var(--mos-text-faint); flex: none; }
 .mos__mckpt-agenda .mos__agenda-body { max-height: 210px; }
 .mos__mckpt .mos__firma, .mos__mckpt .mos__appc { flex: none; }
+
+/* =========================================================================== */
+/* M5 — BETRIEB (24/7): Anzeige · Mac-Steuerung (propose-only) · Frontdoors.    */
+/* Read-only peer scene; same glass/token language as M2–M4.                    */
+/* =========================================================================== */
+.mos__betr { display: flex; flex-direction: column; gap: 12px; }
+.mos__betrgrid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 14px; align-items: start; }
+.mos__betr-display { grid-column: 1; grid-row: 1; }
+.mos__betr-mac { grid-column: 2; grid-row: 1 / span 2; }
+.mos__betr-fd { grid-column: 1; grid-row: 2; }
+
+/* --- Anzeige & Verbindung --- */
+.mos__betr-moderow { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px 4px; }
+/* Anzeige-Modus-Umschalter: drei gleichwertige Modi (Kiosk/PWA/Browser). Der
+   clientseitig ERKANNTE Modus ist aktiv-violett (V3-Standard, wie state-tone
+   focus/think); nicht verfügbare Modi bleiben sichtbar als locked mit Kurzgrund. */
+.mos__betr-modeswitch { display: inline-flex; gap: 6px; padding: 3px; border-radius: var(--mos-pill); background: rgba(120,150,200,0.06); border: 1px solid var(--mos-border); }
+.mos__betr-mode { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; letter-spacing: 0.2px; color: var(--mos-text-dim); padding: 6px 12px; border-radius: var(--mos-pill); background: transparent; border: 1px solid transparent; }
+.mos__betr-mode.mos--on { color: var(--mos-violet); background: rgba(167,139,250,0.16); border-color: rgba(167,139,250,0.32); box-shadow: 0 0 0 1px rgba(167,139,250,0.12); }
+.mos__betr-mode.mos--locked { color: var(--mos-text-faint); background: transparent; border-style: dashed; border-color: var(--mos-border); cursor: default; }
+.mos__betr-mode.mos--locked .mos__icon { opacity: 0.8; }
+.mos__betr-modehint { display: flex; align-items: flex-start; gap: 6px; margin: 6px 14px 0; font-size: 10.5px; line-height: 1.5; color: var(--mos-text-faint); }
+.mos__betr-modehint .mos__icon { flex: none; margin-top: 1px; }
+.mos__betr-conn, .mos__betr-vis { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--mos-text-dim); padding: 6px 10px; border-radius: var(--mos-pill); background: rgba(120,150,200,0.06); border: 1px solid var(--mos-border); }
+.mos__betr-conn.mos--on { color: var(--mos-emerald); }
+.mos__betr-conn.mos--off { color: var(--mos-danger); background: rgba(248,113,113,0.10); border-color: rgba(248,113,113,0.30); }
+/* Sichtbare Reconnect-Erfolgsmeldung (Endnutzer-Statusaussage) — die technische
+   RECONNECT-kv-Zeile (online/focus/visibilitychange) bleibt als Detail erhalten. */
+.mos__betr-recon { display: flex; align-items: center; gap: 7px; margin: 8px 14px 0; padding: 8px 12px; border-radius: var(--mos-radius-sm); font-size: 11.5px; font-weight: 600; color: var(--mos-text-dim); background: rgba(120,150,200,0.05); border: 1px solid var(--mos-border); }
+.mos__betr-recon .mos__icon { flex: none; }
+.mos__betr-recon.mos--on { color: var(--mos-emerald); background: rgba(52,211,153,0.10); border-color: rgba(52,211,153,0.28); }
+.mos__betr-kv { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; padding: 8px 14px; margin: 0; }
+.mos__betr-kv > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mos__betr-kv dt { font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--mos-text-faint); }
+.mos__betr-kv dd { display: inline-flex; align-items: center; gap: 5px; margin: 0; font-size: 11.5px; color: var(--mos-text-dim); }
+.mos__betr-kv dd .mos__icon { color: var(--mos-emerald); flex: none; }
+.mos__betr-sources { list-style: none; margin: 4px 0 0; padding: 8px 14px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--mos-border); }
+.mos__betr-src { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--mos-text-dim); }
+.mos__betr-src .mos__pip-dot { flex: none; color: var(--mos-emerald); }
+.mos__betr-src.mos--off .mos__pip-dot { color: var(--mos-danger); }
+.mos__betr-src-l { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mos__betr-src-s { flex: none; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; color: var(--mos-text-faint); }
+.mos__betr-src.mos--off .mos__betr-src-s { color: var(--mos-danger); }
+.mos__betr-hint { display: flex; align-items: flex-start; gap: 6px; margin: 0; padding: 10px 14px 12px; font-size: 10.5px; line-height: 1.5; color: var(--mos-text-faint); }
+.mos__betr-hint .mos__icon { flex: none; margin-top: 1px; }
+
+/* --- Mac-Steuerung (typed · propose-only) --- */
+.mos__betr-macbanner { margin: 10px 14px 6px; }
+.mos__maclist { list-style: none; margin: 0; padding: 4px 12px 8px; display: flex; flex-direction: column; gap: 8px; }
+.mos__macrow { display: flex; flex-direction: column; border-radius: var(--mos-radius-sm); background: rgba(120,150,200,0.05); border: 1px solid var(--mos-border); overflow: hidden; }
+/* Aufgeklappte Zeile = klar als ausgewähltes Beispiel markiert (violetter Akzent),
+   damit die Höhen-Asymmetrie in Doku-Screenshots als Auswahl lesbar ist. */
+.mos__macrow.mos--open { border-color: rgba(167,139,250,0.4); box-shadow: inset 3px 0 0 var(--mos-violet); }
+.mos__macrow-btn { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; padding: 11px 12px; background: transparent; border: 0; cursor: pointer; color: var(--mos-text); }
+.mos__macrow-btn:hover { background: rgba(167,139,250,0.06); }
+.mos__macrow-ico { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: rgba(167,139,250,0.14); color: var(--mos-violet); }
+.mos__macrow-sel { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--mos-violet); padding: 4px 8px; border-radius: var(--mos-pill); background: rgba(167,139,250,0.12); border: 1px solid rgba(167,139,250,0.32); }
+.mos__macrow-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mos__macrow-title { font-size: 13px; font-weight: 600; }
+.mos__macrow-target { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--mos-text-faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.mos__macrow-lock { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: #a8bce0; padding: 4px 8px; border-radius: var(--mos-pill); background: rgba(120,150,210,0.14); border: 1px solid rgba(140,170,225,0.4); }
+.mos__macrow-prev { padding: 10px 12px; border-top: 1px dashed var(--mos-border); background: rgba(10,18,34,0.4); display: flex; flex-direction: column; gap: 8px; }
+.mos__macrow-prev--err { flex-direction: row; align-items: center; gap: 6px; font-size: 11.5px; color: var(--mos-danger); }
+.mos__macrow-prevhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.mos__macrow-gate { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 600; color: #9db4d0; }
+.mos__macrow-kv { display: flex; flex-direction: column; gap: 5px; margin: 0; }
+.mos__macrow-kv > div { display: grid; grid-template-columns: 82px 1fr; gap: 8px; align-items: baseline; }
+.mos__macrow-kv dt { font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--mos-text-faint); }
+.mos__macrow-kv dd { margin: 0; font-size: 11px; color: var(--mos-text-dim); word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.mos__macrow-note { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 10.5px; line-height: 1.5; color: var(--mos-text-faint); }
+.mos__macrow-note .mos__icon { flex: none; margin-top: 1px; }
+.mos__betr-macfoot { margin-top: auto; }
+
+/* --- Drei-Frontdoor --- */
+.mos__fdlist { list-style: none; margin: 0; padding: 10px 14px 4px; display: flex; flex-direction: column; gap: 9px; }
+.mos__fdrow { display: flex; gap: 10px; padding: 10px 11px; border-radius: var(--mos-radius-sm); background: rgba(120,150,200,0.05); border: 1px solid var(--mos-border); border-left-width: 3px; }
+.mos__fdrow.mos--blue  { border-left-color: var(--mos-blue); }
+.mos__fdrow.mos--amber { border-left-color: var(--mos-amber); }
+.mos__fdrow.mos--muted { border-left-color: var(--mos-text-faint); }
+.mos__fdrow-ico { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: rgba(120,150,200,0.10); color: var(--mos-text-dim); }
+.mos__fdrow.mos--blue .mos__fdrow-ico  { color: var(--mos-blue);  background: rgba(96,165,250,0.14); }
+.mos__fdrow.mos--amber .mos__fdrow-ico { color: var(--mos-amber); background: rgba(251,191,36,0.14); }
+.mos__fdrow-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.mos__fdrow-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.mos__fdrow-name { font-size: 12.5px; font-weight: 700; color: var(--mos-text); }
+.mos__fdrow-role { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; padding: 3px 8px; border-radius: var(--mos-pill); }
+.mos__fdrow-role.mos--blue  { color: var(--mos-blue);  background: rgba(96,165,250,0.12); }
+.mos__fdrow-role.mos--amber { color: var(--mos-amber); background: rgba(251,191,36,0.12); }
+.mos__fdrow-role.mos--muted { color: var(--mos-text-faint); background: rgba(134,149,171,0.12); }
+.mos__fdrow-det { margin: 0; font-size: 10.5px; line-height: 1.5; color: var(--mos-text-dim); }
+.mos__fdshared { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 14px; }
+.mos__fdshared span { font-size: 11px; color: var(--mos-text-dim); padding: 5px 10px; border-radius: var(--mos-pill); background: rgba(120,150,200,0.07); border: 1px solid var(--mos-border); }
+.mos__fdshared b { font-size: 13px; font-weight: 800; color: var(--mos-text); }
+.mos__fd-sharednote { display: flex; align-items: flex-start; gap: 6px; margin: 0; padding: 2px 14px 6px; font-size: 10.5px; line-height: 1.5; color: var(--mos-text-faint); }
+.mos__fd-sharednote .mos__icon { flex: none; margin-top: 1px; }
+.mos__fdgaps { padding: 8px 14px 12px; border-top: 1px solid var(--mos-border); }
+.mos__fdgaps-h { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--mos-amber); }
+.mos__fdgaps ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mos__fdgaps li { display: flex; align-items: flex-start; gap: 8px; font-size: 11px; line-height: 1.5; color: var(--mos-text-dim); }
+.mos__fdgaps-c { flex: none; min-width: 20px; text-align: center; font-size: 11px; font-weight: 800; color: var(--mos-amber); padding: 1px 6px; border-radius: var(--mos-pill); background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.28); }
+.mos__betr-foot { margin-top: 2px; }
+
+/* --- M5 responsive --- */
+@media (max-width: 1180px) {
+  .mos__betrgrid { grid-template-columns: minmax(0,1fr); grid-template-rows: auto; }
+  .mos__betr-display, .mos__betr-mac, .mos__betr-fd { grid-column: 1; grid-row: auto; }
+}
+.mos__mscreen-body .mos__betrgrid { grid-template-columns: minmax(0,1fr); grid-template-rows: auto; }
+.mos__mscreen-body .mos__betr-display,
+.mos__mscreen-body .mos__betr-mac,
+.mos__mscreen-body .mos__betr-fd { grid-column: 1; grid-row: auto; }
+.mos__mscreen-body .mos__betr { padding-bottom: 8px; }
+
+/* Reduced motion: no spin on the reconnect indicator. */
+@media (prefers-reduced-motion: reduce) {
+  .mos__betr .is-spin { animation: none; }
+}

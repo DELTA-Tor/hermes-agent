@@ -385,6 +385,16 @@ const SESSIONS_OVERVIEW_API = PLUGIN_API + "/agent-sessions/overview";
 const ZIELE_OVERVIEW_API = PLUGIN_API + "/ziele/overview";
 const REFLEXION_OVERVIEW_API = PLUGIN_API + "/reflexion/overview";
 const GESUNDHEIT_OVERVIEW_API = PLUGIN_API + "/gesundheit/overview";
+// M5 — BETRIEB (24/7). Read-only /betrieb/overview (Anzeigemodus-Metadaten +
+// Reconnect-Reachability + Drei-Frontdoor-Kontext). The Mac-Steuerung actions
+// POST to /betrieb/mac/propose (dry-run only, execution DEFERRED — the plugin
+// NEVER opens ssh/shell/exec and NEVER executes on the Mac). The PWA manifest +
+// service worker are plugin-served under /pwa/* (injected at runtime, honest
+// about the host-side install limit).
+const BETRIEB_OVERVIEW_API = PLUGIN_API + "/betrieb/overview";
+const MAC_PROPOSE_API = PLUGIN_API + "/betrieb/mac/propose";
+const PWA_MANIFEST_HREF = PLUGIN_API + "/pwa/manifest.webmanifest";
+const PWA_SW_HREF = PLUGIN_API + "/pwa/sw.js";
 const POS = MODULES.reduce((acc, m) => { acc[m.id] = m.pos; return acc; }, {});
 
 // SDK-aware POST/GET. Prefer the host's authed transport; fall back to window
@@ -481,6 +491,33 @@ function freshnessLabel(iso) {
   const h = Math.round(m / 60);
   if (h < 48) return "vor " + h + " Std";
   return "vor " + Math.round(h / 24) + " T";
+}
+
+// M5 — CLIENT-side display/connectivity detection (the backend cannot know the
+// runtime display mode). Reports the installed/kiosk vs. browser-tab mode, the
+// online flag and the page visibility — all honestly read from the real browser
+// APIs, never guessed. Safe on a server/SSR (returns unknown/browser defaults).
+function detectDisplayEnv() {
+  if (typeof window === "undefined") {
+    return { mode: "browser", modeLabel: "Browser-Tab", standalone: false,
+             online: true, visibility: "visible" };
+  }
+  const mm = (q) => (typeof window.matchMedia === "function" ? window.matchMedia(q).matches : false);
+  const iosStandalone = typeof navigator !== "undefined" && navigator.standalone === true;
+  let mode = "browser";
+  if (mm("(display-mode: fullscreen)")) mode = "fullscreen";
+  else if (mm("(display-mode: standalone)") || mm("(display-mode: window-controls-overlay)") || iosStandalone) mode = "standalone";
+  else if (mm("(display-mode: minimal-ui)")) mode = "minimal-ui";
+  const LABEL = { standalone: "Installiert / Kiosk", fullscreen: "Vollbild-Kiosk",
+                  "minimal-ui": "App-Fenster (minimal-ui)", browser: "Browser-Tab" };
+  return {
+    mode,
+    modeLabel: LABEL[mode] || "Browser-Tab",
+    standalone: mode !== "browser",
+    online: typeof navigator === "undefined" ? true : navigator.onLine !== false,
+    visibility: typeof document === "undefined" ? "visible" : (document.visibilityState || "visible"),
+    secureContext: typeof window !== "undefined" ? !!window.isSecureContext : false,
+  };
 }
 
 // Enrich one positional (draggable) module with its live read-model payload.
@@ -1891,6 +1928,7 @@ const MSCREEN_META = {
   ziele:         { title: "Ziele & Systeme",    sub: "mission.v2 + Policy · keine neue Task-DB" },
   reflexion:     { title: "Reflexion",          sub: "strikt privat · nur lesen · kein Versand" },
   gesundheit:    { title: "Gesundheit",         sub: "WHOOP :18090 · privat · nur lesen" },
+  betrieb:       { title: "Betrieb 24/7",        sub: "Mac-Steuerung propose-only · nur lesen" },
 };
 function MobileScreen(props) {
   const kind = props.kind;
@@ -1914,6 +1952,9 @@ function MobileScreen(props) {
     body = h(ReflexionScene, { data: props.reflexion, load: props.reflexionLoad });
   } else if (kind === "gesundheit") {
     body = h(GesundheitScene, { data: props.gesundheit, load: props.gesundheitLoad });
+  } else if (kind === "betrieb") {
+    body = h(BetriebScene, { data: props.betrieb, load: props.betriebLoad,
+      displayEnv: props.displayEnv, pwaStatus: props.pwaStatus });
   }
   return h("div", { className: "mos__mscreen mos__mscreen--" + kind, role: "region", "aria-label": meta.title },
     h("header", { className: "mos__mscreen-top" },
@@ -1939,6 +1980,8 @@ function MobileShell(props) {
       ziele: props.ziele, zieleLoad: props.zieleLoad,
       reflexion: props.reflexion, reflexionLoad: props.reflexionLoad,
       gesundheit: props.gesundheit, gesundheitLoad: props.gesundheitLoad,
+      betrieb: props.betrieb, betriebLoad: props.betriebLoad,
+      displayEnv: props.displayEnv, pwaStatus: props.pwaStatus,
     });
   }
   // The command pill belongs to the Jarvis tab; the Timeline is a read view
@@ -3532,6 +3575,9 @@ const M3_AREAS = [
     sub: "Journal · Entscheidungen · Erkenntnisse" },
   { id: "gesundheit",    icon: "heart-pulse", accent: "emerald", title: "Gesundheit",
     sub: "WHOOP · Recovery · Schlaf · Strain" },
+  // M5 peer (same launch mechanism, same read-only peer-scene contract).
+  { id: "betrieb",       icon: "monitor",     accent: "cyan",   title: "Betrieb 24/7",
+    sub: "Anzeige · Mac-Steuerung (propose-only) · Frontdoors" },
 ];
 function AreaLauncher(props) {
   return h("nav", { className: "mos__arealaunch", "aria-label": "Bereiche öffnen" },
@@ -4184,6 +4230,247 @@ function GesundheitScene(props) {
       h("span", { className: "mos__firma-foot-ro" }, "Nur lesen")));
 }
 
+// ===========================================================================
+// M5 — BETRIEB (24/7) scene. Read-only peer scene (same contract as M2–M4).
+// Three honest cards: Anzeige-Modus (client-detected display/connectivity + PWA
+// state), Mac-Steuerung (four TYPED propose-only actions — the plugin never opens
+// ssh/shell/exec; each click builds a dry-run preview and shows an explicit
+// deferred lock), and Drei-Frontdoor (shared job truth over mission.v2 —
+// Dashboard=reader, Telegram=writer, Hermes-App=not observed — with real gaps).
+// ===========================================================================
+const MAC_ICON = { focus_window: "app-window", open_surface: "monitor",
+                   arrange_widgets: "layout-grid", show_file: "file-text" };
+const MODE_ICON = { standalone: "monitor-check", fullscreen: "monitor-check",
+                    "minimal-ui": "app-window", browser: "app-window" };
+const FRONTDOOR_TONE = { reader: "blue", writer: "amber", unknown: "muted" };
+const FRONTDOOR_ICON = { dashboard: "monitor", telegram: "send-horizontal", hermes_app: "circle-help" };
+
+// One typed Mac action row — click builds a dry-run preview via /betrieb/mac/propose.
+// It shows an explicit "Ausführung folgt / deferred" lock and NEVER a live/exec CTA.
+function MacActionRow(props) {
+  const a = props.action;
+  const st = props.state || {};      // { phase: idle|loading|preview|error, data }
+  const phase = st.phase || "idle";
+  const pv = st.data;
+  const open = phase === "preview" && !!pv;
+  return h("li", { className: "mos__macrow" + (open ? " mos--open" : "") },
+    h("button", { type: "button", className: "mos__macrow-btn",
+        onClick: () => props.onPropose(a.id), "aria-expanded": open ? "true" : "false",
+        "aria-label": a.label + " vorschlagen (nur Vorschau)" },
+      h("span", { className: "mos__macrow-ico" }, h(Icon, { name: MAC_ICON[a.id] || a.icon || "app-window", size: 17 })),
+      h("span", { className: "mos__macrow-body" },
+        h("span", { className: "mos__macrow-title" }, a.label),
+        h("span", { className: "mos__macrow-target" }, h(Icon, { name: "arrow-up-right", size: 11 }), a.target)),
+      open
+        ? h("span", { className: "mos__macrow-sel", title: "aufgeklappte Beispiel-Vorschau (Dry-Run)" },
+            h(Icon, { name: "flask-conical", size: 11 }), "Beispiel")
+        : h("span", { className: "mos__macrow-lock", title: "Ausführung folgt über Control-Plane-Capability (gated)" },
+            h(Icon, { name: "lock", size: 11 }), "deferred")),
+    // Preview / deferred detail — only after a click (dry-run), never live.
+    phase === "loading"
+      ? h("div", { className: "mos__macrow-prev mos__skrow" })
+      : phase === "error"
+        ? h("div", { className: "mos__macrow-prev mos__macrow-prev--err" },
+            h(Icon, { name: "triangle-alert", size: 12 }), (st.note || "Vorschau nicht möglich."))
+        : phase === "preview" && pv
+          ? h("div", { className: "mos__macrow-prev" },
+              h("div", { className: "mos__macrow-prevhead" },
+                h("span", { className: "mos__pip mos__pip--amber" },
+                  h(Icon, { name: "flask-conical", size: 11 }), "Dry-Run · nichts gesendet"),
+                h("span", { className: "mos__macrow-gate" },
+                  h(Icon, { name: "shield-check", size: 11 }),
+                  (pv.predictedGate && pv.predictedGate.gateClass) || "device_propose")),
+              h("dl", { className: "mos__macrow-kv" },
+                h("div", null, h("dt", null, "Intent"),
+                  h("dd", null, (pv.intent && (pv.intent.action + " → " + pv.intent.target)) || "—")),
+                h("div", null, h("dt", null, "Capability"),
+                  h("dd", null, (pv.intent && pv.intent.requiredCapabilities && pv.intent.requiredCapabilities.join(", ")) || "—")),
+                (pv.plan && pv.plan.greenCapability)
+                  ? h("div", null, h("dt", null, "Bestehend"), h("dd", null, pv.plan.greenCapability))
+                  : null),
+              h("p", { className: "mos__macrow-note" },
+                h(Icon, { name: "lock", size: 11 }),
+                (pv.plan && pv.plan.capabilityDetail) || "Ausführung über Control-Plane-Capability folgt."))
+          : null);
+}
+
+function BetriebScene(props) {
+  const ov = props.data;
+  const load = props.load;
+  const env = props.displayEnv || {};
+  const pwa = props.pwaStatus || {};
+  const offline = load === "offline" || (!ov && load !== "loading");
+  const loading = load === "loading" && !ov;
+  const [mac, setMac] = useState({});    // action id -> { phase, data, note }
+  const onPropose = useCallback((id) => {
+    setMac((m) => ({ ...m, [id]: { phase: "loading" } }));
+    sdkPost(MAC_PROPOSE_API, { action: id, dryRun: true })
+      .then((r) => {
+        if (!r || r.ok === false) { setMac((m) => ({ ...m, [id]: { phase: "error", note: (r && r.note) || "Vorschau nicht möglich." } })); return; }
+        setMac((m) => ({ ...m, [id]: { phase: "preview", data: r } }));
+      })
+      .catch(() => setMac((m) => ({ ...m, [id]: { phase: "error", note: "Vorschau nicht erreichbar." } })));
+  }, []);
+
+  if (offline && !ov) {
+    return h("div", { className: "mos__betr" },
+      h(ZoneEmpty, { state: "unavailable", icon: "monitor",
+        title: "Betriebs-Projektion nicht erreichbar",
+        note: "Read-Modelle offline — Anzeige/Mac-Steuerung/Frontdoors erscheinen, sobald /betrieb/overview antwortet." }));
+  }
+  const mc = ov && ov.macControl;
+  const macActions = (mc && Array.isArray(mc.actions)) ? mc.actions : [];
+  const fd = ov && ov.frontdoors;
+  const channels = (fd && Array.isArray(fd.channels)) ? fd.channels : [];
+  const gaps = (fd && Array.isArray(fd.gaps)) ? fd.gaps : [];
+  const shared = (fd && fd.shared) || {};
+  const rc = ov && ov.reconnect;
+  const sources = (rc && Array.isArray(rc.sources)) ? rc.sources : [];
+  const dm = ov && ov.displayMode;
+  const swLabel = { registered: "registriert", unavailable: "nicht möglich",
+                    unsupported: "nicht unterstützt", unknown: "…" }[pwa.sw || "unknown"];
+
+  return h("div", { className: "mos__betr" },
+    h("div", { className: "mos__betrgrid" },
+      // ---- 1. Anzeige-Modus + PWA + Reconnect --------------------------------
+      h("section", { className: "mos__card mos__betr-display" },
+        h("header", { className: "mos__card-head" },
+          h(Icon, { name: env.standalone ? "monitor-check" : "monitor", size: 16 }),
+          h("span", { className: "mos__card-title" }, "Anzeige & Verbindung"),
+          h(WorkspacePill, { workspace: "private" }),
+          h(ZonePip, { state: loading ? "loading" : (dm && dm._prov && dm._prov.state) || "partial",
+            observedAt: dm && dm._prov && dm._prov.observedAt,
+            source: "clientseitig erkannt", note: dm && dm.note })),
+        // Drei gleichwertige Anzeige-Modi. Der clientseitig ERKANNTE ist aktiv
+        // (violett); nicht verfügbare bleiben sichtbar als locked + Kurzgrund.
+        // Kein echtes Umschalten aus dem Plugin — reiner Status (M5: read-only).
+        (function () {
+          const modes = (dm && Array.isArray(dm.modes) && dm.modes.length)
+            ? dm.modes
+            : [{ id: "standalone", label: "Kiosk" }, { id: "browser", label: "Browser-Tab" }];
+          const installable = !!(dm && dm.pwa && dm.pwa.installableFromPlugin);
+          const activeId = modes.some((m) => m.id === env.mode) ? env.mode
+            : (env.standalone ? "standalone" : "browser");
+          const needsHost = (id) => id !== "browser" && !installable;
+          const hasLocked = modes.some((m) => m.id !== activeId && needsHost(m.id));
+          return [
+            h("div", { key: "sw", className: "mos__betr-moderow" },
+              h("div", { className: "mos__betr-modeswitch", role: "group", "aria-label": "Anzeige-Modus" },
+                modes.map((m) => {
+                  const on = m.id === activeId;
+                  const locked = !on && needsHost(m.id);
+                  return h("span", { key: m.id,
+                      className: "mos__betr-mode mos--" + (on ? "on" : (locked ? "locked" : "idle")),
+                      title: m.hint || m.label, "aria-current": on ? "true" : undefined },
+                    h(Icon, { name: on ? "monitor-check" : (locked ? "lock" : MODE_ICON[m.id] || "app-window"), size: 14 }),
+                    m.label);
+                })),
+              h("span", { className: "mos__betr-conn mos--" + (env.online === false ? "off" : "on"),
+                  title: "navigator.onLine" },
+                h(Icon, { name: env.online === false ? "wifi-off" : "wifi", size: 13 }),
+                env.online === false ? "offline" : "online"),
+              h("span", { className: "mos__betr-vis", title: "document.visibilityState" },
+                h(Icon, { name: "eye", size: 13 }), env.visibility || "visible")),
+            hasLocked
+              ? h("p", { key: "hint", className: "mos__betr-modehint" },
+                  h(Icon, { name: "info", size: 11 }),
+                  "Aktiver Modus clientseitig erkannt. Kiosk/PWA brauchen ein Host-Manifest (Runbook) — hier ehrlich als „nicht verfügbar“ markiert, nicht schaltbar.")
+              : null,
+          ];
+        })(),
+        // Sichtbare Reconnect-Erfolgsmeldung (Endnutzer-Statusaussage), zusätzlich
+        // zur technischen RECONNECT-kv-Zeile weiter unten.
+        (rc && rc.total)
+          ? h("div", { className: "mos__betr-recon mos--" + (rc.reachableCount === rc.total ? "on" : "off") },
+              h(Icon, { name: rc.reachableCount === rc.total ? "circle-check-big" : "loader", size: 13 }),
+              rc.reachableCount === rc.total
+                ? "Verbunden · Zustand nach Reconnect sofort wiederhergestellt"
+                : ("Teil-verbunden · " + rc.reachableCount + "/" + rc.total + " Read-Modelle erreichbar"))
+          : null,
+        h("dl", { className: "mos__betr-kv" },
+          h("div", null, h("dt", null, "PWA-Manifest"),
+            h("dd", null, h(Icon, { name: pwa.manifest ? "circle-check-big" : "flask-conical", size: 12 }),
+              pwa.manifest ? "in <head> injiziert" : "nicht injiziert")),
+          h("div", null, h("dt", null, "Service-Worker"),
+            h("dd", null, h(Icon, { name: pwa.sw === "registered" ? "circle-check-big" : "flask-conical", size: 12 }), swLabel)),
+          h("div", null, h("dt", null, "Reconnect"),
+            h("dd", null, h(Icon, { name: "refresh-cw", size: 12 }),
+              (rc && rc.strategy) ? rc.strategy.join(" · ") : "online · focus · visibilitychange"))),
+        // read-model reachability strip (honest, real probe)
+        h("ul", { className: "mos__betr-sources" },
+          loading
+            ? [0, 1, 2, 3].map((i) => h("li", { key: i, className: "mos__skrow" }))
+            : sources.map((s) =>
+                h("li", { key: s.id, className: "mos__betr-src mos--" + (s.reachable ? "on" : "off") },
+                  h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+                  h("span", { className: "mos__betr-src-l" }, s.label),
+                  h("span", { className: "mos__betr-src-s" }, s.reachable ? "erreichbar" : "offline")))),
+        h("p", { className: "mos__betr-hint" },
+          h(Icon, { name: "info", size: 12 }),
+          (dm && dm.pwa && dm.pwa.note)
+            || "Voll installierbares PWA/Kiosk braucht zusätzlich einen Host-<link rel=manifest> (Runbook).")),
+
+      // ---- 2. Mac-Steuerung (typed · propose-only · deferred) ----------------
+      h("section", { className: "mos__card mos__betr-mac" },
+        h("header", { className: "mos__card-head" },
+          h(Icon, { name: "cpu", size: 16 }),
+          h("span", { className: "mos__card-title" }, "Mac-Steuerung"),
+          h("span", { className: "mos__pip mos__pip--gated", title: "propose-only" },
+            h(Icon, { name: "shield-check", size: 11 }), "propose-only"),
+          h(ZonePip, { state: loading ? "loading" : "fresh",
+            observedAt: mc && mc._prov && mc._prov.observedAt, source: "typisierte Aktionen" })),
+        h("div", { className: "mos__kbanner mos__betr-macbanner" },
+          h(Icon, { name: "lock", size: 14 }),
+          h("span", null, (mc && mc.safety)
+            || "Das Plugin führt NIE selbst etwas aus — kein Shell/exec/ssh. Jede Aktion ist ein typisierter Vorschlag (dry-run); Ausführung folgt gated."),
+          h("span", { className: "mos__kbanner-ro" }, h(Icon, { name: "eye", size: 12 }), "kein Autopilot")),
+        loading
+          ? h("ul", { className: "mos__maclist" }, [0, 1, 2, 3].map((i) => h("li", { key: i, className: "mos__skrow" })))
+          : h("ul", { className: "mos__maclist" },
+              macActions.map((a) => h(MacActionRow, { key: a.id, action: a, state: mac[a.id], onPropose: onPropose }))),
+        h("footer", { className: "mos__firma-foot mos__betr-macfoot" },
+          h(Icon, { name: "git-branch", size: 12 }),
+          h("span", { className: "mos__firma-foot-t" },
+            "Route: " + ((mc && mc.proposeRoute) || "/betrieb/mac/propose") + " · dry-run"),
+          h("span", { className: "mos__firma-foot-ro" }, "Ausführung gated"))),
+
+      // ---- 3. Drei-Frontdoor (shared job truth, honest) ----------------------
+      h("section", { className: "mos__card mos__betr-fd" },
+        h("header", { className: "mos__card-head" },
+          h(Icon, { name: "waypoints", size: 16 }),
+          h("span", { className: "mos__card-title" }, "Drei Frontdoors · geteilter Kontext"),
+          h(ZonePip, { state: loading ? "loading" : (fd && fd._prov && fd._prov.state) || "fresh",
+            observedAt: fd && fd._prov && fd._prov.observedAt, source: fd && fd._prov && fd._prov.source })),
+        h("ul", { className: "mos__fdlist" },
+          (loading ? [] : channels).map((c) =>
+            h("li", { key: c.id, className: "mos__fdrow mos--" + (FRONTDOOR_TONE[c.role] || "muted") },
+              h("span", { className: "mos__fdrow-ico" }, h(Icon, { name: FRONTDOOR_ICON[c.id] || "circle", size: 16 })),
+              h("div", { className: "mos__fdrow-body" },
+                h("div", { className: "mos__fdrow-head" },
+                  h("span", { className: "mos__fdrow-name" }, c.label),
+                  h("span", { className: "mos__fdrow-role mos--" + (FRONTDOOR_TONE[c.role] || "muted") },
+                    h(Icon, { name: c.observed ? "link" : "unlink", size: 10 }),
+                    c.role === "reader" ? "Leser" : c.role === "writer" ? "Schreiber" : "nicht beobachtet")),
+                h("p", { className: "mos__fdrow-det" }, c.detail))))),
+        loading ? h("div", { className: "mos__skrow" }, "") : h("div", { className: "mos__fdshared" },
+          h("span", null, h("b", null, shared.missions != null ? shared.missions : "—"), " Missionen (mission.v2)"),
+          h("span", null, h("b", null, shared.approvalsPending != null ? shared.approvalsPending : "—"), " Approval-Cards offen"),
+          h("span", null, h("b", null, shared.missionsWithCorrelation != null ? shared.missionsWithCorrelation : "—"), " mit channel_correlations")),
+        (!loading && shared.note) ? h("p", { className: "mos__fd-sharednote" }, h(Icon, { name: "info", size: 12 }), shared.note) : null,
+        (!loading && gaps.length) ? h("div", { className: "mos__fdgaps" },
+          h("span", { className: "mos__fdgaps-h" }, h(Icon, { name: "triangle-alert", size: 12 }), "Ehrliche Lücken (nicht verschwiegen)"),
+          h("ul", null, gaps.map((g, i) =>
+            h("li", { key: g.id || i },
+              (g.count != null ? h("span", { className: "mos__fdgaps-c" }, g.count) : null),
+              h("span", null, g.text))))) : null)),
+    h("footer", { className: "mos__firma-foot mos__betr-foot" },
+      h(Icon, { name: "lock", size: 12 }),
+      h("span", { className: "mos__firma-foot-t" },
+        "Betrieb = 24/7 · Anzeige clientseitig · Mac propose-only (kein Shell/exec) · Frontdoors nur lesen"
+        + (ov && ov.observedAt ? " · Stand " + (freshnessLabel(ov.observedAt) || "gerade") : "")),
+      h("span", { className: "mos__firma-foot-ro" }, "Nur lesen")));
+}
+
 // --- Cockpit desktop assembly (3-column grid) ---------------------------------
 function CockpitScene(props) {
   return h("div", { className: "mos__ckpt" },
@@ -4315,6 +4602,14 @@ function MikaelOS() {
   const [reflexionLoad, setReflexionLoad] = useState("loading"); // loading | ready | offline
   const [gesundheit, setGesundheit] = useState(null);
   const [gesundheitLoad, setGesundheitLoad] = useState("loading"); // loading | ready | offline
+  // M5 — BETRIEB (24/7). Read-only /betrieb/overview projection + a CLIENT-detected
+  // display/connectivity snapshot (display-mode, online, visibility). The backend
+  // can't know the runtime display mode, so the client fills it and re-reads on
+  // reconnect. Any fetch failure leaves the honest offline state.
+  const [betrieb, setBetrieb] = useState(null);
+  const [betriebLoad, setBetriebLoad] = useState("loading"); // loading | ready | offline
+  const [displayEnv, setDisplayEnv] = useState(() => detectDisplayEnv());
+  const [pwaStatus, setPwaStatus] = useState({ manifest: false, sw: "unknown" });
   // Focus flash for the Approval-Center when the Gates-KPI is clicked (§6).
   const [approvalsFlash, setApprovalsFlash] = useState(false);
   const approvalsRef = useRef(null);
@@ -4424,19 +4719,69 @@ function MikaelOS() {
       .then((data) => { setGesundheit(data); setGesundheitLoad("ready"); })
       .catch(() => { setGesundheitLoad((p) => (p === "ready" ? "ready" : "offline")); });
   }, []);
+  // M5 — BETRIEB overview + a fresh CLIENT display/connectivity snapshot on every
+  // (re)load, so a returning Kiosk window shows the current state immediately.
+  const loadBetrieb = useCallback(() => {
+    setDisplayEnv(detectDisplayEnv());
+    setBetriebLoad((p) => (p === "ready" ? "ready" : "loading"));
+    sdkGet(BETRIEB_OVERVIEW_API)
+      .then((data) => { setBetrieb(data); setBetriebLoad("ready"); })
+      .catch(() => { setBetriebLoad((p) => (p === "ready" ? "ready" : "offline")); });
+  }, []);
   useEffect(() => { loadOverview(); loadCockpit(); loadFirma(); loadKomm(); loadSessions();
-    loadZiele(); loadReflexion(); loadGesundheit(); },
-    [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit]);
-  // Reconnect: on regained focus / online, re-read the models so a returning
-  // session sees the live state at once (no stale snapshot lingering).
+    loadZiele(); loadReflexion(); loadGesundheit(); loadBetrieb(); },
+    [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb]);
+  // Reconnect: on regained focus / online / visibility (the Kiosk case — a
+  // single-app foreground window that never loses OS focus), re-read the models
+  // so a returning session sees the live state at once (no stale snapshot).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const reload = () => { loadOverview(); loadCockpit(); loadFirma(); loadKomm(); loadSessions();
-      loadZiele(); loadReflexion(); loadGesundheit(); };
+      loadZiele(); loadReflexion(); loadGesundheit(); loadBetrieb(); };
+    const onVisible = () => { if (document.visibilityState === "visible") reload(); };
+    const onEnv = () => setDisplayEnv(detectDisplayEnv());
     window.addEventListener("online", reload);
+    window.addEventListener("online", onEnv);
+    window.addEventListener("offline", onEnv);
     window.addEventListener("focus", reload);
-    return () => { window.removeEventListener("online", reload); window.removeEventListener("focus", reload); };
-  }, [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit]);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", reload);
+      window.removeEventListener("online", onEnv);
+      window.removeEventListener("offline", onEnv);
+      window.removeEventListener("focus", reload);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb]);
+  // M5 — PWA: inject the plugin-served manifest link + theme-color into the shared
+  // host <head> (soweit im Plugin machbar) and register the offline-shell service
+  // worker at scope "/". Honest: a fully installable PWA still needs a host-side
+  // <link rel=manifest> in nous-hermes-agent (documented in the runbook). Every
+  // step is guarded so a failure never breaks the shell — it just reports honestly.
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    let linkEl = null;
+    try {
+      if (!document.querySelector('link[rel="manifest"][data-mos="1"]')) {
+        linkEl = document.createElement("link");
+        linkEl.rel = "manifest";
+        linkEl.href = PWA_MANIFEST_HREF;
+        linkEl.setAttribute("data-mos", "1");
+        document.head.appendChild(linkEl);
+      } else {
+        linkEl = document.querySelector('link[rel="manifest"][data-mos="1"]');
+      }
+      setPwaStatus((s) => ({ ...s, manifest: true }));
+    } catch (_e) { setPwaStatus((s) => ({ ...s, manifest: false })); }
+    if (typeof navigator !== "undefined" && navigator.serviceWorker && window.isSecureContext) {
+      navigator.serviceWorker.register(PWA_SW_HREF, { scope: "/" })
+        .then(() => setPwaStatus((s) => ({ ...s, sw: "registered" })))
+        .catch(() => setPwaStatus((s) => ({ ...s, sw: "unavailable" })));
+    } else {
+      setPwaStatus((s) => ({ ...s, sw: "unsupported" }));
+    }
+    return undefined;
+  }, []);
 
   const liveById = useMemo(() => indexLive(live), [live]);
   const loadingModules = loadState === "loading";
@@ -4855,6 +5200,7 @@ function MikaelOS() {
         komm: komm, kommLoad: kommLoad, sessions: sessions, sessionsLoad: sessionsLoad,
         ziele: ziele, zieleLoad: zieleLoad, reflexion: reflexion, reflexionLoad: reflexionLoad,
         gesundheit: gesundheit, gesundheitLoad: gesundheitLoad,
+        betrieb: betrieb, betriebLoad: betriebLoad, displayEnv: displayEnv, pwaStatus: pwaStatus,
       }),
       h(ProposeFlow, {
         state: propose, onObjective: proposeObjective, onPreview: proposePreview,
@@ -4926,7 +5272,8 @@ function MikaelOS() {
 
   const isBackScene = scene === "firma" || scene === "approvals"
     || scene === "wissen" || scene === "kommunikation" || scene === "sessions"
-    || scene === "ziele" || scene === "reflexion" || scene === "gesundheit";
+    || scene === "ziele" || scene === "reflexion" || scene === "gesundheit"
+    || scene === "betrieb";
   return h(
     "div",
     { className: "mos" + (scene === "timeline" ? " mos--timeline" : scene === "cockpit" ? " mos--cockpit" : isBackScene ? " mos--cockpit mos--" + scene : "") },
@@ -5033,6 +5380,16 @@ function MikaelOS() {
                 h("span", null, "WHOOP-Connector :18090 · Recovery/Schlaf/HRV/Strain · privat, nur lesen")),
               h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Privat · nur lesen")),
             h(GesundheitScene, { data: gesundheit, load: gesundheitLoad }),
+            h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
+        : scene === "betrieb"
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
+            h("div", { className: "mos__scenehead" },
+              h(Icon, { name: "monitor", size: 20 }),
+              h("div", { className: "mos__scenehead-t" },
+                h("h2", null, "Betrieb 24/7"),
+                h("span", null, "Anzeigemodus (clientseitig) · Mac-Steuerung typisiert + propose-only (kein Shell/exec) · Drei-Frontdoor-Kontext")),
+              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen · propose-only")),
+            h(BetriebScene, { data: betrieb, load: betriebLoad, displayEnv: displayEnv, pwaStatus: pwaStatus }),
             h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
         : scene === "timeline"
         ? h("div", { className: "mos__stagewrap mos__stagewrap--tl" },
