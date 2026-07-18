@@ -68,6 +68,30 @@ plugins/mikael-os/
 └── README.md
 ```
 
+## Learning Intake Foundation (not live)
+
+`learning_intake/` adds contracts only. It does not mount a route or run OCR,
+Vision, Qdrant, embeddings, calendar writes or a scheduler. Existing L-1 Anki,
+L-2 review and L-3 coach code remains the future consumer and is not duplicated.
+
+The manifest covers module/exam identity, date/form/aids, tenant-scoped source
+SHA deduplication, PDF-page/PPTX-slide provenance, render assets, extracted
+text, evidence-only OCR/Vision confidence and review, learning objectives and
+ingestion state. `studium` plus a `uni:` tenant is mandatory; company routing
+keys and business authority flags are rejected.
+
+Flow: **Drop → Analyse → Confirmation Card → Freigabe**. The included card is
+always a dry-run with `will_write=false`; approval and ingestion require a later
+gated adapter.
+
+```bash
+cd plugins/mikael-os
+python -m learning_intake.cli validate /path/manifest.json
+python -m learning_intake.cli confirmation-card /path/manifest.json
+```
+
+Schemas live under `learning_intake/schemas/`.
+
 ## Build
 
 The frontend is a Vite **library build** that emits the exact bundle contract the

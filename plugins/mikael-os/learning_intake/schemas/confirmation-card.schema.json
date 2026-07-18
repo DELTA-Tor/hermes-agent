@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:delta:mikael-os:learning-intake-confirmation:v1",
+  "title": "Learning Intake Confirmation Card",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "card_type", "workspace", "isolation", "module_id", "exam_id", "summary", "proposed_transition", "dry_run", "will_write", "writes", "note"],
+  "properties": {
+    "schema_version": {"const": "learning-intake-confirmation.v1"},
+    "card_type": {"const": "learning_intake_confirmation"},
+    "workspace": {"const": "studium"},
+    "isolation": {"type": "object"},
+    "module_id": {"type": "string"},
+    "exam_id": {"type": "string"},
+    "summary": {"type": "object"},
+    "proposed_transition": {"type": "object", "additionalProperties": false, "required": ["from", "to", "gate"], "properties": {"from": {"type": "string"}, "to": {"const": "approved"}, "gate": {"const": "studium_learning_intake"}}},
+    "dry_run": {"const": true},
+    "will_write": {"const": false},
+    "writes": {"type": "array", "maxItems": 0},
+    "note": {"type": "string", "minLength": 1}
+  }
+}
