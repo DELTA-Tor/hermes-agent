@@ -5058,3 +5058,29 @@ def module(module_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail="unknown module")
     readers = _build_readers()
     return _safe_read(readers[module_id], meta)
+
+
+# Keep the user-specific readiness surface outside the Hermes narrow waist.
+# The dashboard host imports this file directly (not as a package), so load the
+# focused sibling module by exact path and give it only existing read callbacks.
+import importlib.util as _mikael_importlib_util  # noqa: E402
+
+_readiness_path = Path(__file__).with_name("integration_readiness.py")
+_readiness_spec = _mikael_importlib_util.spec_from_file_location(
+    "mikael_os_integration_readiness", _readiness_path
+)
+if _readiness_spec is None or _readiness_spec.loader is None:  # pragma: no cover
+    raise RuntimeError("Mikael OS integration readiness module is unavailable")
+_readiness_module = _mikael_importlib_util.module_from_spec(_readiness_spec)
+_readiness_spec.loader.exec_module(_readiness_module)
+_readiness_module.register_routes(
+    router,
+    {
+        "whoop": module_body,
+        "freescout": _freescout_signals,
+        "journal": reflexion_overview,
+        "goals": goals_overview,
+        "sessions": agent_sessions_overview,
+        "control_plane": control_plane_status,
+    },
+)
