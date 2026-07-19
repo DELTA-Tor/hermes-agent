@@ -1,0 +1,13 @@
+name: mikael-os
+version: 1.1.0
+description: "Private Mikael OS tools, including the Konstruktionslehre learning center."
+author: DELTA-Tor
+kind: backend
+provides_tools:
+  - search_learning_materials
+  - get_learning_progress
+  - record_learning_result
+  - get_due_flashcards
+  - start_or_continue_quiz
+  - get_mistakes
+  - get_current_study_block
