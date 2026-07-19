@@ -64,7 +64,7 @@ def test_manifest_health_and_router_contract_are_aligned(plugin_api) -> None:
     health = plugin_api.health()
     route_paths = {route.path for route in plugin_api.router.routes}
 
-    assert manifest["version"] == health["version"] == "0.5.0"
+    assert manifest["version"] == health["version"] == "0.6.0"
     assert health["phase"] == 5
     assert {
         "/cockpit/kpi",
@@ -81,8 +81,62 @@ def test_manifest_health_and_router_contract_are_aligned(plugin_api) -> None:
         "/betrieb/mac/propose",
         "/study/plan",
         "/study/plan/propose",
+        "/learning/intake/analyze",
         "/health",
     } <= route_paths
+
+
+def test_dashboard_multi_pdf_upload_is_ephemeral_and_uses_shared_adapter(
+    plugin_api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    staged: list[Path] = []
+
+    def analyze(attachments, **kwargs):
+        assert kwargs["tenant_id"] == "uni:tum"
+        assert kwargs["module_id"] == "thermodynamik-1"
+        assert kwargs["exam_id"] == "thermo-ws26"
+        assert kwargs["question"] == "Welche Hauptsätze sind wichtig?"
+        assert [item.display_name for item in attachments] == ["eins.pdf", "zwei.pdf"]
+        assert [item.path.read_bytes() for item in attachments] == [b"pdf-one", b"pdf-two"]
+        staged.extend(item.path for item in attachments)
+        return {
+            "ok": True,
+            "mode": "direct_context",
+            "receipt": {"receipt_id": "libundle-test", "will_write": False},
+            "direct_context": {
+                "answer_ready": True,
+                "embedding_requested": False,
+                "graph_write_requested": False,
+                "durable_write_requested": False,
+            },
+        }
+
+    monkeypatch.setattr(plugin_api, "analyze_pdf_attachments", analyze)
+    app = FastAPI()
+    app.include_router(plugin_api.router, prefix="/api/plugins/mikael-os")
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/plugins/mikael-os/learning/intake/analyze",
+            files=[
+                ("files", ("eins.pdf", b"pdf-one", "application/pdf")),
+                ("files", ("zwei.pdf", b"pdf-two", "application/pdf")),
+            ],
+            data={
+                "tenant_id": "uni:tum",
+                "module_id": "thermodynamik-1",
+                "exam_id": "thermo-ws26",
+                "exam_date": "2026-12-18",
+                "question": "Welche Hauptsätze sind wichtig?",
+            },
+        )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["surface"] == "dashboard_upload"
+    assert result["receipt"]["will_write"] is False
+    assert staged and all(not path.exists() for path in staged)
 
 
 def test_learning_coach_uses_real_exam_evidence_without_faking_jarvis(plugin_api) -> None:

@@ -419,6 +419,7 @@ var MikaelOSPlugin = function() {
   const FEYNMAN_API = PLUGIN_API + "/study/feynman";
   const FEYNMAN_EVAL_API = PLUGIN_API + "/study/feynman/evaluate";
   const STUDY_PROPOSE_API = PLUGIN_API + "/study/plan/propose";
+  const LEARNING_INTAKE_API = PLUGIN_API + "/learning/intake/analyze";
   const KPI_API = PLUGIN_API + "/cockpit/kpi";
   const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
   const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
@@ -450,6 +451,19 @@ var MikaelOSPlugin = function() {
     }
     if (typeof fetch === "function") {
       return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.ok ? r.json() : Promise.reject(r.status));
+    }
+    return Promise.reject(new Error("no transport"));
+  }
+  function sdkPostForm(url, form) {
+    const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
+    if (typeof sdk.authedFetch === "function") {
+      return Promise.resolve(sdk.authedFetch(url, { method: "POST", body: form })).then((r) => r && typeof r.json === "function" ? r.json().then((body) => {
+        if (r.ok === false) return Promise.reject(body);
+        return body;
+      }) : r);
+    }
+    if (typeof fetch === "function") {
+      return fetch(url, { method: "POST", body: form }).then((r) => r.json().then((body) => r.ok ? body : Promise.reject(body)));
     }
     return Promise.reject(new Error("no transport"));
   }
@@ -2635,7 +2649,8 @@ var MikaelOSPlugin = function() {
   const COACH_TABS = [
     { id: "countdown", icon: "calendar-clock", label: "Countdown" },
     { id: "feynman", icon: "message-square", label: "Feynman" },
-    { id: "plan", icon: "list-todo", label: "Lernplan" }
+    { id: "plan", icon: "list-todo", label: "Lernplan" },
+    { id: "material", icon: "file-plus", label: "PDFs" }
   ];
   const COACH_METHODS_FALLBACK = [
     { key: "priming", icon: "lightbulb", title: "Priming", line: "Erst aus dem Kopf: Was weißt du schon?" },
@@ -2905,6 +2920,129 @@ var MikaelOSPlugin = function() {
       )
     );
   }
+  function intakeSlug(value, fallback) {
+    const text = String(value || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+    return text || fallback;
+  }
+  function CoachIntake(props) {
+    const plan = props.state && props.state.plan || {};
+    const exam = plan.nextExam || (plan.exams || []).find((e) => e && e.valid !== false) || {};
+    const [files, setFiles] = useState([]);
+    const [tenant, setTenant] = useState("uni:mikael");
+    const [moduleId, setModuleId] = useState(() => intakeSlug(exam.fach, "studium"));
+    const [examId, setExamId] = useState(() => intakeSlug((exam.fach || "pruefung") + "-" + (exam.datum || "aktuell"), "pruefung-aktuell"));
+    const [examDate, setExamDate] = useState(exam.datum || "");
+    const [question, setQuestion] = useState("Welche Inhalte sind für die Prüfung am wichtigsten?");
+    const [phase, setPhase] = useState("idle");
+    const [result, setResult] = useState(null);
+    const [error, setError] = useState("");
+    const submit = useCallback((event) => {
+      if (event && event.preventDefault) event.preventDefault();
+      if (!files.length || !tenant.trim() || !moduleId.trim() || !examId.trim() || !examDate || !question.trim()) {
+        setError("PDFs, Uni-Workspace, Modul, Prüfung, Datum und Frage sind erforderlich.");
+        return;
+      }
+      const form = new FormData();
+      files.forEach((file) => form.append("files", file, file.name));
+      form.append("tenant_id", tenant.trim());
+      form.append("module_id", moduleId.trim());
+      form.append("exam_id", examId.trim());
+      form.append("exam_date", examDate);
+      form.append("question", question.trim());
+      form.append("exam_form", "written");
+      setPhase("loading");
+      setError("");
+      setResult(null);
+      sdkPostForm(LEARNING_INTAKE_API, form).then((data) => {
+        setResult(data || null);
+        setPhase("done");
+      }).catch((reason) => {
+        setError(reason && (reason.detail || reason.message) || "PDF-Analyse nicht möglich.");
+        setPhase("error");
+      });
+    }, [files, tenant, moduleId, examId, examDate, question]);
+    const dc = result && result.direct_context || {};
+    const receipt = result && result.receipt || {};
+    return h(
+      "div",
+      { className: "mos__co-scroll" },
+      h(
+        "div",
+        { className: "mos__co-plan-intro" },
+        h(Icon, { name: "file-plus", size: 14 }),
+        h(
+          "span",
+          null,
+          "Bis zu 8 PDFs werden sofort lokal gelesen und mit Seitenzitaten in den Kontext gelegt. ",
+          h("b", null, "Nur Studium/privat"),
+          " · kein Upload-Speicher, kein Embedding, kein Graph-Write."
+        )
+      ),
+      h(
+        "form",
+        { className: "mos__intake-form", onSubmit: submit },
+        h(
+          "label",
+          { className: "mos__intake-drop" },
+          h(Icon, { name: "file-plus", size: 24 }),
+          h("span", { className: "mos__intake-drop-title" }, files.length ? files.length + " PDF(s) gewählt" : "PDF-Lernmaterial auswählen"),
+          h("span", { className: "mos__intake-drop-note" }, "Mehrfachauswahl · je PDF max. 20 MiB / 200 Seiten"),
+          h("input", {
+            type: "file",
+            accept: "application/pdf,.pdf",
+            multiple: true,
+            onChange: (e) => setFiles(Array.from(e.target && e.target.files || []).slice(0, 8))
+          })
+        ),
+        h(
+          "div",
+          { className: "mos__intake-grid" },
+          h("label", null, h("span", null, "Uni-Workspace"), h("input", { value: tenant, onChange: (e) => setTenant(e.target.value), placeholder: "uni:tum" })),
+          h("label", null, h("span", null, "Modul-ID"), h("input", { value: moduleId, onChange: (e) => setModuleId(e.target.value), placeholder: "thermodynamik-1" })),
+          h("label", null, h("span", null, "Prüfungs-ID"), h("input", { value: examId, onChange: (e) => setExamId(e.target.value), placeholder: "thermo-ws26" })),
+          h("label", null, h("span", null, "Prüfungsdatum"), h("input", { type: "date", value: examDate, onChange: (e) => setExamDate(e.target.value) }))
+        ),
+        h(
+          "label",
+          { className: "mos__intake-question" },
+          h("span", null, "Was soll Jarvis daraus beantworten?"),
+          h("textarea", { rows: 3, value: question, onChange: (e) => setQuestion(e.target.value) })
+        ),
+        error ? h("div", { className: "mos__co-panel mos--red" }, h(Icon, { name: "triangle-alert", size: 16 }), h("span", null, error)) : null,
+        h(
+          "button",
+          { type: "submit", className: "mos__co-btn mos__co-btn--primary", disabled: phase === "loading" },
+          h(Icon, { name: phase === "loading" ? "loader" : "file-text", size: 15, className: phase === "loading" ? "is-spin" : "" }),
+          phase === "loading" ? "Analysiere lokal …" : "Direkt-Kontext vorbereiten"
+        )
+      ),
+      result ? h(
+        "div",
+        { className: "mos__intake-receipt mos--" + (dc.answer_ready ? "verified" : "amber") },
+        h(
+          "div",
+          { className: "mos__intake-receipt-head" },
+          h(Icon, { name: dc.answer_ready ? "circle-check-big" : "triangle-alert", size: 16 }),
+          h("b", null, dc.answer_ready ? "Antwortbereit" : "Partitionsauswahl nötig"),
+          h("code", null, receipt.receipt_id || "—")
+        ),
+        h(
+          "div",
+          { className: "mos__intake-stats" },
+          h("span", null, (dc.document_count || 0) + " eindeutige PDFs"),
+          h("span", null, (dc.citations || []).length + " Seitenzitate"),
+          h("span", null, (dc.duplicate_count || 0) + " SHA-Duplikate"),
+          h("span", null, (dc.needs_vision || []).length + " Vision-Seiten")
+        ),
+        h(
+          "div",
+          { className: "mos__co-honest" },
+          h(Icon, { name: "lock", size: 12 }),
+          h("span", null, "Receipt ist deterministisch, aber nicht gespeichert. will_write=false · Qdrant=false · Neo4j=false.")
+        )
+      ) : null
+    );
+  }
   function CoachSurface(props) {
     const st = props.state;
     useEffect(() => {
@@ -2924,6 +3062,7 @@ var MikaelOSPlugin = function() {
     let body;
     if (tab === "feynman") body = h(CoachFeynman, { state: st, onExplain: props.onExplain, onEvaluate: props.onEvaluate, onNextConcept: props.onNextConcept });
     else if (tab === "plan") body = h(CoachPlan, { state: st, onPropose: props.onPropose });
+    else if (tab === "material") body = h(CoachIntake, { state: st });
     else body = h(CoachCountdown, { state: st });
     return h(
       "div",
@@ -2945,7 +3084,7 @@ var MikaelOSPlugin = function() {
             "span",
             { className: "mos__co-head-titles" },
             h("span", { className: "mos__co-head-title" }, "Lern-Coach"),
-            h("span", { className: "mos__co-head-sub" }, "Klausur-Countdown · Feynman · Lernplan")
+            h("span", { className: "mos__co-head-sub" }, "Countdown · Feynman · Lernplan · PDF-Kontext")
           ),
           h(CoachJarvisPip, { jarvis }),
           h(
