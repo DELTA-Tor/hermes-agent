@@ -30,8 +30,9 @@ Der Plugin-Toolset `mikael_learning` enthält:
 - `get_mistakes`
 - `get_current_study_block`
 
-Neue Plugin-Toolsets werden von Hermes standardmäßig für die Plattformen
-aktiviert, bis ein Operator sie ausdrücklich deaktiviert. Ein
+Der private Toolset ist bewusst standardmäßig aus. Beim Rise-L-Cutover wird
+`mikael_learning` nur auf den ausdrücklich freigegebenen Jarvis-Plattformen
+aktiviert; vorhandene `platform_toolsets`-Overrides werden nie erweitert. Ein
 `pre_llm_call`-Kontext weist Jarvis bei erkannten Konstruktionslehre-Turns auf
 den verbindlichen Quellensuchlauf, Datei-/Seitenangabe, die ehrliche
 Nichtbelegt-Antwort und genau eine Active-Recall-Frage an. Die Werkzeuge
@@ -71,7 +72,9 @@ Der Code-Cutover besteht aus drei getrennten, gegateten Schritten:
 
 1. Den geprüften PR per Squash-Merge promoten.
 2. Den gepinnten `hermes-agent`-Stand aktualisieren und nur die betroffenen
-   Nous-Hermes-Dashboard-/Gateway-Units neu starten.
+   Nous-Hermes-Dashboard-/Gateway-Units neu starten. Dabei
+   `mikael_learning` ausdrücklich nur für die Jarvis-API-/Realtime-Plattform
+   aktivieren.
 3. Einen budgetierten Realtime-Abnahmelauf durchführen: deutscher Voice-Turn,
    Unterbrechung, nachweislicher `search_learning_materials`-Aufruf vor der
    Antwort, Datei/Seite und genau eine Active-Recall-Frage.

@@ -212,3 +212,24 @@ def test_learning_center_is_fresh_when_crashcamp_is_ready(monkeypatch):
     assert result["due"] == 12
     assert result["rows"][0]["title"] == "Konstruktionslehre · Crashcamp"
     sys.modules.pop(name, None)
+
+
+def test_private_learning_toolset_respects_platform_allowlist(monkeypatch):
+    from hermes_cli import tools_config
+
+    monkeypatch.setattr(
+        tools_config, "_get_plugin_toolset_keys", lambda: {"mikael_learning"}
+    )
+    restricted = tools_config._get_platform_tools(
+        {"platform_toolsets": {"api_server": ["web", "terminal"]}},
+        "api_server",
+    )
+    enabled = tools_config._get_platform_tools(
+        {"platform_toolsets": {
+            "api_server": ["web", "terminal", "mikael_learning"],
+        }},
+        "api_server",
+    )
+
+    assert "mikael_learning" not in restricted
+    assert "mikael_learning" in enabled
