@@ -71,12 +71,15 @@ company signals; the company module is a read-only projection only.
 
 from __future__ import annotations
 
+import asyncio
 import glob
 import hashlib
 import json
 import os
 import sqlite3
 import subprocess
+import sys
+import tempfile
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
@@ -87,8 +90,11 @@ from urllib.request import Request, urlopen
 
 try:
     from fastapi import APIRouter
-    from fastapi import HTTPException
     from fastapi import Body
+    from fastapi import File
+    from fastapi import Form
+    from fastapi import HTTPException
+    from fastapi import UploadFile
     from fastapi.responses import Response  # PWA static files (manifest/sw/shell)
 except Exception:  # pragma: no cover - allow import/unit use without FastAPI
     class HTTPException(Exception):  # type: ignore
@@ -107,6 +113,16 @@ except Exception:  # pragma: no cover - allow import/unit use without FastAPI
     def Body(default=None, **_kwargs):  # type: ignore
         return default
 
+    def File(default=None, **_kwargs):  # type: ignore
+        return default
+
+    def Form(default=None, **_kwargs):  # type: ignore
+        return default
+
+    class UploadFile:  # type: ignore
+        filename = ""
+        content_type = ""
+
     class Response:  # type: ignore
         def __init__(self, content="", media_type="text/plain", headers=None, **_kw):
             self.content = content
@@ -115,6 +131,27 @@ except Exception:  # pragma: no cover - allow import/unit use without FastAPI
 
 
 router = APIRouter()
+
+
+# ``plugin_api.py`` is imported directly from ``dashboard/`` by the dashboard
+# host, not as a normal Python package. Add the plugin root only for the bounded
+# import so the shared learning-intake adapter can keep its relative imports.
+_PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+_plugin_root_text = str(_PLUGIN_ROOT)
+_path_added = _plugin_root_text not in sys.path
+if _path_added:
+    sys.path.insert(0, _plugin_root_text)
+try:
+    from learning_intake.attachments import (
+        MAX_ATTACHMENT_COUNT as LEARNING_MAX_ATTACHMENTS,
+        MAX_TOTAL_BYTES as LEARNING_MAX_TOTAL_BYTES,
+        analyze_pdf_attachments,
+        gateway_pdf_attachments,
+    )
+    from learning_intake.direct_context import DirectContextError
+finally:
+    if _path_added:
+        sys.path.remove(_plugin_root_text)
 
 
 class RuntimeSecret(str, Enum):
@@ -4936,6 +4973,110 @@ def study_plan_route() -> Dict[str, Any]:
     return study_plan()
 
 
+@router.post("/learning/intake/analyze")
+async def learning_intake_analyze_route(
+    files: List[UploadFile] = File(...),
+    tenant_id: str = Form(...),
+    module_id: str = Form(...),
+    exam_id: str = Form(...),
+    exam_date: str = Form(...),
+    question: str = Form(...),
+    exam_form: str = Form("written"),
+    selected_partitions_json: str = Form(""),
+) -> Dict[str, Any]:
+    """Analyze up to eight PDFs as immediate, cited Direct Context.
+
+    Multipart bodies are staged only in a request-scoped temporary directory and
+    removed before this call returns. The result contains deterministic SHA
+    receipts and native per-PDF manifests. It never persists an upload, invokes
+    a model, or writes Anki, Qdrant, Neo4j, missions, or business truth.
+    """
+
+    uploads = list(files or [])
+    if not uploads:
+        raise HTTPException(status_code=400, detail="at least one PDF is required")
+    if len(uploads) > LEARNING_MAX_ATTACHMENTS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"too many PDFs (maximum {LEARNING_MAX_ATTACHMENTS})",
+        )
+    selected: List[Optional[int]] = [None] * len(uploads)
+    if selected_partitions_json.strip():
+        try:
+            raw_selected = json.loads(selected_partitions_json)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="selected partitions must be JSON") from exc
+        if not isinstance(raw_selected, list) or len(raw_selected) != len(uploads):
+            raise HTTPException(
+                status_code=400,
+                detail="selected partitions must align with uploaded PDFs",
+            )
+        for index, value in enumerate(raw_selected):
+            if value is not None and (not isinstance(value, int) or value < 1):
+                raise HTTPException(status_code=400, detail="selected partition must be positive")
+            selected[index] = value
+
+    staged_paths: List[Path] = []
+    display_names: List[str] = []
+    media_types: List[str] = []
+    total_bytes = 0
+    try:
+        with tempfile.TemporaryDirectory(prefix="mikael-os-intake-") as temp_dir:
+            root = Path(temp_dir)
+            for index, upload in enumerate(uploads):
+                display_names.append(str(upload.filename or f"material-{index + 1}.pdf"))
+                media_types.append(str(upload.content_type or "application/pdf"))
+                target = root / f"{index + 1:02d}.pdf"
+                file_bytes = 0
+                with target.open("xb") as handle:
+                    while True:
+                        chunk = await upload.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        file_bytes += len(chunk)
+                        total_bytes += len(chunk)
+                        if file_bytes > 20 * 1024 * 1024:
+                            raise HTTPException(
+                                status_code=413,
+                                detail="one PDF exceeds the 20 MiB direct-context limit",
+                            )
+                        if total_bytes > LEARNING_MAX_TOTAL_BYTES:
+                            raise HTTPException(
+                                status_code=413,
+                                detail="PDF bundle exceeds the direct-context byte limit",
+                            )
+                        handle.write(chunk)
+                staged_paths.append(target)
+            attachments = gateway_pdf_attachments(
+                staged_paths,
+                media_types=media_types,
+                display_names=display_names,
+                selected_partitions=selected,
+            )
+            result = await asyncio.to_thread(
+                analyze_pdf_attachments,
+                attachments,
+                tenant_id=tenant_id,
+                module_id=module_id,
+                exam_id=exam_id,
+                exam_date=exam_date,
+                question=question,
+                exam_form=exam_form,
+            )
+            result["surface"] = "dashboard_upload"
+            return result
+    except HTTPException:
+        raise
+    except (DirectContextError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        for upload in uploads:
+            try:
+                await upload.close()
+            except Exception:
+                pass
+
+
 @router.get("/study/feynman")
 def study_feynman_route(concept: str = "", subject: str = "") -> Dict[str, Any]:
     """Stage a Feynman round (concept + prompt + Jarvis reachability). No LLM call,
@@ -4973,7 +5114,7 @@ def health() -> Dict[str, Any]:
     return {
         "status": "ok",
         "plugin": "mikael-os",
-        "version": "0.5.0",
+        "version": "0.6.0",
         "phase": 5,
         "readPaths": {
             "missions_dir": str(MISSIONS_DIR),
@@ -5016,6 +5157,14 @@ def health() -> Dict[str, Any]:
             "planPropose": "POST /study/plan/propose (studium workspace, dry-run default, gated)",
             "ankiWrites": False,
             "jarvis": _brain_status(),
+        },
+        "learningIntake": {
+            "analyze": "POST /learning/intake/analyze (multipart, multi-PDF, ephemeral)",
+            "workspace": "studium",
+            "maxAttachments": LEARNING_MAX_ATTACHMENTS,
+            "willWrite": False,
+            "qdrantWrites": False,
+            "neo4jWrites": False,
         },
         "propose": {
             "capability": "engineering_task (propose-only)",
