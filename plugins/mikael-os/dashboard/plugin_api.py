@@ -149,6 +149,17 @@ try:
         gateway_pdf_attachments,
     )
     from learning_intake.direct_context import DirectContextError
+    from konstruktionslehre import (
+        LearningCenterError as KonstruktionslehreError,
+        get_current_study_block as konstruktionslehre_current_block,
+        get_due_flashcards as konstruktionslehre_due_flashcards,
+        get_learning_progress as konstruktionslehre_progress,
+        get_mistakes as konstruktionslehre_mistakes,
+        overview as konstruktionslehre_overview,
+        record_learning_result as konstruktionslehre_record_result,
+        search_learning_materials as konstruktionslehre_search,
+        start_or_continue_quiz as konstruktionslehre_quiz,
+    )
 finally:
     if _path_added:
         sys.path.remove(_plugin_root_text)
@@ -1245,7 +1256,7 @@ def _read_anki(path: Path) -> Dict[str, Any]:
     return out
 
 
-def module_learning() -> Dict[str, Any]:
+def _module_learning_anki() -> Dict[str, Any]:
     path = _find_anki_collection()
     if path is None:
         # Honest current state: sync server is up but no device has synced yet, so
@@ -1360,6 +1371,63 @@ def module_learning() -> Dict[str, Any]:
             "hasCoach": True,
         },
     )
+
+
+def module_learning() -> Dict[str, Any]:
+    """One Learning Center: Anki generally, Crashcamp for Konstruktionslehre.
+
+    The two sources are deliberately not blended into one scheduler. Anki stays
+    the general SR authority, while Crashcamp owns Konstruktionslehre progress,
+    quizzes and mistakes. This wrapper only projects both into the existing
+    Mikael OS learning lens.
+    """
+    payload = _module_learning_anki()
+    rows = list(payload.get("rows") or [])
+    try:
+        crashcamp = konstruktionslehre_overview()
+    except KonstruktionslehreError as exc:
+        crashcamp = {"state": "unavailable", "error": str(exc)}
+        rows.insert(0, {
+            "icon": "unplug", "accent": "red", "title": "Konstruktionslehre",
+            "sub": "Crashcamp nicht erreichbar", "status": "error",
+            "statusLabel": "Nicht erreichbar", "value": "—",
+        })
+        if payload.get("state") == "empty":
+            payload["state"] = "partial"
+    else:
+        counts = crashcamp.get("counts") or {}
+        crash_due = int(crashcamp.get("dueFlashcards") or 0)
+        rows.insert(0, {
+            "icon": "graduation-cap", "accent": "violet",
+            "title": "Konstruktionslehre · Crashcamp",
+            "sub": (
+                f"{crashcamp.get('pdfs', 0)} PDFs · {crashcamp.get('sourcePages', 0)} Seiten · "
+                f"{counts.get('flashcards', 0)} Karten · {counts.get('quizQuestions', 0)} Quiz"
+            ),
+            "status": "running" if crashcamp.get("state") == "ready" else "error",
+            "statusLabel": "Lernbereit" if crashcamp.get("state") == "ready" else "Degradiert",
+            "value": f"{crash_due} fällig",
+        })
+        if crashcamp.get("state") == "ready":
+            payload["state"] = "fresh"
+            payload["observedAt"] = _iso(_now())
+            if payload.get("due") is None:
+                payload["due"] = crash_due
+                payload["count"] = crash_due
+        payload["summary"] = (
+            f"Konstruktionslehre lernbereit · {crashcamp.get('openMistakes', 0)} offene Fehler · "
+            f"{payload.get('summary', '')}"
+        ).rstrip(" ·")
+    payload["rows"] = rows
+    payload["konstruktionslehre"] = crashcamp
+    payload["hasKonstruktionslehre"] = crashcamp.get("state") == "ready"
+    payload["source"] = f"{payload.get('source', ANKI_SOURCE)} + Crashcamp :13150"
+    payload["note"] = (
+        "Anki bleibt allgemeine SR-Wahrheit. Für Konstruktionslehre sind die "
+        "Crashcamp-APIs und crashcamp_progress/progress.db alleinige Wahrheit; "
+        "Jarvis verwendet denselben PDF-Index, Fortschritt, Quiz und Fehlerbestand."
+    )
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -4971,6 +5039,78 @@ def review_session_route(limit: int = _REVIEW_LIMIT_DEFAULT) -> Dict[str, Any]:
 def study_plan_route() -> Dict[str, Any]:
     """READ-ONLY Klausur-Countdown + Pacing (exams.json × Anki). No writes."""
     return study_plan()
+
+
+def _konstruktionslehre_call(fn: Callable[..., Dict[str, Any]], *args, **kwargs) -> Dict[str, Any]:
+    """Map the bounded adapter error to one honest dashboard response."""
+    try:
+        return fn(*args, **kwargs)
+    except KonstruktionslehreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/learning/konstruktionslehre/overview")
+def konstruktionslehre_overview_route() -> Dict[str, Any]:
+    """Full Crashcamp readiness, counts, progress and current study block."""
+    return _konstruktionslehre_call(konstruktionslehre_overview)
+
+
+@router.post("/learning/konstruktionslehre/search")
+def konstruktionslehre_search_route(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Search only the nine approved PDFs and return file/page evidence."""
+    return _konstruktionslehre_call(konstruktionslehre_search, str((payload or {}).get("query") or ""))
+
+
+@router.get("/learning/konstruktionslehre/progress")
+def konstruktionslehre_progress_route() -> Dict[str, Any]:
+    """Read the canonical Crashcamp progress and error book."""
+    return _konstruktionslehre_call(konstruktionslehre_progress)
+
+
+@router.post("/learning/konstruktionslehre/progress")
+def konstruktionslehre_record_route(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Write one validated result through the Crashcamp progress API."""
+    body = payload or {}
+    return _konstruktionslehre_call(
+        konstruktionslehre_record_result,
+        str(body.get("itemType") or body.get("item_type") or ""),
+        str(body.get("itemId") or body.get("item_id") or ""),
+        body.get("score"),
+    )
+
+
+@router.get("/learning/konstruktionslehre/cards")
+def konstruktionslehre_cards_route(limit: int = 10, card_id: str = "", reveal: bool = False) -> Dict[str, Any]:
+    """Read due cards or reveal one selected answer from the course truth."""
+    return _konstruktionslehre_call(
+        konstruktionslehre_due_flashcards, limit=limit, card_id=card_id, reveal=reveal
+    )
+
+
+@router.post("/learning/konstruktionslehre/quiz")
+def konstruktionslehre_quiz_route(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Start a quiz or grade and persist one answer in Crashcamp."""
+    body = payload or {}
+    return _konstruktionslehre_call(
+        konstruktionslehre_quiz,
+        topic_id=str(body.get("topicId") or body.get("topic_id") or ""),
+        question_id=str(body.get("questionId") or body.get("question_id") or ""),
+        answer_index=body.get("answerIndex", body.get("answer_index")),
+    )
+
+
+@router.get("/learning/konstruktionslehre/mistakes")
+def konstruktionslehre_mistakes_route(open_only: bool = True, limit: int = 20) -> Dict[str, Any]:
+    """Read the canonical Konstruktionslehre error book."""
+    return _konstruktionslehre_call(
+        konstruktionslehre_mistakes, open_only=open_only, limit=limit
+    )
+
+
+@router.get("/learning/konstruktionslehre/current-block")
+def konstruktionslehre_current_block_route() -> Dict[str, Any]:
+    """Read the active or next block from the tested Crashcamp plan."""
+    return _konstruktionslehre_call(konstruktionslehre_current_block)
 
 
 @router.post("/learning/intake/analyze")
