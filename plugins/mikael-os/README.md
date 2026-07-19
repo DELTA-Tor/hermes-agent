@@ -68,6 +68,52 @@ plugins/mikael-os/
 └── README.md
 ```
 
+## Learning Intake Foundation (code-ready, not live)
+
+`learning_intake/` provides contracts plus a bounded, read-only Direct-Context
+CLI for local text PDFs up to 200 pages. It does not mount a route, persist uploads, run OCR,
+invoke Vision, write Qdrant/Graph/calendar data or start a scheduler. Existing
+L-1 Anki, L-2 review and L-3 coach code remains the future consumer and is not
+duplicated.
+
+The manifest covers module/exam identity, date/form/aids, tenant-scoped source
+SHA deduplication, PDF-page/PPTX-slide provenance, render assets, extracted
+text, evidence-only OCR/Vision confidence and review, learning objectives and
+ingestion state. `studium` plus a `uni:` tenant is mandatory; company routing
+keys and business authority flags are rejected.
+
+The immediate lane computes the source SHA, extracts at most 200 PDF pages and
+20 MiB through local Poppler, and emits stable `sha256:…#page=N` citations.
+Up to 300,000 text characters enter direct context at once. Larger documents
+are not rejected: they produce a deterministic page map and roughly
+100,000-character partitions. Re-run with `--partition N` to load one complete
+partition plus bounded page excerpts; `answer_ready` remains false until that
+selection is explicit. Blank pages are listed under `needs_vision_pages` for a
+later OCR/Vision lane.
+The manifest enforces `embedding_requested=false`, `graph_write_requested=false`
+and `durable_write_requested=false`, so durable ingestion cannot enter the
+answer-critical path.
+
+Durable flow remains: **Drop → Analyse → Confirmation Card → Freigabe**. The
+included card is always a dry-run with `will_write=false`; approval and durable
+ingestion require a later gated adapter.
+
+```bash
+cd plugins/mikael-os
+python -m learning_intake.cli validate /path/manifest.json
+python -m learning_intake.cli confirmation-card /path/manifest.json
+python -m learning_intake.cli analyze-pdf /path/script.pdf \
+  --tenant uni:tum --module thermodynamik --exam thermo-2026 \
+  --exam-date 2026-09-08 --question "Welche Hauptsätze sind prüfungsrelevant?"
+# If the result reports partition_required=true:
+python -m learning_intake.cli analyze-pdf /path/script.pdf \
+  --tenant uni:tum --module thermodynamik --exam thermo-2026 \
+  --exam-date 2026-09-08 --question "Welche Hauptsätze sind prüfungsrelevant?" \
+  --partition 1
+```
+
+Schemas live under `learning_intake/schemas/`.
+
 ## Build
 
 The frontend is a Vite **library build** that emits the exact bundle contract the

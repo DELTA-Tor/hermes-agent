@@ -1,5 +1,12 @@
 # RUNBOOK — Jarvis-Coaching-Anbindung (L-3 Lern-Coach, Feynman-Bewertung)
 
+> **Stand PR #3:** Die unten beschriebene manuelle Token-Auflösung ist abgelöst
+> und darf nicht ausgeführt werden. Das Plugin akzeptiert nur noch die
+> zweckgebundene Runtime-Injection `MIKAELOS_BRAIN_TOKEN` aus dem versionierten,
+> typisierten Dashboard-Launcher. Kein Plugin-Subprozess und kein Klartext in
+> Unit, Drop-in, Prompt oder Log. Der Launcher-/Deploy-Schritt bleibt separat
+> gated und ist nicht Teil dieses PRs.
+
 Der **Feynman-Flow** im Lern-Coach lässt eine freie Erklärung **von Jarvis** bewerten
 — nie vom Plugin gefaked. Technisch ruft `plugin_api.py` dafür die **Hermes Brain
 Gateway** (`POST /v1/chat/completions`, die abo-first Brain-Kette, loopback
