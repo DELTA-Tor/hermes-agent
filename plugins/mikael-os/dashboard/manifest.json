@@ -1,0 +1,14 @@
+{
+  "name": "mikael-os",
+  "label": "MIKAEL OS",
+  "description": "Private Personal OS cockpit with source-labelled read projections and gated proposals. Mac actions remain typed previews only.",
+  "icon": "Sparkles",
+  "version": "0.5.0",
+  "tab": {
+    "path": "/mikael-os",
+    "position": "end"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}
