@@ -62,6 +62,7 @@ def manifest(source_format: str = "pdf") -> dict:
             "kind": kind,
             "number": 1,
             "citation": f"sha256:{SOURCE_SHA}#{kind}=1",
+            "text_scope": "full",
             "source_sha256": SOURCE_SHA,
             "render_assets": [{
                 "asset_id": "render:1",
@@ -215,17 +216,21 @@ def test_direct_context_pdf_is_sha_idempotent_cited_and_write_free(tmp_path: Pat
     assert manifest_a["units"][0]["citation"].endswith("#page=1")
     assert manifest_a["units"][1]["citation"].endswith("#page=2")
     assert manifest_a["learning_objectives"][0]["provenance_refs"] == ["page:1", "page:2"]
-    assert manifest_a["direct_context"] == {
-        "mode": "direct_context",
-        "embedding_requested": False,
-        "graph_write_requested": False,
-        "durable_write_requested": False,
-        "answer_ready": True,
-        "extractor": "poppler-pdftotext",
-        "citations": [unit["citation"] for unit in manifest_a["units"]],
-        "readable_pages": [1, 2],
-        "needs_vision_pages": [],
-    }
+    direct = manifest_a["direct_context"]
+    assert direct["mode"] == "direct_context"
+    assert direct["embedding_requested"] is False
+    assert direct["graph_write_requested"] is False
+    assert direct["durable_write_requested"] is False
+    assert direct["answer_ready"] is True
+    assert direct["extractor"] == "poppler-pdftotext"
+    assert direct["citations"] == [unit["citation"] for unit in manifest_a["units"]]
+    assert direct["readable_pages"] == [1, 2]
+    assert direct["needs_vision_pages"] == []
+    assert direct["partition_required"] is False
+    assert direct["selected_partition"] is None
+    assert direct["partitions"] == []
+    assert [item["page"] for item in direct["page_map"]] == [1, 2]
+    assert all(unit["text_scope"] == "full" for unit in manifest_a["units"])
     assert {command[0] for command in commands} == {"pdfinfo", "pdftotext"}
 
 
@@ -254,6 +259,72 @@ def test_direct_context_marks_blank_pages_for_deferred_vision(tmp_path: Path) ->
     assert result["units"][1]["evidence"] == []
 
 
+def test_large_pdf_returns_deterministic_page_map_before_partition_selection(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "large-script.pdf"
+    source.write_bytes(b"%PDF-1.4\nlarge")
+    runner = _poppler_runner([])
+
+    result = build_pdf_manifest(
+        source,
+        tenant_id="uni:tum",
+        module_id="mechanik",
+        exam_id="mechanik-2026",
+        exam_date="2026-08-25",
+        question="Was ist prüfungsrelevant?",
+        observed_at="2026-07-19T00:00:00Z",
+        max_text_chars=20,
+        partition_text_chars=20,
+        page_excerpt_chars=5,
+        runner=runner,
+    )
+
+    direct = result["direct_context"]
+    assert direct["partition_required"] is True
+    assert direct["answer_ready"] is False
+    assert direct["selected_partition"] is None
+    assert [(part["start_page"], part["end_page"]) for part in direct["partitions"]] == [
+        (1, 1),
+        (2, 2),
+    ]
+    assert [item["citation"] for item in direct["page_map"]] == direct["citations"]
+    assert all(unit["text_scope"] == "excerpt" for unit in result["units"])
+    assert direct["context_text_chars"] <= direct["context_text_budget"]
+    assert direct["embedding_requested"] is False
+    assert direct["graph_write_requested"] is False
+    assert direct["durable_write_requested"] is False
+
+
+def test_selected_partition_loads_full_pages_and_keeps_other_pages_bounded(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "large-script.pdf"
+    source.write_bytes(b"%PDF-1.4\nlarge")
+
+    result = build_pdf_manifest(
+        source,
+        tenant_id="uni:tum",
+        module_id="mechanik",
+        exam_id="mechanik-2026",
+        exam_date="2026-08-25",
+        question="Was ist prüfungsrelevant?",
+        observed_at="2026-07-19T00:00:00Z",
+        max_text_chars=20,
+        partition_text_chars=20,
+        page_excerpt_chars=5,
+        selected_partition=1,
+        runner=_poppler_runner([]),
+    )
+
+    direct = result["direct_context"]
+    assert direct["answer_ready"] is True
+    assert direct["selected_partition"] == 1
+    assert result["units"][0]["text_scope"] == "full"
+    assert result["units"][1]["text_scope"] == "excerpt"
+    assert direct["context_text_chars"] <= direct["context_text_budget"]
+
+
 def test_direct_context_rejects_large_or_image_only_pdf(tmp_path: Path) -> None:
     source = tmp_path / "scan.pdf"
     source.write_bytes(b"%PDF-1.4\nscan")
@@ -267,3 +338,19 @@ def test_direct_context_rejects_large_or_image_only_pdf(tmp_path: Path) -> None:
 
     with pytest.raises(DirectContextError, match="OCR/Vision"):
         extract_pdf_pages(source, runner=blank_runner)
+
+
+def test_direct_context_accepts_two_hundred_page_text_pdf(tmp_path: Path) -> None:
+    source = tmp_path / "two-hundred-pages.pdf"
+    source.write_bytes(b"%PDF-1.4\n200-pages")
+
+    def runner(command: list[str], _timeout: float) -> subprocess.CompletedProcess[str]:
+        if command[0] == "pdfinfo":
+            return subprocess.CompletedProcess(command, 0, "Pages: 200\n", "")
+        return subprocess.CompletedProcess(command, 0, "\f".join(["Lernstoff"] * 200) + "\f", "")
+
+    _path, _sha, _size, pages = extract_pdf_pages(source, runner=runner)
+
+    assert len(pages) == 200
+    assert pages[0] == "Lernstoff"
+    assert pages[-1] == "Lernstoff"

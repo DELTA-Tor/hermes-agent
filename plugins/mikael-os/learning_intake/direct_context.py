@@ -1,4 +1,4 @@
-"""Fast, read-only direct-context extraction for small text PDFs."""
+"""Fast, read-only direct-context extraction for bounded text PDFs."""
 
 from __future__ import annotations
 
@@ -13,8 +13,10 @@ from typing import Any
 from .contracts import dedup_key, validate_manifest
 
 DEFAULT_MAX_BYTES = 20 * 1024 * 1024
-DEFAULT_MAX_PAGES = 40
+DEFAULT_MAX_PAGES = 200
 DEFAULT_MAX_TEXT_CHARS = 300_000
+DEFAULT_PARTITION_TEXT_CHARS = 100_000
+DEFAULT_PAGE_EXCERPT_CHARS = 500
 _PAGES_RE = re.compile(r"^Pages:\s*(\d+)\s*$", re.MULTILINE)
 
 
@@ -74,7 +76,6 @@ def extract_pdf_pages(
     *,
     max_bytes: int = DEFAULT_MAX_BYTES,
     max_pages: int = DEFAULT_MAX_PAGES,
-    max_text_chars: int = DEFAULT_MAX_TEXT_CHARS,
     timeout: float = 20.0,
     runner: CommandRunner = _run_command,
 ) -> tuple[Path, str, int, list[str]]:
@@ -102,14 +103,48 @@ def extract_pdf_pages(
     if completed.returncode != 0:
         raise DirectContextError("pdftotext could not extract the PDF")
     extracted = _split_pages(completed.stdout or "", pages)
-    text_chars = sum(len(page) for page in extracted)
-    if text_chars > max_text_chars:
-        raise DirectContextError(
-            f"PDF exceeds direct-context extracted-text limit ({max_text_chars})"
-        )
     if not any(page.strip() for page in extracted):
         raise DirectContextError("PDF has no native text; route it to the OCR/Vision lane")
     return path, source_sha, size, extracted
+
+
+def _partition_pages(pages: list[str], limit: int, source_sha: str) -> list[dict[str, Any]]:
+    if limit < 1:
+        raise DirectContextError("partition text budget must be positive")
+    partitions: list[dict[str, Any]] = []
+    current_pages: list[int] = []
+    current_chars = 0
+
+    def flush() -> None:
+        nonlocal current_pages, current_chars
+        if not current_pages:
+            return
+        number = len(partitions) + 1
+        partitions.append(
+            {
+                "partition": number,
+                "start_page": current_pages[0],
+                "end_page": current_pages[-1],
+                "text_chars": current_chars,
+                "citations": [
+                    f"sha256:{source_sha}#page={page_number}"
+                    for page_number in current_pages
+                ],
+            }
+        )
+        current_pages = []
+        current_chars = 0
+
+    for page_number, text in enumerate(pages, start=1):
+        page_chars = len(text)
+        if current_pages and current_chars + page_chars > limit:
+            flush()
+        current_pages.append(page_number)
+        current_chars += page_chars
+        if page_chars >= limit:
+            flush()
+    flush()
+    return partitions
 
 
 def build_pdf_manifest(
@@ -125,15 +160,21 @@ def build_pdf_manifest(
     max_bytes: int = DEFAULT_MAX_BYTES,
     max_pages: int = DEFAULT_MAX_PAGES,
     max_text_chars: int = DEFAULT_MAX_TEXT_CHARS,
+    partition_text_chars: int = DEFAULT_PARTITION_TEXT_CHARS,
+    page_excerpt_chars: int = DEFAULT_PAGE_EXCERPT_CHARS,
+    selected_partition: int | None = None,
     timeout: float = 20.0,
     runner: CommandRunner = _run_command,
 ) -> dict[str, Any]:
     """Build a cited, SHA-idempotent manifest for the immediate answer lane."""
+    if max_text_chars < 1:
+        raise DirectContextError("context text budget must be positive")
+    if page_excerpt_chars < 0:
+        raise DirectContextError("page excerpt budget must not be negative")
     path, source_sha, size, pages = extract_pdf_pages(
         source_path,
         max_bytes=max_bytes,
         max_pages=max_pages,
-        max_text_chars=max_text_chars,
         timeout=timeout,
         runner=runner,
     )
@@ -144,20 +185,59 @@ def build_pdf_manifest(
     readable_pages = [number for number, text in enumerate(pages, start=1) if text.strip()]
     needs_vision_pages = [number for number, text in enumerate(pages, start=1) if not text.strip()]
     objective_hash = hashlib.sha256(question.encode("utf-8")).hexdigest()[:16]
+    total_text_chars = sum(len(page) for page in pages)
+    partition_required = total_text_chars > max_text_chars
+    partitions = _partition_pages(pages, partition_text_chars, source_sha) if partition_required else []
+    if selected_partition is not None and not partition_required:
+        raise DirectContextError("selected partition is only valid when partitioning is required")
+    if selected_partition is not None and not 1 <= selected_partition <= len(partitions):
+        raise DirectContextError("selected partition is outside the deterministic page map")
+    selected_pages: set[int] = set()
+    if selected_partition is not None:
+        selected = partitions[selected_partition - 1]
+        if selected["text_chars"] > max_text_chars:
+            raise DirectContextError(
+                "selected partition exceeds the safe context budget; route that page to OCR/Vision chunking"
+            )
+        selected_pages = set(range(selected["start_page"], selected["end_page"] + 1))
+    remaining_context_chars = max_text_chars - sum(
+        len(text) for number, text in enumerate(pages, start=1) if number in selected_pages
+    )
 
     units = []
     citations = []
+    page_map = []
     for number, text in enumerate(pages, start=1):
         citation = f"sha256:{source_sha}#page={number}"
         citations.append(citation)
+        use_full_text = not partition_required or number in selected_pages
+        if use_full_text:
+            context_text = text
+        else:
+            excerpt_chars = min(page_excerpt_chars, max(remaining_context_chars, 0))
+            context_text = text[:excerpt_chars]
+            remaining_context_chars -= len(context_text)
+        text_scope = "full" if use_full_text else "excerpt"
+        page_map.append(
+            {
+                "page": number,
+                "citation": citation,
+                "text_chars": len(text),
+                "excerpt": text[:page_excerpt_chars],
+            }
+        )
         evidence = []
-        if text.strip():
+        if context_text.strip():
             evidence.append(
                 {
                     "kind": "native_text",
                     "producer": "poppler-pdftotext",
-                    "content": text,
-                    "structured_fields": {"page": number},
+                    "content": context_text,
+                    "structured_fields": {
+                        "page": number,
+                        "text_scope": text_scope,
+                        "full_text_chars": len(text),
+                    },
                     "confidence": 1.0,
                     "review_required": False,
                     "authority": "evidence_only",
@@ -169,9 +249,10 @@ def build_pdf_manifest(
                 "kind": "page",
                 "number": number,
                 "citation": citation,
+                "text_scope": text_scope,
                 "source_sha256": source_sha,
                 "render_assets": [],
-                "extracted_text": text,
+                "extracted_text": context_text,
                 "evidence": evidence,
             }
         )
@@ -202,11 +283,18 @@ def build_pdf_manifest(
             "embedding_requested": False,
             "graph_write_requested": False,
             "durable_write_requested": False,
-            "answer_ready": True,
+            "answer_ready": not partition_required or selected_partition is not None,
             "extractor": "poppler-pdftotext",
             "citations": citations,
             "readable_pages": readable_pages,
             "needs_vision_pages": needs_vision_pages,
+            "partition_required": partition_required,
+            "selected_partition": selected_partition,
+            "partitions": partitions,
+            "page_map": page_map,
+            "total_text_chars": total_text_chars,
+            "context_text_budget": max_text_chars,
+            "context_text_chars": sum(len(unit["extracted_text"]) for unit in units),
         },
         "units": units,
         "learning_objectives": [

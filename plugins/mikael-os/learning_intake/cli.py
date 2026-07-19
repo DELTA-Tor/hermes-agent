@@ -18,12 +18,13 @@ def main(argv: list[str] | None = None) -> int:
         command = commands.add_parser(name)
         command.add_argument("manifest", help="JSON path or - for stdin")
     analyze = commands.add_parser("analyze-pdf")
-    analyze.add_argument("pdf", help="Small local text PDF")
+    analyze.add_argument("pdf", help="Bounded local text PDF (up to 200 pages)")
     analyze.add_argument("--tenant", required=True, help="University tenant, for example uni:tum")
     analyze.add_argument("--module", required=True, dest="module_id")
     analyze.add_argument("--exam", required=True, dest="exam_id")
     analyze.add_argument("--exam-date", required=True)
     analyze.add_argument("--question", required=True)
+    analyze.add_argument("--partition", type=int, dest="selected_partition")
     args = parser.parse_args(argv)
     try:
         if args.command == "analyze-pdf":
@@ -34,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
                 exam_id=args.exam_id,
                 exam_date=args.exam_date,
                 question=args.question,
+                selected_partition=args.selected_partition,
             )
             result = {
                 "ok": True,

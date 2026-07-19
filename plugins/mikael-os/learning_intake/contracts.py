@@ -128,6 +128,8 @@ def validate_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
         expected_citation = f"sha256:{source_sha}#{anchor}={unit.get('number')}"
         if citation and citation != expected_citation:
             errors.append(f"{path}.citation: must be {expected_citation}")
+        if unit.get("text_scope") not in {"full", "excerpt"}:
+            errors.append(f"{path}.text_scope: full or excerpt required")
         if unit.get("source_sha256") != source_sha:
             errors.append(f"{path}.source_sha256: must match source")
         assets = unit.get("render_assets")
@@ -174,8 +176,8 @@ def validate_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
         for key in ("embedding_requested", "graph_write_requested", "durable_write_requested"):
             if direct_context.get(key) is not False:
                 errors.append(f"direct_context.{key}: must be false")
-        if direct_context.get("answer_ready") is not True:
-            errors.append("direct_context.answer_ready: must be true")
+        if not isinstance(direct_context.get("answer_ready"), bool):
+            errors.append("direct_context.answer_ready: boolean required")
         _text(direct_context, "extractor", "direct_context", errors)
         citations = direct_context.get("citations")
         expected_citations = [unit.get("citation") for unit in units]
@@ -196,6 +198,48 @@ def validate_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
             or set(readable_pages).union(needs_vision_pages) != page_numbers
         ):
             errors.append("direct_context page lists: must partition manifest pages")
+        partition_required = direct_context.get("partition_required")
+        if not isinstance(partition_required, bool):
+            errors.append("direct_context.partition_required: boolean required")
+        partitions = direct_context.get("partitions")
+        if not isinstance(partitions, list):
+            errors.append("direct_context.partitions: array required")
+            partitions = []
+        selected_partition = direct_context.get("selected_partition")
+        if selected_partition is not None and (
+            not isinstance(selected_partition, int)
+            or selected_partition < 1
+            or selected_partition > len(partitions)
+        ):
+            errors.append("direct_context.selected_partition: known partition required")
+        if partition_required:
+            if not partitions:
+                errors.append("direct_context.partitions: required for partitioned context")
+            if direct_context.get("answer_ready") != (selected_partition is not None):
+                errors.append("direct_context.answer_ready: must reflect partition selection")
+        elif partitions or selected_partition is not None or direct_context.get("answer_ready") is not True:
+            errors.append("direct_context: unpartitioned context must be answer-ready")
+        page_map = direct_context.get("page_map")
+        if (
+            not isinstance(page_map, list)
+            or any(not isinstance(item, Mapping) for item in page_map)
+            or [item.get("citation") for item in page_map] != citations
+        ):
+            errors.append("direct_context.page_map: must match citations in page order")
+        for key in ("total_text_chars", "context_text_budget", "context_text_chars"):
+            if not isinstance(direct_context.get(key), int) or direct_context.get(key, -1) < 0:
+                errors.append(f"direct_context.{key}: non-negative integer required")
+        if (
+            not isinstance(direct_context.get("context_text_budget"), int)
+            or direct_context.get("context_text_budget", 0) < 1
+        ):
+            errors.append("direct_context.context_text_budget: positive integer required")
+        if (
+            isinstance(direct_context.get("context_text_chars"), int)
+            and isinstance(direct_context.get("context_text_budget"), int)
+            and direct_context["context_text_chars"] > direct_context["context_text_budget"]
+        ):
+            errors.append("direct_context.context_text_chars: exceeds context budget")
 
     objectives = manifest.get("learning_objectives")
     if not isinstance(objectives, list) or not objectives:
