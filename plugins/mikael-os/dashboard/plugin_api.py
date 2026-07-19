@@ -78,6 +78,7 @@ import os
 import sqlite3
 import subprocess
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.error import URLError, HTTPError
@@ -114,6 +115,28 @@ except Exception:  # pragma: no cover - allow import/unit use without FastAPI
 
 
 router = APIRouter()
+
+
+class RuntimeSecret(str, Enum):
+    """Purpose-scoped credentials supplied by the service's typed launcher."""
+
+    BRAIN_GATEWAY = "brain_gateway"
+    PAPERLESS_API = "paperless_api"
+    FREESCOUT_DB = "freescout_db"
+    WHOOP_INTERNAL = "whoop_internal"
+
+
+_RUNTIME_SECRET_ENV = {
+    RuntimeSecret.BRAIN_GATEWAY: "MIKAELOS_BRAIN_TOKEN",
+    RuntimeSecret.PAPERLESS_API: "MIKAELOS_PAPERLESS_TOKEN",
+    RuntimeSecret.FREESCOUT_DB: "MIKAELOS_FREESCOUT_PASSWORD",
+    RuntimeSecret.WHOOP_INTERNAL: "WHOOP_INTERNAL_TOKEN",
+}
+
+
+def _runtime_secret(secret: RuntimeSecret) -> str:
+    """Read one typed runtime injection; never resolve or persist secrets here."""
+    return os.environ.get(_RUNTIME_SECRET_ENV[secret], "").strip()
 
 # ---------------------------------------------------------------------------
 # Read-path configuration (all env-overridable; all read-only).
@@ -153,14 +176,12 @@ EXAMS_PATH = Path(os.environ.get(
 # **Brain Gateway** (OpenAI-compatible ``/v1/chat/completions``, the abo-first
 # Brain chain, loopback :18084). This is a READ/coaching call — no business write,
 # no mission, no gate. It needs the gateway Bearer token; following the WHOOP
-# pattern the token is resolved at call time (env first, then the sanctioned SOPS
-# ``secret get`` path) and NEVER logged/persisted. Absent token/gateway -> the
+# pattern the token is resolved at call time from a purpose-scoped injection by
+# the service launcher and NEVER logged/persisted. Absent token/gateway -> the
 # surface is HONEST that the Jarvis grade is pending; it never invents feedback.
 BRAIN_GATEWAY_BASE = os.environ.get("MIKAELOS_BRAIN_GATEWAY", "http://127.0.0.1:18084")
 BRAIN_MODEL = os.environ.get("MIKAELOS_BRAIN_MODEL", "jarvis")
 BRAIN_TIMEOUT = float(os.environ.get("MIKAELOS_BRAIN_TIMEOUT", "45"))
-_BRAIN_TOKEN_REF = os.environ.get("MIKAELOS_BRAIN_TOKEN_REF", "hermes/GATEWAY_TOKEN")
-_BRAIN_TOKEN_CACHE: Optional[str] = None
 
 # Kalender/Heute — calendar-evidence projection (read-only SQLite; built every
 # 30 min by calendar-evidence-index.timer via a real Google-Calendar-API
@@ -194,8 +215,6 @@ BILLING_KPI_JSON = Path(os.environ.get(
 WARTUNGS_RADAR_JSON = Path(os.environ.get(
     "MIKAELOS_WARTUNGS_RADAR", str(REPORTS_DIR / "wartungs-radar-latest.json")))
 PAPERLESS_BASE = os.environ.get("MIKAELOS_PAPERLESS_BASE", "http://127.0.0.1:18075")
-_PAPERLESS_TOKEN_REF = os.environ.get("MIKAELOS_PAPERLESS_TOKEN_REF", "paperless/API_TOKEN")
-_PAPERLESS_TOKEN_CACHE: Optional[str] = None
 # Cockpit deep-link base (the "im FSM öffnen" target). Navigation only — the
 # plugin never renders an editable Cockpit control, it only links out.
 COCKPIT_BASE = os.environ.get(
@@ -219,7 +238,7 @@ def _whoop_token() -> str:
     detail path below activates automatically; until then the module stays an
     honest ``partial``. The value is never logged or written anywhere.
     """
-    return os.environ.get("WHOOP_INTERNAL_TOKEN", "").strip()
+    return _runtime_secret(RuntimeSecret.WHOOP_INTERNAL)
 
 # ---------------------------------------------------------------------------
 # Phase 3 — the ONE propose capability. The plugin never writes and never
@@ -1952,26 +1971,8 @@ def study_plan() -> Dict[str, Any]:
 
 # --- Jarvis coaching read-path (Brain-Gateway) ------------------------------
 def _brain_token() -> str:
-    """Resolve the Brain-Gateway Bearer token: env first, then the sanctioned SOPS
-    ``secret get`` render (cached in-process). NEVER logged or written to disk.
-    Empty string = no token available -> the caller reports an honest pending."""
-    global _BRAIN_TOKEN_CACHE
-    if _BRAIN_TOKEN_CACHE:
-        return _BRAIN_TOKEN_CACHE
-    tok = (os.environ.get("MIKAELOS_BRAIN_TOKEN")
-           or os.environ.get("HERMES_GATEWAY_TOKEN") or "").strip()
-    if not tok and os.environ.get("MIKAELOS_BRAIN_SECRET", "1") != "0":
-        try:
-            proc = subprocess.run(
-                ["secret", "get", _BRAIN_TOKEN_REF],
-                capture_output=True, text=True, timeout=6)
-            if proc.returncode == 0:
-                tok = (proc.stdout or "").strip()
-        except (OSError, subprocess.SubprocessError):
-            tok = tok
-    if tok:
-        _BRAIN_TOKEN_CACHE = tok
-    return tok
+    """Return the purpose-scoped Brain token injected by the typed launcher."""
+    return _runtime_secret(RuntimeSecret.BRAIN_GATEWAY)
 
 
 def _brain_status() -> Dict[str, Any]:
@@ -1985,9 +1986,8 @@ def _brain_status() -> Dict[str, Any]:
     elif not reachable:
         note = "Brain-Gateway :18084 nicht erreichbar — Jarvis-Bewertung ausstehend."
     else:
-        note = ("Kein Gateway-Token im Dashboard-Prozess — Jarvis-Bewertung ausstehend "
-                "(Operator: HERMES_GATEWAY_TOKEN env oder SOPS hermes/GATEWAY_TOKEN, "
-                "siehe docs/RUNBOOK-jarvis-coaching.md).")
+        note = ("Kein typisiert injiziertes Brain-Token im Dashboard-Prozess — "
+                "Jarvis-Bewertung ausstehend (siehe docs/RUNBOOK-jarvis-coaching.md).")
     return {"base": BRAIN_GATEWAY_BASE, "reachable": bool(reachable),
             "hasToken": has_token, "ready": bool(reachable and has_token), "note": note}
 
@@ -2059,10 +2059,9 @@ def feynman_evaluate(concept: str = "", explanation: str = "") -> Dict[str, Any]
     token = _brain_token()
     if not token:
         return {"ok": False, "reason": "auth_pending", "jarvisDependent": True, "jarvis": status,
-                "note": ("Jarvis-Bewertung ausstehend — kein Brain-Gateway-Token im "
+                "note": ("Jarvis-Bewertung ausstehend — kein typisiert injiziertes Brain-Token im "
                          "Dashboard-Prozess. Deine Erklärung wird NICHT bewertet und nichts "
-                         "gespeichert. (Operator: HERMES_GATEWAY_TOKEN env oder SOPS "
-                         "hermes/GATEWAY_TOKEN, siehe docs/RUNBOOK-jarvis-coaching.md.)")}
+                         "gespeichert. Siehe docs/RUNBOOK-jarvis-coaching.md.")}
     user = ((f"Konzept: {concept}\n\n" if concept else "") + "Meine Erklärung:\n" + explanation)
     payload = {"model": BRAIN_MODEL, "temperature": 0.3, "max_tokens": 700,
                "messages": [{"role": "system", "content": FEYNMAN_SYSTEM},
@@ -2883,26 +2882,8 @@ def _fsm_link(path: str, label: str = "Im FSM öffnen") -> Dict[str, str]:
 
 
 def _paperless_token() -> str:
-    """Resolve the Paperless API token: env first, then the sanctioned SOPS
-    ``secret get`` render (cached in-process). NEVER logged or written to disk.
-    Empty string => the Dokumente card stays an honest partial (reachable but no
-    live count)."""
-    global _PAPERLESS_TOKEN_CACHE
-    if _PAPERLESS_TOKEN_CACHE:
-        return _PAPERLESS_TOKEN_CACHE
-    tok = (os.environ.get("MIKAELOS_PAPERLESS_TOKEN") or "").strip()
-    if not tok and os.environ.get("MIKAELOS_PAPERLESS_SECRET", "1") != "0":
-        try:
-            proc = subprocess.run(
-                ["secret", "get", _PAPERLESS_TOKEN_REF],
-                capture_output=True, text=True, timeout=6)
-            if proc.returncode == 0:
-                tok = (proc.stdout or "").strip()
-        except (OSError, subprocess.SubprocessError):
-            tok = tok
-    if tok:
-        _PAPERLESS_TOKEN_CACHE = tok
-    return tok
+    """Return the purpose-scoped Paperless token injected by the typed launcher."""
+    return _runtime_secret(RuntimeSecret.PAPERLESS_API)
 
 
 def _epoch_dt(value: Any) -> Optional[datetime]:
@@ -3538,7 +3519,6 @@ FREESCOUT_DB_HOST = os.environ.get("MIKAELOS_FREESCOUT_HOST", "127.0.0.1")
 FREESCOUT_DB_PORT = int(os.environ.get("MIKAELOS_FREESCOUT_PORT", "3306"))
 FREESCOUT_DB_NAME = os.environ.get("MIKAELOS_FREESCOUT_DB", "freescout")
 FREESCOUT_DB_USER = os.environ.get("MIKAELOS_FREESCOUT_USER", "freescout")
-_FREESCOUT_SECRET_REF = os.environ.get("MIKAELOS_FREESCOUT_SECRET_REF", "freescout/DB_PASSWORD")
 _KOMM_PERM = "Nur lesen (nur Signale · Versand G7-gated, hier nicht möglich)"
 
 
@@ -3615,23 +3595,8 @@ def _komm_telegram() -> Dict[str, Any]:
 
 
 def _freescout_password() -> str:
-    """FreeScout DB password: env first, else sanctioned SOPS ``secret get``.
-    Never logged. Empty => the FreeScout block stays an honest partial."""
-    tok = (os.environ.get("MIKAELOS_FREESCOUT_PASSWORD") or "").strip()
-    if not tok and os.environ.get("MIKAELOS_FREESCOUT_SECRET", "1") != "0":
-        try:
-            proc = subprocess.run(
-                ["secret", "get", _FREESCOUT_SECRET_REF],
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                timeout=6,
-            )
-            if proc.returncode == 0:
-                tok = (proc.stdout or "").strip()
-        except (OSError, subprocess.SubprocessError):
-            pass
-    return tok
+    """Return the purpose-scoped FreeScout secret injected by the typed launcher."""
+    return _runtime_secret(RuntimeSecret.FREESCOUT_DB)
 
 
 def _freescout_signals() -> Dict[str, Any]:

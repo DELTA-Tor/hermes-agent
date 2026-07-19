@@ -123,6 +123,11 @@ def validate_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
             errors.append(f"{path}.kind: must match PDF page or PPTX slide")
         if not isinstance(unit.get("number"), int) or unit.get("number", 0) < 1:
             errors.append(f"{path}.number: positive 1-based integer required")
+        citation = _text(unit, "citation", path, errors)
+        anchor = FORMATS.get(source_format)
+        expected_citation = f"sha256:{source_sha}#{anchor}={unit.get('number')}"
+        if citation and citation != expected_citation:
+            errors.append(f"{path}.citation: must be {expected_citation}")
         if unit.get("source_sha256") != source_sha:
             errors.append(f"{path}.source_sha256: must match source")
         assets = unit.get("render_assets")
@@ -160,6 +165,37 @@ def validate_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
                 errors.append(f"{evidence_path}.authority: evidence_only required")
             if not isinstance(item.get("structured_fields"), Mapping):
                 errors.append(f"{evidence_path}.structured_fields: object required")
+
+    direct_context_raw = manifest.get("direct_context")
+    if direct_context_raw is not None:
+        direct_context = _obj(direct_context_raw, "direct_context", errors)
+        if direct_context.get("mode") != "direct_context":
+            errors.append("direct_context.mode: must be direct_context")
+        for key in ("embedding_requested", "graph_write_requested", "durable_write_requested"):
+            if direct_context.get(key) is not False:
+                errors.append(f"direct_context.{key}: must be false")
+        if direct_context.get("answer_ready") is not True:
+            errors.append("direct_context.answer_ready: must be true")
+        _text(direct_context, "extractor", "direct_context", errors)
+        citations = direct_context.get("citations")
+        expected_citations = [unit.get("citation") for unit in units]
+        if citations != expected_citations:
+            errors.append("direct_context.citations: must match units in page order")
+        page_numbers = {unit.get("number") for unit in units}
+        readable_pages = direct_context.get("readable_pages")
+        needs_vision_pages = direct_context.get("needs_vision_pages")
+        if not isinstance(readable_pages, list) or not readable_pages:
+            errors.append("direct_context.readable_pages: non-empty array required")
+            readable_pages = []
+        if not isinstance(needs_vision_pages, list):
+            errors.append("direct_context.needs_vision_pages: array required")
+            needs_vision_pages = []
+        if (
+            any(not isinstance(number, int) for number in readable_pages + needs_vision_pages)
+            or set(readable_pages).intersection(needs_vision_pages)
+            or set(readable_pages).union(needs_vision_pages) != page_numbers
+        ):
+            errors.append("direct_context page lists: must partition manifest pages")
 
     objectives = manifest.get("learning_objectives")
     if not isinstance(objectives, list) or not objectives:

@@ -20,6 +20,11 @@ from learning_intake.contracts import (  # noqa: E402
     dedup_key,
     validate_manifest,
 )
+from learning_intake.direct_context import (  # noqa: E402
+    DirectContextError,
+    build_pdf_manifest,
+    extract_pdf_pages,
+)
 
 SOURCE_SHA = "a" * 64
 
@@ -56,6 +61,7 @@ def manifest(source_format: str = "pdf") -> dict:
             "unit_id": f"{kind}:1",
             "kind": kind,
             "number": 1,
+            "citation": f"sha256:{SOURCE_SHA}#{kind}=1",
             "source_sha256": SOURCE_SHA,
             "render_assets": [{
                 "asset_id": "render:1",
@@ -165,3 +171,99 @@ def test_cli_prints_card_without_changing_input(tmp_path: Path) -> None:
     result = json.loads(completed.stdout)
     assert result["card"]["will_write"] is False
     assert path.read_bytes() == before
+
+
+def _poppler_runner(commands: list[list[str]]):
+    def run(command: list[str], _timeout: float) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        if command[0] == "pdfinfo":
+            return subprocess.CompletedProcess(command, 0, "Pages:          2\n", "")
+        if command[0] == "pdftotext":
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                "Erster Hauptsatz\n\f\nCarnot-Wirkungsgrad\n\f",
+                "",
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    return run
+
+
+def test_direct_context_pdf_is_sha_idempotent_cited_and_write_free(tmp_path: Path) -> None:
+    first = tmp_path / "skript-a.pdf"
+    second = tmp_path / "skript-b.pdf"
+    first.write_bytes(b"%PDF-1.4\nsame-content")
+    second.write_bytes(first.read_bytes())
+    commands: list[list[str]] = []
+    runner = _poppler_runner(commands)
+    kwargs = {
+        "tenant_id": "uni:tum",
+        "module_id": "thermodynamik-1",
+        "exam_id": "thermodynamik-ws26",
+        "exam_date": "2026-12-18",
+        "question": "Erkläre die Hauptsätze.",
+        "observed_at": "2026-07-19T00:00:00Z",
+        "runner": runner,
+    }
+
+    manifest_a = build_pdf_manifest(first, **kwargs)
+    manifest_b = build_pdf_manifest(second, **kwargs)
+
+    assert manifest_a["source"]["sha256"] == manifest_b["source"]["sha256"]
+    assert manifest_a["dedup_key"] == manifest_b["dedup_key"]
+    assert manifest_a["units"][0]["citation"].endswith("#page=1")
+    assert manifest_a["units"][1]["citation"].endswith("#page=2")
+    assert manifest_a["learning_objectives"][0]["provenance_refs"] == ["page:1", "page:2"]
+    assert manifest_a["direct_context"] == {
+        "mode": "direct_context",
+        "embedding_requested": False,
+        "graph_write_requested": False,
+        "durable_write_requested": False,
+        "answer_ready": True,
+        "extractor": "poppler-pdftotext",
+        "citations": [unit["citation"] for unit in manifest_a["units"]],
+        "readable_pages": [1, 2],
+        "needs_vision_pages": [],
+    }
+    assert {command[0] for command in commands} == {"pdfinfo", "pdftotext"}
+
+
+def test_direct_context_marks_blank_pages_for_deferred_vision(tmp_path: Path) -> None:
+    source = tmp_path / "mixed.pdf"
+    source.write_bytes(b"%PDF-1.4\nmixed")
+
+    def runner(command: list[str], _timeout: float) -> subprocess.CompletedProcess[str]:
+        if command[0] == "pdfinfo":
+            return subprocess.CompletedProcess(command, 0, "Pages: 2\n", "")
+        return subprocess.CompletedProcess(command, 0, "Textseite\f\f", "")
+
+    result = build_pdf_manifest(
+        source,
+        tenant_id="uni:tum",
+        module_id="mechanik",
+        exam_id="mechanik-2026",
+        exam_date="2026-08-25",
+        question="Was ist prüfungsrelevant?",
+        observed_at="2026-07-19T00:00:00Z",
+        runner=runner,
+    )
+
+    assert result["direct_context"]["readable_pages"] == [1]
+    assert result["direct_context"]["needs_vision_pages"] == [2]
+    assert result["units"][1]["evidence"] == []
+
+
+def test_direct_context_rejects_large_or_image_only_pdf(tmp_path: Path) -> None:
+    source = tmp_path / "scan.pdf"
+    source.write_bytes(b"%PDF-1.4\nscan")
+    with pytest.raises(DirectContextError, match="byte limit"):
+        extract_pdf_pages(source, max_bytes=1, runner=_poppler_runner([]))
+
+    def blank_runner(command: list[str], _timeout: float) -> subprocess.CompletedProcess[str]:
+        if command[0] == "pdfinfo":
+            return subprocess.CompletedProcess(command, 0, "Pages: 1\n", "")
+        return subprocess.CompletedProcess(command, 0, "\f", "")
+
+    with pytest.raises(DirectContextError, match="OCR/Vision"):
+        extract_pdf_pages(source, runner=blank_runner)

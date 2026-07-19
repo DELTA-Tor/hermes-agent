@@ -68,11 +68,13 @@ plugins/mikael-os/
 └── README.md
 ```
 
-## Learning Intake Foundation (not live)
+## Learning Intake Foundation (code-ready, not live)
 
-`learning_intake/` adds contracts only. It does not mount a route or run OCR,
-Vision, Qdrant, embeddings, calendar writes or a scheduler. Existing L-1 Anki,
-L-2 review and L-3 coach code remains the future consumer and is not duplicated.
+`learning_intake/` provides contracts plus a bounded, read-only Direct-Context
+CLI for small text PDFs. It does not mount a route, persist uploads, run OCR,
+invoke Vision, write Qdrant/Graph/calendar data or start a scheduler. Existing
+L-1 Anki, L-2 review and L-3 coach code remains the future consumer and is not
+duplicated.
 
 The manifest covers module/exam identity, date/form/aids, tenant-scoped source
 SHA deduplication, PDF-page/PPTX-slide provenance, render assets, extracted
@@ -80,14 +82,24 @@ text, evidence-only OCR/Vision confidence and review, learning objectives and
 ingestion state. `studium` plus a `uni:` tenant is mandatory; company routing
 keys and business authority flags are rejected.
 
-Flow: **Drop → Analyse → Confirmation Card → Freigabe**. The included card is
-always a dry-run with `will_write=false`; approval and ingestion require a later
-gated adapter.
+The immediate lane computes the source SHA, extracts at most 40 PDF pages and
+20 MiB through local Poppler, and emits stable `sha256:…#page=N` citations.
+Blank pages are listed under `needs_vision_pages` for a later OCR/Vision lane.
+The manifest enforces `embedding_requested=false`, `graph_write_requested=false`
+and `durable_write_requested=false`, so durable ingestion cannot enter the
+answer-critical path.
+
+Durable flow remains: **Drop → Analyse → Confirmation Card → Freigabe**. The
+included card is always a dry-run with `will_write=false`; approval and durable
+ingestion require a later gated adapter.
 
 ```bash
 cd plugins/mikael-os
 python -m learning_intake.cli validate /path/manifest.json
 python -m learning_intake.cli confirmation-card /path/manifest.json
+python -m learning_intake.cli analyze-pdf /path/script.pdf \
+  --tenant uni:tum --module thermodynamik --exam thermo-2026 \
+  --exam-date 2026-09-08 --question "Welche Hauptsätze sind prüfungsrelevant?"
 ```
 
 Schemas live under `learning_intake/schemas/`.

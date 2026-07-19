@@ -37,10 +37,15 @@ def plugin_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setenv("MIKAELOS_EXAMS", str(exams_path))
     monkeypatch.setenv("MIKAELOS_ANKI_DIR", str(tmp_path / "missing-anki"))
-    monkeypatch.setenv("MIKAELOS_BRAIN_SECRET", "0")
     monkeypatch.setenv("MIKAELOS_BRAIN_GATEWAY", "http://127.0.0.1:6")
-    monkeypatch.delenv("MIKAELOS_BRAIN_TOKEN", raising=False)
-    monkeypatch.delenv("HERMES_GATEWAY_TOKEN", raising=False)
+    for key in (
+        "MIKAELOS_BRAIN_TOKEN",
+        "MIKAELOS_PAPERLESS_TOKEN",
+        "MIKAELOS_FREESCOUT_PASSWORD",
+        "WHOOP_INTERNAL_TOKEN",
+        "HERMES_GATEWAY_TOKEN",
+    ):
+        monkeypatch.delenv(key, raising=False)
 
     module_name = f"hermes_dashboard_plugin_mikael_os_test_{uuid4().hex}"
     spec = importlib.util.spec_from_file_location(module_name, PLUGIN_PATH)
@@ -98,6 +103,23 @@ def test_learning_coach_uses_real_exam_evidence_without_faking_jarvis(plugin_api
     assert evaluation["ok"] is False
     assert evaluation["jarvisDependent"] is True
     assert "feedback" not in evaluation
+
+
+def test_runtime_secrets_are_purpose_scoped_typed_injections(
+    plugin_api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_TOKEN", "broad-token-must-not-be-used")
+    assert plugin_api._brain_token() == ""
+
+    monkeypatch.setenv("MIKAELOS_BRAIN_TOKEN", "brain-runtime")
+    monkeypatch.setenv("MIKAELOS_PAPERLESS_TOKEN", "paperless-runtime")
+    monkeypatch.setenv("MIKAELOS_FREESCOUT_PASSWORD", "freescout-runtime")
+    monkeypatch.setenv("WHOOP_INTERNAL_TOKEN", "whoop-runtime")
+
+    assert plugin_api._brain_token() == "brain-runtime"
+    assert plugin_api._paperless_token() == "paperless-runtime"
+    assert plugin_api._freescout_password() == "freescout-runtime"
+    assert plugin_api._whoop_token() == "whoop-runtime"
 
 
 def test_study_plan_default_is_dry_run_and_business_scope_is_refused(

@@ -1,5 +1,10 @@
 # RUNBOOK — WHOOP_INTERNAL_TOKEN ins Nous-Dashboard bringen (Operator, gated)
 
+> **Stand PR #3:** Manuelles Rendern ist abgelöst und darf nicht ausgeführt
+> werden. `WHOOP_INTERNAL_TOKEN` wird ausschließlich durch den versionierten,
+> typisierten Dashboard-Launcher in die geschützte Runtime-Umgebung injiziert.
+> Kein Secret-Wert in Prompt, Shell-Ausgabe, Unit, Drop-in, Git oder Log.
+
 **Ziel:** Das MIKAEL-OS-Plugin (läuft in-process im `nous-hermes-dashboard.service`)
 soll `GET http://127.0.0.1:18090/internal/summary` mit `Authorization: Bearer <token>`
 aufrufen dürfen. Bis dahin bleibt das Körper/WHOOP-Modul ehrlich `partial`
