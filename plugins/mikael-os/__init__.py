@@ -7,11 +7,24 @@ from .konstruktionslehre import (
     get_due_flashcards,
     get_learning_progress,
     get_mistakes,
-    health,
+    health as learning_health,
     record_learning_result,
     safe_json,
     search_learning_materials,
     start_or_continue_quiz,
+)
+
+# Importing the ``.health`` submodule rebinds the package attribute ``health``
+# to the module object, so the Konstruktionslehre probe above must keep an
+# explicit ``learning_health`` alias.
+from .health import (
+    connector_ready as _whoop_connector_ready,
+    get_health_status,
+    get_recovery_trend,
+    get_sleep_trend,
+    get_strain_overview,
+    get_today_readiness,
+    safe_json as _health_safe_json,
 )
 
 
@@ -50,7 +63,50 @@ def _learning_turn_context(*, user_message: str = "", **_kwargs):
 
 def _learning_ready() -> bool:
     """One shared readiness probe so Hermes can TTL-cache it for all tools."""
-    return health().get("ready") is True
+    return learning_health().get("ready") is True
+
+
+_HEALTH_MARKERS = (
+    "gesundheit",
+    "whoop",
+    "recovery",
+    "erholung",
+    "erholt",
+    "hrv",
+    "ruhepuls",
+    "schlaf",
+    "readiness",
+    "strain",
+    "belastung",
+    "workout",
+    "training",
+    "fitness",
+    "wie fit",
+    "ernährung",
+    "ernaehrung",
+    "essensplan",
+    "mahlzeit",
+    "kalorien",
+    "abnehmen",
+)
+
+
+def _health_turn_context(*, user_message: str = "", **_kwargs):
+    """Inject the private health contract only for health or nutrition turns."""
+    normalized = str(user_message or "").casefold()
+    if not any(marker in normalized for marker in _HEALTH_MARKERS):
+        return None
+    return {"context": (
+        "Mikael-Gesundheitsvertrag: Hole Whoop-Werte IMMER zuerst über die "
+        "mikael_health-Werkzeuge (get_today_readiness, get_recovery_trend, "
+        "get_sleep_trend, get_strain_overview, get_health_status) und schätze "
+        "nie Werte. Nenne Zahlen roh mit knapper Einordnung, stelle keine "
+        "Diagnosen und verweise bei medizinisch auffälligen Werten auf einen "
+        "Arzt. Ernährungs- und Essensplan-Ideen sind reine Vorschläge "
+        "(propose-only): biete easy und anspruchsvollere Gerichte an und "
+        "kennzeichne effektiv vs. lecker. PRIVAT-Grenze: Whoop-Daten nie in "
+        "Firmen-Kontexte wie FSM, Qdrant oder sevDesk tragen."
+    )}
 
 
 def _schema(name, description, properties=None, required=None):
@@ -107,8 +163,35 @@ _TOOLS = (
 )
 
 
+_HEALTH_TOOLS = (
+    ("get_health_status", _schema(
+        "get_health_status",
+        "Read jarvis-whoop connector health and WHOOP data availability."),
+     lambda _args, **_kw: _health_safe_json(get_health_status)),
+    ("get_recovery_trend", _schema(
+        "get_recovery_trend",
+        "Read daily WHOOP recovery score, HRV and resting heart rate with short stats.",
+        {"days": {"type": "integer", "minimum": 1, "maximum": 30}}),
+     lambda args, **_kw: _health_safe_json(get_recovery_trend, days=args.get("days", 7))),
+    ("get_sleep_trend", _schema(
+        "get_sleep_trend",
+        "Read WHOOP sleep duration, performance and consistency per night.",
+        {"days": {"type": "integer", "minimum": 1, "maximum": 30}}),
+     lambda args, **_kw: _health_safe_json(get_sleep_trend, days=args.get("days", 7))),
+    ("get_strain_overview", _schema(
+        "get_strain_overview",
+        "Read WHOOP daily strain and the workouts of the window.",
+        {"days": {"type": "integer", "minimum": 1, "maximum": 30}}),
+     lambda args, **_kw: _health_safe_json(get_strain_overview, days=args.get("days", 7))),
+    ("get_today_readiness", _schema(
+        "get_today_readiness",
+        "Read today's compact WHOOP core values (recovery, HRV, RHR, strain, sleep)."),
+     lambda _args, **_kw: _health_safe_json(get_today_readiness)),
+)
+
+
 def register(ctx) -> None:
-    """Register the bounded Konstruktionslehre toolset."""
+    """Register the bounded Konstruktionslehre and private health toolsets."""
     for name, schema, handler in _TOOLS:
         ctx.register_tool(
             name=name,
@@ -118,4 +201,14 @@ def register(ctx) -> None:
             check_fn=_learning_ready,
             emoji="🎓",
         )
+    for name, schema, handler in _HEALTH_TOOLS:
+        ctx.register_tool(
+            name=name,
+            toolset="mikael_health",
+            schema=schema,
+            handler=handler,
+            check_fn=_whoop_connector_ready,
+            emoji="🫀",
+        )
     ctx.register_hook("pre_llm_call", _learning_turn_context)
+    ctx.register_hook("pre_llm_call", _health_turn_context)
