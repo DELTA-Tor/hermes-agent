@@ -3245,6 +3245,13 @@ const VOICE_CONFIRM_TEXT = "Startet eine Sprach-Session — reserviert 5,50 $ vo
 function LernmodusLaunch() {
   const [st, setSt] = useState(null); // null | {phase:'opening'|'open'|'error', url, popupBlocked, message}
   const open = () => {
+    // Fenster SYNCHRON im Klick-Gesture öffnen, sonst blockieren Safari & Co.
+    // es als Popup (der asynchrone Backend-Call käme sonst zu spät). Danach
+    // wird der leere Tab auf die gelieferte URL navigiert — kein zweiter Klick.
+    let win = null;
+    try { win = window.open("about:blank", "_blank"); } catch (_e) { win = null; }
+    // Reverse-tabnabbing verhindern, solange der Tab noch same-origin (about:blank) ist.
+    if (win) { try { win.opener = null; } catch (_e) { /* ignore */ } }
     setSt({ phase: "opening" });
     const sdk = (typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__) || {};
     const call = typeof sdk.authedFetch === "function"
@@ -3253,14 +3260,22 @@ function LernmodusLaunch() {
     call.then((r) => (r && typeof r.json === "function" ? r.json().catch(() => ({})) : r))
       .then((data) => {
         if (!data || data.ok !== true || !data.launch_url) {
+          if (win) { try { win.close(); } catch (_e) { /* ignore */ } }
           setSt({ phase: "error", message: "Lernmodus nicht geöffnet — Backend lieferte keinen Link." });
           return;
         }
-        let win = null;
-        try { win = window.open(data.launch_url, "_blank", "noopener"); } catch (_e) { win = null; }
-        setSt({ phase: "open", url: data.launch_url, popupBlocked: !win });
+        if (win) {
+          try { win.location.replace(data.launch_url); } catch (_e) { /* ignore */ }
+          setSt({ phase: "open", url: data.launch_url, popupBlocked: false });
+        } else {
+          // Synchroner Open wurde doch blockiert (selten) — Ein-Klick-Anchor anbieten.
+          setSt({ phase: "open", url: data.launch_url, popupBlocked: true });
+        }
       })
-      .catch(() => setSt({ phase: "error", message: "Backend nicht erreichbar — Lernmodus nicht geöffnet." }));
+      .catch(() => {
+        if (win) { try { win.close(); } catch (_e) { /* ignore */ } }
+        setSt({ phase: "error", message: "Backend nicht erreichbar — Lernmodus nicht geöffnet." });
+      });
   };
   const phase = st && st.phase;
   const hint = phase === "open"

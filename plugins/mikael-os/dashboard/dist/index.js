@@ -3355,22 +3355,50 @@ var MikaelOSPlugin = function() {
   function LernmodusLaunch() {
     const [st, setSt] = useState(null);
     const open = () => {
+      let win = null;
+      try {
+        win = window.open("about:blank", "_blank");
+      } catch (_e) {
+        win = null;
+      }
+      if (win) {
+        try {
+          win.opener = null;
+        } catch (_e) {
+        }
+      }
       setSt({ phase: "opening" });
       const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
       const call = typeof sdk.authedFetch === "function" ? Promise.resolve(sdk.authedFetch(LEARNING_LAUNCH_API)) : typeof fetch === "function" ? fetch(LEARNING_LAUNCH_API) : Promise.reject(new Error("no transport"));
       call.then((r) => r && typeof r.json === "function" ? r.json().catch(() => ({})) : r).then((data) => {
         if (!data || data.ok !== true || !data.launch_url) {
+          if (win) {
+            try {
+              win.close();
+            } catch (_e) {
+            }
+          }
           setSt({ phase: "error", message: "Lernmodus nicht geöffnet — Backend lieferte keinen Link." });
           return;
         }
-        let win = null;
-        try {
-          win = window.open(data.launch_url, "_blank", "noopener");
-        } catch (_e) {
-          win = null;
+        if (win) {
+          try {
+            win.location.replace(data.launch_url);
+          } catch (_e) {
+          }
+          setSt({ phase: "open", url: data.launch_url, popupBlocked: false });
+        } else {
+          setSt({ phase: "open", url: data.launch_url, popupBlocked: true });
         }
-        setSt({ phase: "open", url: data.launch_url, popupBlocked: !win });
-      }).catch(() => setSt({ phase: "error", message: "Backend nicht erreichbar — Lernmodus nicht geöffnet." }));
+      }).catch(() => {
+        if (win) {
+          try {
+            win.close();
+          } catch (_e) {
+          }
+        }
+        setSt({ phase: "error", message: "Backend nicht erreichbar — Lernmodus nicht geöffnet." });
+      });
     };
     const phase = st && st.phase;
     const hint = phase === "open" ? st.popupBlocked ? h(
