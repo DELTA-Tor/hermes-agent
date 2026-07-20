@@ -11,3 +11,8 @@ provides_tools:
   - start_or_continue_quiz
   - get_mistakes
   - get_current_study_block
+  - get_health_status
+  - get_recovery_trend
+  - get_sleep_trend
+  - get_strain_overview
+  - get_today_readiness

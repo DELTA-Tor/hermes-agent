@@ -173,14 +173,16 @@ def test_plugin_registers_complete_learning_toolset(monkeypatch):
             hooks.append((event, callback))
 
     module.register(Context())
-    assert {item["name"] for item in registered} == {
+    learning = [item for item in registered if item["toolset"] == "mikael_learning"]
+    assert {item["name"] for item in learning} == {
         "search_learning_materials", "get_learning_progress",
         "record_learning_result", "get_due_flashcards",
         "start_or_continue_quiz", "get_mistakes", "get_current_study_block",
     }
-    assert {item["toolset"] for item in registered} == {"mikael_learning"}
-    assert len({id(item["check_fn"]) for item in registered}) == 1
-    assert [event for event, _callback in hooks] == ["pre_llm_call"]
+    assert len({id(item["check_fn"]) for item in learning}) == 1
+    # The plugin registers a second pre_llm_call hook for mikael_health; the
+    # learning guardrail stays the first registered hook.
+    assert {event for event, _callback in hooks} == {"pre_llm_call"}
     guardrail = hooks[0][1](user_message="Erkläre die Fest-Los-Lagerung")
     assert "search_learning_materials" in guardrail["context"]
     assert "genau eine Active-Recall-Frage" in guardrail["context"]

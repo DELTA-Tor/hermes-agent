@@ -117,7 +117,7 @@ def gui_toolset_label(label: str) -> str:
 # model if the credential later goes missing or expires.
 _DEFAULT_OFF_TOOLSETS = {
     "homeassistant", "spotify", "discord", "discord_admin", "video",
-    "video_gen", "x_search", "mikael_learning",
+    "video_gen", "x_search", "mikael_learning", "mikael_health",
 }
 
 
