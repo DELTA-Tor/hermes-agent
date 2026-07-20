@@ -360,6 +360,15 @@ const LEARNING_INTAKE_API = PLUGIN_API + "/learning/intake/analyze";
 // Center reads /cockpit/approvals ONLY — it never reaches /approvals/decide.
 const KPI_API = PLUGIN_API + "/cockpit/kpi";
 const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
+// Jarvis Voice-Launch — the ONE deliberate money-touching POST of this surface.
+// Same-origin plugin route only; the backend invokes the EXISTING mint path
+// (/srv/delta/bin/jarvis-voice-launch → :18086/internal/launch). A success
+// reserves 5,50 $ vom 25-$-Monatsbudget and returns a one-shot launch URL
+// (TTL ~120 s) that exists ONLY in that response — never logged/persisted.
+// The session opens in a NEW TAB (voice-web sends X-Frame-Options: DENY +
+// frame-ancestors 'none' — an iframe can never work). 409 = a mint window is
+// still open (debounce; orphan reservations eat the monthly cap).
+const VOICE_LAUNCH_API = PLUGIN_API + "/jarvis/launch";
 const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
 // M2 — FIRMA/Rise-L read-only projection bundle + one approval card's full
 // detail. Both are GET-only, zero-write. The detail route NEVER decides — it
@@ -1671,6 +1680,9 @@ function MobileJarvis(props) {
       { type: "button", className: "mos__mjarvis-ptt", onClick: props.onSpeak, "aria-label": "Halten zum Sprechen (Demo)" },
       h(Icon, { name: "mic", size: 20 }), "Halten zum Sprechen",
     ),
+    // Real Realtime entry (same self-contained flow as the desktop Cockpit):
+    // confirm → mint (5,50 $ Reservierung) → new tab / anchor fallback.
+    h(JarvisVoiceLaunch, { block: true }),
     h(
       "div",
       { className: "mos__mjarvis-quick" },
@@ -3189,6 +3201,148 @@ function SuggestionCard(props) {
       h("span", { className: "mos__suggest-note" }, "Nichts wird ausgeführt.")));
 }
 
+// ===========================================================================
+// Jarvis Voice-Launch — „🎙️ Jarvis starten“. Self-contained button + confirm
+// dialog (local state only, no root plumbing). Flow: Button → Bestätigung
+// (Budget-Wirkung explizit) → POST /jarvis/launch → window.open(_blank,
+// noopener). Popup-Blocker-Fallback: klickbarer Anchor (target=_blank,
+// rel=noopener) mit ablaufendem TTL-Countdown. NIE ein iframe (voice-web:
+// X-Frame-Options DENY). Die Launch-URL trägt das Einmal-Token im Fragment —
+// sie wird hier nur geöffnet/angezeigt, nie geloggt oder gespeichert.
+// ===========================================================================
+function voiceLaunchPost(body) {
+  // Dedicated transport: parse the JSON body even on 409/5xx — the generic
+  // helpers drop it, but the dialog needs remaining TTL + honest status.
+  const sdk = (typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__) || {};
+  const opts = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) };
+  const call = typeof sdk.authedFetch === "function"
+    ? Promise.resolve(sdk.authedFetch(VOICE_LAUNCH_API, opts))
+    : (typeof fetch === "function" ? fetch(VOICE_LAUNCH_API, opts) : Promise.reject(new Error("no transport")));
+  return call.then((r) => {
+    if (r && typeof r.json === "function") {
+      return r.json().catch(() => ({})).then((data) => ({ httpStatus: r.status || 200, data }));
+    }
+    return { httpStatus: 200, data: r };
+  });
+}
+
+const VOICE_CONFIRM_TEXT = "Startet eine Sprach-Session — reserviert 5,50 $ vom Monatsbudget, Link 120 s gültig.";
+
+function JarvisVoiceLaunch(props) {
+  const [st, setSt] = useState(null); // null | {phase: confirm|launching|open|busy|error, ...}
+  const [, tick] = useState(0);
+  // 1-s ticker only while a countdown is visible (open/busy); mock hooks in the
+  // smoke harness are inert, which is fine — st stays null there.
+  useEffect(() => {
+    if (!st || (st.phase !== "open" && st.phase !== "busy")) return undefined;
+    const t = setInterval(() => tick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [st]);
+
+  const close = () => setSt(null);
+  const launch = () => {
+    setSt({ phase: "launching" });
+    voiceLaunchPost({ purpose: "Jarvis Realtime Sprachsession (MIKAEL OS Dashboard)" })
+      .then((res) => {
+        const raw = res.data || {};
+        if (res.httpStatus === 409) {
+          const d = (raw && typeof raw.detail === "object" && raw.detail) || raw;
+          const secs = typeof d.remainingSeconds === "number" ? d.remainingSeconds : null;
+          setSt({ phase: "busy", until: secs != null ? Date.now() + secs * 1000 : null,
+            message: d.message || "Ein Start-Link ist bereits aktiv." });
+          return;
+        }
+        if (!raw || raw.ok !== true || !raw.launch_url) {
+          setSt({ phase: "error", status: raw && raw.status,
+            message: (raw && raw.message) || "Start nicht möglich — Backend lieferte keinen Launch-Link." });
+          return;
+        }
+        let win = null;
+        try { win = window.open(raw.launch_url, "_blank", "noopener"); } catch (_e) { win = null; }
+        setSt({ phase: "open", url: raw.launch_url, expiresAt: raw.expires_at,
+          reserved: raw.reserved_usd, popupBlocked: !win });
+      })
+      .catch(() => setSt({ phase: "error", message: "Backend nicht erreichbar — nichts gestartet, nichts reserviert." }));
+  };
+
+  let dialog = null;
+  if (st) {
+    const phase = st.phase;
+    const tone = phase === "open" ? "emerald" : phase === "error" ? "red" : phase === "launching" ? "muted" : "amber";
+    const remaining = phase === "open" && st.expiresAt
+      ? Math.max(0, Math.round((Date.parse(st.expiresAt) - Date.now()) / 1000))
+      : phase === "busy" && st.until != null
+        ? Math.max(0, Math.round((st.until - Date.now()) / 1000))
+        : null;
+    const expired = remaining === 0;
+    const body = [];
+    body.push(h("div", { key: "honest", className: "mos__pp-honest" },
+      h(Icon, { name: "banknote", size: 13 }),
+      "Budget-Wirkung: 5,50 $ Reservierung gegen die 25-$-Monatskappe. Der Link ist ein Einmal-Token (~120 s)."));
+    if (phase === "confirm") {
+      body.push(h("p", { key: "q", className: "mos__vlaunch-q" }, VOICE_CONFIRM_TEXT));
+    } else if (phase === "launching") {
+      body.push(h("p", { key: "l", className: "mos__vlaunch-q" },
+        h(Icon, { name: "loader", size: 14, className: "is-spin" }), " Reserviere Budget und hole den Start-Link …"));
+    } else if (phase === "busy") {
+      body.push(h("p", { key: "b", className: "mos__vlaunch-q" }, st.message),
+        remaining != null && !expired
+          ? h("p", { key: "bc", className: "mos__vlaunch-count" }, h(Icon, { name: "clock", size: 13 }),
+              "Noch ~" + remaining + " s, dann ist ein neuer Start möglich.")
+          : null,
+        expired ? h("p", { key: "be", className: "mos__vlaunch-count" }, "Fenster abgelaufen — ein neuer Start ist jetzt möglich.") : null);
+    } else if (phase === "open") {
+      body.push(
+        st.popupBlocked
+          ? h("p", { key: "o", className: "mos__vlaunch-q" },
+              "Popup blockiert — öffne die Sprach-Session über den Link (neuer Tab):")
+          : h("p", { key: "o", className: "mos__vlaunch-q" }, "Sprach-Session in neuem Tab geöffnet."),
+        st.popupBlocked && !expired
+          ? h("a", { key: "a", className: "mos__vlaunch-link", href: st.url, target: "_blank", rel: "noopener" },
+              h(Icon, { name: "mic", size: 15 }), "Sprach-Session öffnen")
+          : null,
+        remaining != null
+          ? h("p", { key: "c", className: "mos__vlaunch-count" + (expired ? " is-expired" : "") },
+              h(Icon, { name: "clock", size: 13 }),
+              expired ? "Link abgelaufen — Session ggf. neu starten." : "Link noch ~" + remaining + " s gültig (Einmal-Token).")
+          : null);
+    } else {
+      body.push(h("p", { key: "e", className: "mos__vlaunch-q" }, st.message),
+        st.status ? h("p", { key: "es", className: "mos__pp-note mos__pp-note--muted" }, "Status: " + st.status) : null);
+    }
+    const actions = phase === "confirm"
+      ? [h("button", { key: "no", type: "button", className: "mos__pp-btn", onClick: close }, "Abbrechen"),
+         h("button", { key: "go", type: "button", className: "mos__pp-btn mos__pp-btn--send", onClick: launch,
+           title: "Erst dieser Klick reserviert 5,50 $ und holt den Einmal-Link." },
+           h(Icon, { name: "mic", size: 15 }), "Jetzt starten")]
+      : phase === "launching"
+        ? []
+        : [h("button", { key: "ok", type: "button", className: "mos__pp-btn mos__pp-btn--primary", onClick: close }, "Schließen")];
+    dialog = h("div", { className: "mos__pp-scrim", onClick: close },
+      h("section", { className: "mos__pp mos__pp--" + tone, role: "dialog", "aria-modal": "true",
+        "aria-label": "Jarvis-Sprachsession starten", onClick: (e) => e.stopPropagation() },
+        h("header", { className: "mos__pp-head" },
+          h("span", { className: "mos__pp-badge" }, h(Icon, { name: "mic", size: 18 })),
+          h("span", { className: "mos__pp-titles" },
+            h("span", { className: "mos__pp-title" }, "Jarvis-Sprachsession"),
+            h("span", { className: "mos__pp-sub" }, "Realtime · 5,50 $ Reservierung · Link 120 s")),
+          h("button", { type: "button", className: "mos__iconbtn mos__iconbtn--close", "aria-label": "Schließen", onClick: close },
+            h(Icon, { name: "x", size: 18 }))),
+        h("div", { className: "mos__pp-body" }, body),
+        h("footer", { className: "mos__pp-foot" }, actions)));
+  }
+
+  return h(React.Fragment, null,
+    h("button", {
+      type: "button",
+      className: "mos__vlaunch-btn" + (props.block ? " mos__vlaunch-btn--block" : ""),
+      onClick: () => setSt({ phase: "confirm" }),
+      title: VOICE_CONFIRM_TEXT,
+      "aria-haspopup": "dialog",
+    }, "🎙️ Jarvis starten"),
+    dialog);
+}
+
 function JarvisLive(props) {
   const j = props.jarvis;
   const load = props.load;
@@ -3230,7 +3384,9 @@ function JarvisLive(props) {
         ? h("span", { className: "mos__pip mos__pip--" + (chatOk ? "verified" : "red"), title: chat.note || "" },
             h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), chatOk ? "Chat bereit" : "Chat offline")
         : h("span", { className: "mos__jlive-load" }, h(Icon, { name: load === "loading" ? "loader" : "unplug", size: 14, className: load === "loading" ? "is-spin" : "" })),
-      h("button", { type: "button", className: "mos__jlive-mic", title: NOT_WIRED, "aria-label": "Voice-Memo (folgt)" }, h(Icon, { name: "mic", size: 18 }))),
+      // The former dead "Voice-Memo (folgt)" placeholder is now the REAL voice
+      // entry: confirm dialog → mint → new tab (JarvisVoiceLaunch, self-contained).
+      h(JarvisVoiceLaunch, null)),
     h("div", { className: "mos__jlive-stream" },
       load === "loading" && !j
         ? [0, 1].map((i) => h("div", { key: i, className: "mos__skbub" }))

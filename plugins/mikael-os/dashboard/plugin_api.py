@@ -80,6 +80,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
@@ -4844,6 +4845,203 @@ _PWA_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
 
 
 # ---------------------------------------------------------------------------
+# Jarvis Voice-Launch (M1) — deliberately the ONE money-touching subprocess of
+# this surface, tightly bounded. It only *invokes* the existing, tested mint
+# path ``/srv/delta/bin/jarvis-voice-launch "<Zweck>"`` (RealtimeMissionControl
+# → POST 127.0.0.1:18086/internal/launch): mission + 5,50 $ reservation against
+# the 25 $ monthly cap + HMAC capability token (TTL ~120 s, one-shot bootstrap).
+# Nothing of that flow is rebuilt here.
+#
+# Guardrails (contract, enforced below + in tests/plugins/test_mikael_os_voice_launch.py):
+#   * In-memory debounce — while a minted token has not expired, a second call
+#     answers 409 with the remaining TTL instead of minting again. Orphan
+#     reservations eat the monthly cap: four open mints block the fifth start.
+#   * The launch URL / capability token is NEVER logged and NEVER persisted —
+#     it exists only in the one HTTP response. The debounce state keeps only
+#     expiry + mission id. No logger call in this lane, no raw stdout in any
+#     error text.
+#   * Launcher errors (e.g. ``realtime_prerequisite_missing`` when the egress
+#     attestation expired) surface as an understandable ``ok:false`` status for
+#     the UI — never as a blind 500.
+#   * A subprocess timeout is treated as a POSSIBLE mint (the internal POST may
+#     have completed before the kill): the debounce blocks for the full TTL —
+#     cap protection beats convenience.
+# ---------------------------------------------------------------------------
+_VOICE_LAUNCH_BIN = os.environ.get(
+    "MIKAELOS_VOICE_LAUNCH_BIN", "/srv/delta/bin/jarvis-voice-launch")
+_VOICE_LAUNCH_TIMEOUT_S = 15
+_VOICE_RESERVED_USD = 5.5
+_VOICE_TTL_FALLBACK_S = 120
+_VOICE_PURPOSE_DEFAULT = "Jarvis Realtime Sprachsession (MIKAEL OS Dashboard)"
+_VOICE_PURPOSE_MAX = 200
+
+_VOICE_LOCK = threading.Lock()
+# Debounce state — deliberately WITHOUT launch_url/token (never persisted).
+_VOICE_ACTIVE: Dict[str, Any] = {
+    "expires_at": None,   # datetime | None — end of the active token window
+    "in_flight": False,   # a mint subprocess is currently running
+    "mission_id": None,   # reference only; carries no secret
+    "reason": None,       # "minted" | "timeout" | None (why the window is set)
+}
+
+_VOICE_ERROR_HUMAN = {
+    "realtime_prerequisite_missing":
+        "Voraussetzung fehlt (z. B. Egress-Attestation abgelaufen). Es wurde "
+        "nichts gestartet und nichts reserviert.",
+    "budget_exhausted":
+        "Monatsbudget (25 $) erschöpft oder durch offene Reservierungen "
+        "blockiert. Es wurde nichts gestartet.",
+    "budget_reserved":
+        "Budget bereits durch offene Reservierungen blockiert. Es wurde "
+        "nichts gestartet.",
+}
+
+
+def _voice_launch_exec(purpose: str) -> "subprocess.CompletedProcess[str]":
+    """Run the real mint script. Kept as its own tiny seam so tests replace it —
+    every REAL invocation reserves 5,50 $ against the monthly cap and must never
+    happen from a test."""
+    return subprocess.run(
+        [_VOICE_LAUNCH_BIN, purpose],
+        capture_output=True, text=True, timeout=_VOICE_LAUNCH_TIMEOUT_S,
+    )
+
+
+def _voice_parse_output(text: str) -> Optional[Dict[str, Any]]:
+    """Parse the launcher's stdout JSON (tolerates surrounding noise)."""
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else None
+    except ValueError:
+        start, end = raw.find("{"), raw.rfind("}")
+        if 0 <= start < end:
+            try:
+                parsed = json.loads(raw[start:end + 1])
+                return parsed if isinstance(parsed, dict) else None
+            except ValueError:
+                return None
+    return None
+
+
+def _voice_remaining_seconds(now: Optional[datetime] = None) -> Optional[int]:
+    exp = _VOICE_ACTIVE.get("expires_at")
+    if not isinstance(exp, datetime):
+        return None
+    ref = now or datetime.now(timezone.utc)
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return max(0, int((exp - ref).total_seconds()))
+
+
+def jarvis_voice_launch(purpose: str = "") -> Dict[str, Any]:
+    """Mint ONE voice-session launch URL via the existing launcher. See the
+    guardrail block above; raises 409 while a previous mint window is open."""
+    goal = (purpose or "").strip()[:_VOICE_PURPOSE_MAX] or _VOICE_PURPOSE_DEFAULT
+    now = datetime.now(timezone.utc)
+    with _VOICE_LOCK:
+        if _VOICE_ACTIVE.get("in_flight"):
+            raise HTTPException(status_code=409, detail={
+                "status": "minting", "remainingSeconds": None,
+                "message": "Ein Start läuft bereits — bitte einen Moment warten.",
+            })
+        remaining = _voice_remaining_seconds(now)
+        if remaining is not None and remaining > 0:
+            raise HTTPException(status_code=409, detail={
+                "status": "active", "remainingSeconds": remaining,
+                "missionId": _VOICE_ACTIVE.get("mission_id"),
+                "message": ("Ein Start-Link ist bereits aktiv (noch ~%ds gültig). "
+                            "Offene Reservierungen fressen die Monatskappe — bitte "
+                            "erst ablaufen lassen.") % remaining,
+            })
+        _VOICE_ACTIVE.update({"in_flight": True})
+    try:
+        proc = _voice_launch_exec(goal)
+    except subprocess.TimeoutExpired:
+        # The internal POST may have completed right before the kill → the
+        # reservation may exist. Block the full TTL: cap protection first.
+        with _VOICE_LOCK:
+            _VOICE_ACTIVE.update({
+                "in_flight": False, "mission_id": None, "reason": "timeout",
+                "expires_at": datetime.now(timezone.utc)
+                + timedelta(seconds=_VOICE_TTL_FALLBACK_S),
+            })
+        return {
+            "ok": False, "status": "timeout",
+            "retryAfterSeconds": _VOICE_TTL_FALLBACK_S,
+            "message": ("Launcher-Timeout nach %ds — möglicherweise wurde trotzdem "
+                        "reserviert. Neuer Versuch erst nach %d s (Kappen-Schutz).")
+                       % (_VOICE_LAUNCH_TIMEOUT_S, _VOICE_TTL_FALLBACK_S),
+        }
+    except OSError:
+        with _VOICE_LOCK:
+            _VOICE_ACTIVE.update({"in_flight": False, "expires_at": None,
+                                  "mission_id": None, "reason": None})
+        return {
+            "ok": False, "status": "launcher_unavailable",
+            "message": "Launcher %s nicht ausführbar/gefunden — nichts gestartet, "
+                       "nichts reserviert." % _VOICE_LAUNCH_BIN,
+        }
+    except Exception:
+        with _VOICE_LOCK:
+            _VOICE_ACTIVE.update({"in_flight": False, "expires_at": None,
+                                  "mission_id": None, "reason": None})
+        raise
+
+    data = _voice_parse_output(proc.stdout)
+    launch_url = (data or {}).get("launch_url")
+    if data is None or not launch_url or data.get("error") or data.get("ok") is False:
+        # Launcher reported a problem (or spoke no JSON) — no token was issued,
+        # so the debounce window stays CLOSED and a fixed cause can retry at
+        # once. Never echo stdout (it would be the only token carrier).
+        with _VOICE_LOCK:
+            _VOICE_ACTIVE.update({"in_flight": False, "expires_at": None,
+                                  "mission_id": None, "reason": None})
+        if data is None:
+            stderr = (proc.stderr or "").strip()[:300]
+            return {
+                "ok": False, "status": "launcher_error",
+                "message": "Launcher lieferte kein auswertbares JSON (Exit %s)%s"
+                           % (proc.returncode,
+                              (" — " + stderr) if stderr else "."),
+            }
+        code = str(data.get("error") or "launch_failed")
+        result: Dict[str, Any] = {
+            "ok": False, "status": code,
+            "message": _VOICE_ERROR_HUMAN.get(
+                code, "Start nicht möglich (%s). Es wurde nichts reserviert." % code),
+        }
+        if isinstance(data.get("readiness"), (dict, list)):
+            result["readiness"] = data["readiness"]
+        return result
+
+    expires_at = _parse_iso(data.get("expires_at"))
+    if expires_at is None:
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=_VOICE_TTL_FALLBACK_S)
+    with _VOICE_LOCK:
+        _VOICE_ACTIVE.update({
+            "in_flight": False, "expires_at": expires_at,
+            "mission_id": data.get("mission_id"), "reason": "minted",
+        })
+    try:
+        reserved = float(data.get("reservation_usd"))
+    except (TypeError, ValueError):
+        reserved = _VOICE_RESERVED_USD
+    return {
+        "ok": True,
+        "launch_url": launch_url,
+        "expires_at": data.get("expires_at") or _iso(expires_at),
+        "reserved_usd": reserved,
+        "mission_id": data.get("mission_id"),
+        "session_id": data.get("session_id"),
+        # _parse_iso / the fallback are always tz-aware, so this stays safe.
+        "ttl_seconds": max(0, int((expires_at - datetime.now(timezone.utc)).total_seconds())),
+    }
+
+
+# ---------------------------------------------------------------------------
 # HTTP surface. GET reads are zero-write. The single POST route is propose-only:
 # dry-run previews with no network; a live submit hands the intent to the gated
 # :18083/actions seam. Neither path ever calls /approvals/decide.
@@ -4884,6 +5082,23 @@ def cockpit_jarvis_state_route() -> Dict[str, Any]:
     Gateway reachability). No synthesized reply, no invented hint. Action-shaped
     hints are propose-only (dry-run default); nothing is executed here."""
     return cockpit_jarvis_state()
+
+
+@router.post("/jarvis/launch")
+def jarvis_voice_launch_route(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Start ONE Jarvis-Realtime voice session via the EXISTING mint path
+    (/srv/delta/bin/jarvis-voice-launch → :18086/internal/launch). This is the
+    single deliberate money-touching action of this surface: a successful call
+    reserves 5,50 $ against the 25-$-Monatskappe and returns a one-shot launch
+    URL (TTL ~120 s) ONLY in this response — never logged, never persisted.
+    Debounce: while a minted window is open, answers 409 with the remaining TTL
+    instead of minting again (orphan reservations eat the cap). Launcher
+    problems (e.g. realtime_prerequisite_missing) come back as an honest
+    ``ok:false`` status, not a 500. Body: ``{purpose?}``."""
+    if not isinstance(payload, dict):
+        payload = {}
+    purpose = str(payload.get("purpose") or payload.get("zweck") or "")
+    return jarvis_voice_launch(purpose)
 
 
 @router.get("/cockpit/approvals")
