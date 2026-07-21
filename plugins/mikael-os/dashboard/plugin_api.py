@@ -97,6 +97,7 @@ try:
     from fastapi import HTTPException
     from fastapi import UploadFile
     from fastapi.responses import Response  # PWA static files (manifest/sw/shell)
+    from fastapi.responses import HTMLResponse, RedirectResponse  # Ein-Tap-Voice
 except Exception:  # pragma: no cover - allow import/unit use without FastAPI
     class HTTPException(Exception):  # type: ignore
         def __init__(self, status_code: int = 404, detail: str = "") -> None:
@@ -5105,6 +5106,36 @@ def jarvis_voice_launch_route(payload: Dict[str, Any] = Body(default={})) -> Dic
         payload = {}
     purpose = str(payload.get("purpose") or payload.get("zweck") or "")
     return jarvis_voice_launch(purpose)
+
+
+@router.get("/jarvis/launch/go")
+def jarvis_voice_launch_go():
+    """Ein-Tap-Voice: mintet EINE Sprachsession und leitet per 302 direkt in
+    die Session (Home-Screen-Lesezeichen; Auth = bestehendes Dashboard-Cookie).
+    Nutzt exakt denselben gated Mint-Pfad wie POST /jarvis/launch — gleiche
+    5,50-$-Reservierung, gleiche Debounce, KEINE neue Authority. Die Launch-URL
+    wandert nur in den Location-Header (Einmal-Token, TTL ~120 s) — nie in ein
+    HTML-Body, nie in ein Log. Kein iframe."""
+    try:
+        result = jarvis_voice_launch("Jarvis Sprachsession (Ein-Tap)")
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        secs = detail.get("remainingSeconds")
+        hint = f" Neuer Start in ~{int(secs)} s moeglich." if isinstance(secs, (int, float)) else ""
+        message = str(detail.get("message") or "Ein Start-Link ist bereits aktiv.")
+        return HTMLResponse(
+            "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+            f"<h2>&#127908; Jarvis</h2><p>{message}{hint}</p>"
+            "<p><a href=\"\">Erneut versuchen</a></p>",
+            status_code=409)
+    if not result.get("ok") or not result.get("launch_url"):
+        message = str(result.get("message") or result.get("status") or "unbekannt")
+        return HTMLResponse(
+            "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+            f"<h2>&#127908; Jarvis</h2><p>Start nicht m&ouml;glich: {message}</p>"
+            "<p><a href=\"\">Erneut versuchen</a></p>",
+            status_code=503)
+    return RedirectResponse(result["launch_url"], status_code=302)
 
 
 @router.get("/cockpit/approvals")
