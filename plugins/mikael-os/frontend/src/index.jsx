@@ -369,6 +369,7 @@ const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
 // frame-ancestors 'none' — an iframe can never work). 409 = a mint window is
 // still open (debounce; orphan reservations eat the monthly cap).
 const VOICE_LAUNCH_API = PLUGIN_API + "/jarvis/launch";
+const LEARNING_LAUNCH_API = PLUGIN_API + "/learning/konstruktionslehre/launch";
 const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
 // M2 — FIRMA/Rise-L read-only projection bundle + one approval card's full
 // detail. Both are GET-only, zero-write. The detail route NEVER decides — it
@@ -1124,6 +1125,11 @@ function FocusLens(props) {
             onClick: () => props.onCoach(),
             title: "Countdown, Feynman (von Jarvis bewertet) und Lernplan-Vorschlag (gated).",
           }, h(Icon, { name: "graduation-cap", size: 15 }), "Lern-Coach")
+        : null,
+      // „Lernmodus starten" — öffnet die private Lernplattform (Foliencoach) in
+      // einem neuen Tab. Nur im Lernplan-Fokus, neben Drill und Lern-Coach.
+      props.focusId === "learning"
+        ? h(LernmodusLaunch, { key: "lernmodus" })
         : null,
       LENS_TOOLS.map((tl) =>
         h("button", { key: tl.label, type: "button", className: "mos__tool", title: NOT_WIRED }, h(Icon, { name: tl.icon, size: 15 }), tl.label)),
@@ -3227,6 +3233,68 @@ function voiceLaunchPost(body) {
 }
 
 const VOICE_CONFIRM_TEXT = "Startet eine Sprach-Session — reserviert 5,50 $ vom Monatsbudget, Link 120 s gültig.";
+
+// ===========================================================================
+// Lernmodus-Launch — „Lernmodus starten". Öffnet die private Lernplattform
+// (Crashcamp) direkt im Foliencoach in einem neuen Tab. GET /learning/
+// konstruktionslehre/launch liefert die tailnet-Deep-Link-URL — kein Budget,
+// kein Token, keine Schreibwirkung. NIE ein iframe (Crashcamp/voice-web setzen
+// eigene Header): window.open(_blank, noopener) mit Popup-Blocker-Fallback als
+// klickbarer Anchor. Nutzt nur bestehende CSS-Klassen (kein style-Rebuild).
+// ===========================================================================
+function LernmodusLaunch() {
+  const [st, setSt] = useState(null); // null | {phase:'opening'|'open'|'error', url, popupBlocked, message}
+  const open = () => {
+    // Fenster SYNCHRON im Klick-Gesture öffnen, sonst blockieren Safari & Co.
+    // es als Popup (der asynchrone Backend-Call käme sonst zu spät). Danach
+    // wird der leere Tab auf die gelieferte URL navigiert — kein zweiter Klick.
+    let win = null;
+    try { win = window.open("about:blank", "_blank"); } catch (_e) { win = null; }
+    // Reverse-tabnabbing verhindern, solange der Tab noch same-origin (about:blank) ist.
+    if (win) { try { win.opener = null; } catch (_e) { /* ignore */ } }
+    setSt({ phase: "opening" });
+    const sdk = (typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__) || {};
+    const call = typeof sdk.authedFetch === "function"
+      ? Promise.resolve(sdk.authedFetch(LEARNING_LAUNCH_API))
+      : (typeof fetch === "function" ? fetch(LEARNING_LAUNCH_API) : Promise.reject(new Error("no transport")));
+    call.then((r) => (r && typeof r.json === "function" ? r.json().catch(() => ({})) : r))
+      .then((data) => {
+        if (!data || data.ok !== true || !data.launch_url) {
+          if (win) { try { win.close(); } catch (_e) { /* ignore */ } }
+          setSt({ phase: "error", message: "Lernmodus nicht geöffnet — Backend lieferte keinen Link." });
+          return;
+        }
+        if (win) {
+          try { win.location.replace(data.launch_url); } catch (_e) { /* ignore */ }
+          setSt({ phase: "open", url: data.launch_url, popupBlocked: false });
+        } else {
+          // Synchroner Open wurde doch blockiert (selten) — Ein-Klick-Anchor anbieten.
+          setSt({ phase: "open", url: data.launch_url, popupBlocked: true });
+        }
+      })
+      .catch(() => {
+        if (win) { try { win.close(); } catch (_e) { /* ignore */ } }
+        setSt({ phase: "error", message: "Backend nicht erreichbar — Lernmodus nicht geöffnet." });
+      });
+  };
+  const phase = st && st.phase;
+  const hint = phase === "open"
+    ? (st.popupBlocked
+        ? h("a", { className: "mos__vlaunch-link", href: st.url, target: "_blank", rel: "noopener" },
+            h(Icon, { name: "external-link", size: 15 }), "Lernmodus öffnen")
+        : h("span", { className: "mos__vlaunch-count" }, h(Icon, { name: "circle-check-big", size: 13 }), "In neuem Tab geöffnet."))
+    : phase === "error"
+      ? h("span", { className: "mos__vlaunch-count is-expired" }, st.message)
+      : null;
+  return h(React.Fragment, null,
+    h("button", {
+      key: "lernmodus", type: "button", className: "mos__tool",
+      onClick: open, disabled: phase === "opening",
+      title: "Öffnet die private Lernplattform direkt im Foliencoach (neuer Tab).",
+    }, h(Icon, { name: phase === "opening" ? "loader" : "external-link", size: 15,
+        className: phase === "opening" ? "is-spin" : undefined }), "Lernmodus starten"),
+    hint);
+}
 
 function JarvisVoiceLaunch(props) {
   const [st, setSt] = useState(null); // null | {phase: confirm|launching|open|busy|error, ...}

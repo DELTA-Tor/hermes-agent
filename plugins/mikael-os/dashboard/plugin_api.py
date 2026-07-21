@@ -270,6 +270,12 @@ COCKPIT_BASE = os.environ.get(
     "MIKAELOS_COCKPIT_BASE", "https://delta-ai-01.tailbc3df5.ts.net:18065").rstrip("/")
 # The restic offsite backup unit (systemd --user), for the RUNTIME "Backups ok" row.
 RESTIC_UNIT = os.environ.get("MIKAELOS_RESTIC_UNIT", "rise-l-backup.service")
+# Browser-facing deep-link base into the private Crashcamp study surface (the
+# "Lernmodus starten" entry). Navigation only — the loopback base above stays
+# server-side; this tailnet URL is what the user's browser opens.
+KONSTRUKTIONSLEHRE_PUBLIC_BASE = os.environ.get(
+    "MIKAELOS_KONSTRUKTIONSLEHRE_PUBLIC_URL",
+    "https://delta-ai-01.tailbc3df5.ts.net:13150").rstrip("/")
 
 try:  # Berlin local time for day windows (CLAUDE.md: immer Berliner Zeit)
     from zoneinfo import ZoneInfo
@@ -5326,6 +5332,34 @@ def konstruktionslehre_mistakes_route(open_only: bool = True, limit: int = 20) -
 def konstruktionslehre_current_block_route() -> Dict[str, Any]:
     """Read the active or next block from the tested Crashcamp plan."""
     return _konstruktionslehre_call(konstruktionslehre_current_block)
+
+
+_KONSTRUKTIONSLEHRE_VIEWS = frozenset({
+    "dashboard", "plan", "learn", "slides", "cards", "quiz", "images",
+    "media", "mistakes", "exam", "tutor", "search",
+})
+
+
+@router.get("/learning/konstruktionslehre/launch")
+def konstruktionslehre_launch_route(view: str = "slides") -> Dict[str, Any]:
+    """READ-ONLY: build the browser deep-link into the private Crashcamp study
+    surface (the "Lernmodus starten" entry). Defaults to the Foliencoach
+    (?view=slides) and attaches the current/next study block so the dashboard
+    can label the entry with the last active block. No writes, no token, no
+    budget; the URL only navigates (the loopback base stays server-side). If the
+    Crashcamp read is unavailable the launch URL is still returned."""
+    target = view if view in _KONSTRUKTIONSLEHRE_VIEWS else "slides"
+    try:
+        block = konstruktionslehre_current_block()
+    except Exception:
+        block = None
+    return {
+        "ok": True,
+        "launch_url": f"{KONSTRUKTIONSLEHRE_PUBLIC_BASE}/?view={target}",
+        "view": target,
+        "base": KONSTRUKTIONSLEHRE_PUBLIC_BASE,
+        "current_block": block,
+    }
 
 
 @router.post("/learning/intake/analyze")

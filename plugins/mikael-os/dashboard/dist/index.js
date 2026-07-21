@@ -423,6 +423,7 @@ var MikaelOSPlugin = function() {
   const KPI_API = PLUGIN_API + "/cockpit/kpi";
   const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
   const VOICE_LAUNCH_API = PLUGIN_API + "/jarvis/launch";
+  const LEARNING_LAUNCH_API = PLUGIN_API + "/learning/konstruktionslehre/launch";
   const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
   const FIRMA_OVERVIEW_API = PLUGIN_API + "/firma/overview";
   const FIRMA_APPROVAL_DETAIL_API = PLUGIN_API + "/firma/approvals/detail";
@@ -1099,6 +1100,9 @@ var MikaelOSPlugin = function() {
           onClick: () => props.onCoach(),
           title: "Countdown, Feynman (von Jarvis bewertet) und Lernplan-Vorschlag (gated)."
         }, h(Icon, { name: "graduation-cap", size: 15 }), "Lern-Coach") : null,
+        // „Lernmodus starten" — öffnet die private Lernplattform (Foliencoach) in
+        // einem neuen Tab. Nur im Lernplan-Fokus, neben Drill und Lern-Coach.
+        props.focusId === "learning" ? h(LernmodusLaunch, { key: "lernmodus" }) : null,
         LENS_TOOLS.map((tl) => h("button", { key: tl.label, type: "button", className: "mos__tool", title: NOT_WIRED }, h(Icon, { name: tl.icon, size: 15 }), tl.label))
       )
     );
@@ -3348,6 +3352,79 @@ var MikaelOSPlugin = function() {
     });
   }
   const VOICE_CONFIRM_TEXT = "Startet eine Sprach-Session — reserviert 5,50 $ vom Monatsbudget, Link 120 s gültig.";
+  function LernmodusLaunch() {
+    const [st, setSt] = useState(null);
+    const open = () => {
+      let win = null;
+      try {
+        win = window.open("about:blank", "_blank");
+      } catch (_e) {
+        win = null;
+      }
+      if (win) {
+        try {
+          win.opener = null;
+        } catch (_e) {
+        }
+      }
+      setSt({ phase: "opening" });
+      const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
+      const call = typeof sdk.authedFetch === "function" ? Promise.resolve(sdk.authedFetch(LEARNING_LAUNCH_API)) : typeof fetch === "function" ? fetch(LEARNING_LAUNCH_API) : Promise.reject(new Error("no transport"));
+      call.then((r) => r && typeof r.json === "function" ? r.json().catch(() => ({})) : r).then((data) => {
+        if (!data || data.ok !== true || !data.launch_url) {
+          if (win) {
+            try {
+              win.close();
+            } catch (_e) {
+            }
+          }
+          setSt({ phase: "error", message: "Lernmodus nicht geöffnet — Backend lieferte keinen Link." });
+          return;
+        }
+        if (win) {
+          try {
+            win.location.replace(data.launch_url);
+          } catch (_e) {
+          }
+          setSt({ phase: "open", url: data.launch_url, popupBlocked: false });
+        } else {
+          setSt({ phase: "open", url: data.launch_url, popupBlocked: true });
+        }
+      }).catch(() => {
+        if (win) {
+          try {
+            win.close();
+          } catch (_e) {
+          }
+        }
+        setSt({ phase: "error", message: "Backend nicht erreichbar — Lernmodus nicht geöffnet." });
+      });
+    };
+    const phase = st && st.phase;
+    const hint = phase === "open" ? st.popupBlocked ? h(
+      "a",
+      { className: "mos__vlaunch-link", href: st.url, target: "_blank", rel: "noopener" },
+      h(Icon, { name: "external-link", size: 15 }),
+      "Lernmodus öffnen"
+    ) : h("span", { className: "mos__vlaunch-count" }, h(Icon, { name: "circle-check-big", size: 13 }), "In neuem Tab geöffnet.") : phase === "error" ? h("span", { className: "mos__vlaunch-count is-expired" }, st.message) : null;
+    return h(
+      React.Fragment,
+      null,
+      h("button", {
+        key: "lernmodus",
+        type: "button",
+        className: "mos__tool",
+        onClick: open,
+        disabled: phase === "opening",
+        title: "Öffnet die private Lernplattform direkt im Foliencoach (neuer Tab)."
+      }, h(Icon, {
+        name: phase === "opening" ? "loader" : "external-link",
+        size: 15,
+        className: phase === "opening" ? "is-spin" : void 0
+      }), "Lernmodus starten"),
+      hint
+    );
+  }
   function JarvisVoiceLaunch(props) {
     const [st, setSt] = useState(null);
     const [, tick] = useState(0);
