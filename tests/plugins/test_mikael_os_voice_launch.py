@@ -89,6 +89,77 @@ def test_success_returns_launch_contract_and_forwards_purpose(api, monkeypatch):
     assert 0 < result["ttl_seconds"] <= 120
 
 
+def test_continuation_forwards_existing_mission_without_exposing_capability(
+    api, monkeypatch
+):
+    calls = []
+    mission_id = "mis_20260723T215500Z_123456abcdef"
+
+    def fake_exec(purpose, continuation):
+        calls.append((purpose, continuation))
+        return _completed(_launcher_json(mission_id=mission_id))
+
+    monkeypatch.setattr(api, "_voice_launch_exec", fake_exec)
+    result = api.jarvis_voice_launch(
+        "Jarvis Dauergespräch fortsetzen",
+        mission_id,
+    )
+    assert result["ok"] is True
+    assert result["mission_id"] == mission_id
+    assert calls == [("Jarvis Dauergespräch fortsetzen", mission_id)]
+    assert TOKEN in result["launch_url"]
+
+
+def test_continuation_rejects_invalid_mission_before_launcher(api, monkeypatch):
+    monkeypatch.setattr(
+        api,
+        "_voice_launch_exec",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("invalid mission must not reach launcher")
+        ),
+    )
+    with pytest.raises(api.HTTPException) as exc:
+        api.jarvis_voice_launch("Fortsetzen", "not-a-mission")
+    assert exc.value.status_code == 400
+    assert exc.value.detail["status"] == "mission_invalid"
+
+
+def test_inline_prepare_forwards_same_mission_for_rollover(api, monkeypatch):
+    mission_id = "mis_20260723T215500Z_123456abcdef"
+    calls = []
+
+    def fake_launch(purpose, continuation):
+        calls.append((purpose, continuation))
+        return {
+            "ok": True,
+            "launch_url": LAUNCH_URL,
+            "expires_at": "2026-08-15T12:02:00+00:00",
+            "reserved_usd": 0.56,
+            "mission_id": mission_id,
+            "session_id": "rts-continuation",
+        }
+
+    def fake_bootstrap(path, _payload, **_kwargs):
+        assert path == "/bootstrap"
+        return 200, {
+            "bootstrap_id": "boot-continuation",
+            "bootstrap_token": "bootstrap-continuation",
+            "nonce": "nonce-continuation",
+            "model": "gpt-realtime-2.1",
+            "max_session_seconds": 3300,
+            "max_turns": 0,
+        }, {}
+
+    monkeypatch.setattr(api, "jarvis_voice_launch", fake_launch)
+    monkeypatch.setattr(api, "_voice_json_response", fake_bootstrap)
+    result = api.jarvis_voice_inline_prepare("Dauergespräch", mission_id)
+
+    assert result["ok"] is True
+    assert result["missionId"] == mission_id
+    assert calls == [("Dauergespräch", mission_id)]
+    assert TOKEN not in json.dumps(result)
+
+
 def test_second_call_within_ttl_debounces_409_with_remaining_ttl(api, monkeypatch):
     monkeypatch.setattr(api, "_voice_launch_exec", lambda _p: _completed(_launcher_json()))
     first = api.jarvis_voice_launch_route(payload={})
@@ -298,7 +369,7 @@ def test_inline_voice_keeps_capabilities_and_control_tokens_server_side(
                     ],
                     "transcript": [
                         {"speaker": "operator", "text": "Zeige den Status."},
-                        {"speaker": "assistant", "text": "Ich prüfe das."},
+                        {"speaker": "jarvis", "text": "Ich prüfe das."},
                     ],
                     "transcript_draft": "Live",
                     "operator_transcript_draft": "",
@@ -317,6 +388,12 @@ def test_inline_voice_keeps_capabilities_and_control_tokens_server_side(
         raise AssertionError(path)
 
     monkeypatch.setattr(api, "_voice_http_request", fake_http)
+    api._VOICE_ACTIVE.update({
+        "in_flight": False,
+        "expires_at": datetime.now(timezone.utc) + timedelta(seconds=120),
+        "mission_id": "mis_20260723T215500Z_123456abcdef",
+        "reason": "minted",
+    })
     with caplog.at_level(logging.DEBUG):
         prepared = api.jarvis_voice_inline_prepare("Mikael OS Test")
         answer = api.jarvis_voice_inline_session(
@@ -328,6 +405,8 @@ def test_inline_voice_keeps_capabilities_and_control_tokens_server_side(
     assert prepared["missionId"] == "mis-shared-voice"
     assert prepared["reservationUsd"] == 0.56
     assert answer["sdp"] == "v=0\\r\\ntest-answer"
+    assert api._VOICE_ACTIVE["expires_at"] is None
+    assert api._VOICE_ACTIVE["reason"] == "consumed"
     assert status["ok"] is True
     assert status["action"] == "status"
     assert status["status"] == "active"
@@ -385,6 +464,61 @@ def test_inline_session_rejects_unprepared_handle_without_provider_call(
     assert exc.value.detail["status"] == "inline_session_invalid"
 
 
+@pytest.mark.parametrize(
+    ("provider_status", "expected_phase"),
+    [("verified", "verified"), ("reconcile_required", "reconcile_required")],
+)
+def test_inline_status_clears_terminal_cached_handle(
+    api, monkeypatch, provider_status, expected_phase
+):
+    api._VOICE_INLINE.update({
+        "handle": "inline-terminal",
+        "phase": "active",
+        "session_id": "rts_terminal",
+        "control_token": "control-terminal",
+        "control_sequence": 0,
+    })
+
+    def fake_json(path, payload, *, scheme, credential):
+        assert path == "/control"
+        assert payload["action"] == "status"
+        assert scheme == "Jarvis-Control"
+        assert credential == "control-terminal"
+        return 200, {
+            "status": provider_status,
+            "reason": "session_rollover",
+        }, {}
+
+    monkeypatch.setattr(api, "_voice_json_response", fake_json)
+    result = api.jarvis_voice_inline_control("inline-terminal", "status")
+    assert result["status"] == provider_status
+    assert result["reason"] == "session_rollover"
+    assert api._VOICE_INLINE["phase"] == expected_phase
+    assert api._VOICE_INLINE["handle"] is None
+    assert api._VOICE_INLINE["control_token"] is None
+
+
+def test_inline_rollover_forwards_typed_action_and_clears_handle(api, monkeypatch):
+    api._VOICE_INLINE.update({
+        "handle": "inline-rollover",
+        "phase": "active",
+        "session_id": "rts_rollover",
+        "control_token": "control-rollover",
+        "control_sequence": 0,
+    })
+
+    def fake_json(_path, payload, **_kwargs):
+        assert payload["action"] == "rollover"
+        return 200, {"status": "verified", "reason": "session_rollover"}, {}
+
+    monkeypatch.setattr(api, "_voice_json_response", fake_json)
+    result = api.jarvis_voice_inline_control("inline-rollover", "rollover")
+    assert result["ok"] is True
+    assert result["action"] == "rollover"
+    assert api._VOICE_INLINE["phase"] == "rolled_over"
+    assert api._VOICE_INLINE["handle"] is None
+
+
 def test_legacy_voice_bookmark_opens_stable_deck_without_minting(
     api, monkeypatch
 ):
@@ -406,4 +540,9 @@ def test_frontend_webrtc_is_audio_only_and_sideband_owned() -> None:
 
     assert ".createDataChannel(" not in source
     assert "Hermes Sideband is the" in source
+    assert "missionId: continuationMissionId || undefined" in source
+    assert 'body.reason === "session_rollover"' in source
+    assert "preserveTranscript: true" in source
+    assert '"aria-pressed": dictation' in source
+    assert "transcriptTailDelta" in source
     assert 'setScene("constellation")' not in source

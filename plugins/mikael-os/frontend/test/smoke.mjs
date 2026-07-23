@@ -32,9 +32,9 @@ if (code.includes("Halten zum Sprechen (Demo)")) {
 const realtimeMust = [
   "/jarvis/voice/status", "/jarvis/voice/prepare", "/jarvis/voice/session",
   "/jarvis/voice/control", "RTCPeerConnection",
-  "input_audio_buffer.speech_started", "response.output_audio_transcript.delta",
-  "response.function_call_arguments.done", "conversation.item.create",
-  "Hermes-Sideband", "Neu verbinden",
+  "operatorTranscriptDraft", "lastToolResult",
+  "Hermes-Sideband", "Neu verbinden", "session_rollover", "rollover",
+  "Diktat", "60-Minuten-Limit",
 ];
 const realtimeMissing = realtimeMust.filter((s) => !code.includes(s));
 if (realtimeMissing.length) {
@@ -139,7 +139,7 @@ const mustContain = [
   "Realtime-Status wird geladen", "Noch kein Realtime-Transkript",
   "Aktive Missionen", "Missions-Evidenz", "Kalender & Aufgaben",
   "Gezielte Freigaben", "System & Services", "Surface-Katalog",
-  "Native API zuerst", "Computer Use", "Nachricht an Jarvis",
+  "Native API zuerst", "Computer Use", "Nachricht an Jarvis", "Diktat",
   "Alle Lebensbereiche", "Dashboards, Quellen und Bedienwege",
   "Zukunftsradar", "Vollständiger Abschluss",
 ];

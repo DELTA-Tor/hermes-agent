@@ -4879,6 +4879,20 @@ const VOICE_PHASE = {
   error: { label: "Verbindung unterbrochen", tone: "red" },
 };
 
+function transcriptTailDelta(previous, current) {
+  const before = Array.isArray(previous) ? previous : [];
+  const after = Array.isArray(current) ? current : [];
+  const limit = Math.min(before.length, after.length);
+  for (let overlap = limit; overlap >= 0; overlap -= 1) {
+    const tail = before.slice(before.length - overlap);
+    const head = after.slice(0, overlap);
+    if (tail.every((text, index) => text === head[index])) {
+      return after.slice(overlap);
+    }
+  }
+  return after;
+}
+
 function RealtimeVoiceDeck(props) {
   const [meta, setMeta] = useState(null);
   const [phase, setPhase] = useState("idle");
@@ -4895,7 +4909,13 @@ function RealtimeVoiceDeck(props) {
   const reconnectTimerRef = useRef(null);
   const confirmRef = useRef(null);
   const inlineRef = useRef("");
+  const beginRef = useRef(null);
+  const rolloverStartedRef = useRef(false);
+  const dictationSnapshotRef = useRef([]);
+  const commandRef = useRef("");
+  const [dictation, setDictation] = useState(false);
   inlineRef.current = inlineId;
+  commandRef.current = String(props.command || "");
 
   const loadMeta = useCallback(() => {
     sdkRequestJSON(VOICE_STATUS_API, "GET")
@@ -4962,7 +4982,11 @@ function RealtimeVoiceDeck(props) {
       streamRef.current.getTracks().forEach((track) => track.stop());
     }
     if (peerRef.current) {
-      try { peerRef.current.close(); } catch (_e) { /* best effort */ }
+      try {
+        peerRef.current.onconnectionstatechange = null;
+        peerRef.current.ontrack = null;
+        peerRef.current.close();
+      } catch (_e) { /* best effort */ }
     }
     if (audioRef.current) {
       try { audioRef.current.pause(); } catch (_e) { /* best effort */ }
@@ -5025,6 +5049,22 @@ function RealtimeVoiceDeck(props) {
               done: true,
             })).filter((item) => item.text)
           : [];
+        const operatorTexts = Array.isArray(visual.transcript)
+          ? visual.transcript
+              .filter((item) => item && item.speaker === "operator")
+              .map((item) => String(item.text || ""))
+              .filter(Boolean)
+          : [];
+        const dictated = transcriptTailDelta(
+          dictationSnapshotRef.current,
+          operatorTexts,
+        );
+        dictationSnapshotRef.current = operatorTexts;
+        if (dictation && dictated.length) {
+          const currentCommand = String(commandRef.current || "").trim();
+          const addition = dictated.join("\n");
+          props.onCommand(currentCommand ? currentCommand + "\n" + addition : addition);
+        }
         const operatorDraft = String(visual.operatorTranscriptDraft || "");
         const assistantDraft = String(visual.transcriptDraft || "");
         if (operatorDraft) {
@@ -5055,6 +5095,34 @@ function RealtimeVoiceDeck(props) {
             || lastTool.tool
           ),
         }));
+        if (body.status === "verified") {
+          releaseMedia();
+          inlineRef.current = "";
+          setInlineId("");
+          if (body.reason === "session_rollover") {
+            if (rolloverStartedRef.current) return;
+            rolloverStartedRef.current = true;
+            if (!missionId) {
+              setError("Realtime wurde rotiert, aber die gemeinsame Mission fehlt. Keine automatische neue Reservierung.");
+              setPhase("error");
+              return;
+            }
+            setPhase("reconnecting");
+            const restart = beginRef.current;
+            if (typeof restart === "function") {
+              Promise.resolve().then(() => restart({
+                missionId: missionId,
+                preserveTranscript: true,
+              }));
+            } else {
+              setError("Die automatische Fortsetzung ist nicht verfügbar.");
+              setPhase("error");
+            }
+          } else {
+            setPhase("ended");
+          }
+          return;
+        }
         if (body.status === "responding" || visual.phase === "spricht") {
           setPhase("speaking");
         } else if (
@@ -5066,6 +5134,8 @@ function RealtimeVoiceDeck(props) {
         if (!result.ok || body.ok === false || body.status === "reconcile_required") {
           setError("Hermes-Sideband meldet einen unklaren Zustand. Keine automatische Wiederholung.");
           releaseMedia();
+          inlineRef.current = "";
+          setInlineId("");
           setPhase("error");
         }
       }).catch(() => {
@@ -5076,13 +5146,25 @@ function RealtimeVoiceDeck(props) {
     };
     const timer = window.setInterval(poll, 4000);
     return () => window.clearInterval(timer);
-  }, [inlineId, phase, releaseMedia]);
+  }, [dictation, inlineId, missionId, phase, props.onCommand, releaseMedia]);
 
-  const begin = useCallback(async () => {
+  const begin = useCallback(async (options = {}) => {
+    const config = (
+      options
+      && typeof options === "object"
+      && typeof options.preventDefault !== "function"
+    ) ? options : {};
+    const continuationMissionId = String(config.missionId || "");
+    const preserveTranscript = config.preserveTranscript === true;
     setConfirm(false);
     setError("");
-    setTranscript([]);
-    setControl(null);
+    rolloverStartedRef.current = false;
+    dictationSnapshotRef.current = [];
+    if (!preserveTranscript) {
+      setTranscript([]);
+      setControl(null);
+      setMissionId("");
+    }
     if (
       typeof RTCPeerConnection !== "function"
       || !navigator.mediaDevices
@@ -5109,6 +5191,7 @@ function RealtimeVoiceDeck(props) {
     try {
       const result = await sdkRequestJSON(VOICE_PREPARE_API, "POST", {
         purpose: "Jarvis Realtime im MIKAEL OS Voice Command Deck",
+        missionId: continuationMissionId || undefined,
       });
       prepared = sdkResponseBody(result);
       if (!result.ok || prepared.ok !== true || !prepared.inlineId) {
@@ -5183,11 +5266,57 @@ function RealtimeVoiceDeck(props) {
       await peer.setRemoteDescription({ type: "answer", sdp: session.sdp });
       setPhase("listening");
     } catch (err) {
+      const failedHandle = prepared && prepared.inlineId;
       releaseMedia();
+      inlineRef.current = "";
+      setInlineId("");
+      if (failedHandle) {
+        sdkRequestJSON(VOICE_CONTROL_API, "POST", {
+          inlineId: failedHandle,
+          action: "hangup",
+        }).catch(() => {});
+      }
       setError(String(err && err.message || "Realtime-Verbindung fehlgeschlagen."));
       setPhase("error");
     }
   }, [loadMeta, releaseMedia]);
+  beginRef.current = begin;
+
+  const reconnect = useCallback(() => {
+    const handle = inlineRef.current;
+    const continuationMissionId = missionId;
+    setError("");
+    if (!handle || !continuationMissionId) {
+      loadMeta();
+      setConfirm(true);
+      return;
+    }
+    setPhase("reconnecting");
+    releaseMedia();
+    sdkRequestJSON(VOICE_CONTROL_API, "POST", {
+      inlineId: handle,
+      action: "rollover",
+    }).then((result) => {
+      const body = sdkResponseBody(result);
+      if (
+        !result.ok
+        || body.ok === false
+        || body.status !== "verified"
+        || body.reason !== "session_rollover"
+      ) {
+        throw new Error("Rollover nicht eindeutig bestätigt.");
+      }
+      inlineRef.current = "";
+      setInlineId("");
+      return begin({
+        missionId: continuationMissionId,
+        preserveTranscript: true,
+      });
+    }).catch(() => {
+      setError("Neu verbinden wurde nicht eindeutig bestätigt. Keine automatische zweite Reservierung.");
+      setPhase("error");
+    });
+  }, [begin, loadMeta, missionId, releaseMedia]);
 
   const sendText = useCallback((event) => {
     if (event && event.preventDefault) event.preventDefault();
@@ -5250,19 +5379,30 @@ function RealtimeVoiceDeck(props) {
         h("strong", null, active ? state.label : "Bereit — jetzt sprechen"),
         h("span", null, active ? "Du kannst Jarvis jederzeit unterbrechen." : "WebRTC · Live-Transkript · serverseitige Tools")),
       phase === "error"
-        ? h("button", { type: "button", className: "mos__vcd-reconnect", onClick: () => {
-            hangup(true).finally(() => {
-              loadMeta();
-              setConfirm(true);
-            });
-          } },
+        ? h("button", { type: "button", className: "mos__vcd-reconnect", onClick: reconnect },
             h(Icon, { name: "refresh-cw", size: 14 }), "Neu verbinden")
         : null),
     h("form", { className: "mos__vcd-command", onSubmit: sendText },
       h("input", { type: "text", value: props.command, onChange: (event) => props.onCommand(event.target.value),
         placeholder: "Nachricht an Jarvis …", "aria-label": "Nachricht an Jarvis" }),
+      h("button", {
+        type: "button",
+        className: "mos__vcd-dictation" + (dictation ? " is-active" : ""),
+        "aria-label": "Diktat: Sprache in Textfeld",
+        "aria-pressed": dictation,
+        onClick: () => {
+          const next = !dictation;
+          setDictation(next);
+          if (next && !active) setConfirm(true);
+        },
+      }, h(Icon, { name: "audio-lines", size: 15 }), h("span", null, "Diktat")),
       h("button", { type: "submit", "aria-label": "Nachricht senden" },
         h(Icon, { name: "send-horizontal", size: 18 }))),
+    dictation
+      ? h("div", { className: "mos__vcd-dictation-state", role: "status" },
+          h(Icon, { name: "mic", size: 12 }),
+          "Diktat schreibt neue Mikael-Sätze ins Textfeld.")
+      : null,
     h("div", { className: "mos__vcd-quick" },
       ["Status der aktiven Mission", "Was braucht meine Freigabe?", "Zeige Systemgesundheit"].map((label) =>
         h("button", { key: label, type: "button", onClick: () => props.onCommand(label) }, label))),
@@ -5275,10 +5415,11 @@ function RealtimeVoiceDeck(props) {
               h("p", null, "Externe OpenAI-Nutzung. Reservierung laut Live-Policy: ",
                 h("b", null, Number.isFinite(reservation) ? reservation.toFixed(2).replace(".", ",") + " $" : "nicht verfügbar"),
                 ". Mikrofon wird vor der Reservierung geprüft."),
+              h("p", null, "Für lange Gespräche wird die Provider-Sitzung vor dem 60-Minuten-Limit automatisch unter derselben Mission rotiert; jede Rotation reserviert erneut."),
               h("small", null, (policy.model || "Modell nicht verfügbar") + " · " + (policy.voice || "Voice nicht verfügbar") + " · Hermes-Sideband")),
             h("div", { className: "mos__vcd-confirmactions" },
               h("button", { type: "button", onClick: () => setConfirm(false) }, "Abbrechen"),
-              h("button", { type: "button", className: "is-primary", onClick: begin, disabled: !canStart },
+              h("button", { type: "button", className: "is-primary", onClick: () => begin({}), disabled: !canStart },
                 "Starten · " + (Number.isFinite(reservation) ? reservation.toFixed(2).replace(".", ",") + " $" : "nicht verfügbar")))))
       : null);
 }

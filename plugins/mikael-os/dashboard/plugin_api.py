@@ -77,6 +77,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -5462,6 +5463,9 @@ _VOICE_RESERVED_USD = 0.56
 _VOICE_TTL_FALLBACK_S = 120
 _VOICE_PURPOSE_DEFAULT = "Jarvis Realtime Sprachsession (MIKAEL OS Dashboard)"
 _VOICE_PURPOSE_MAX = 200
+_VOICE_MISSION_RE = re.compile(
+    r"^mis_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{12}$"
+)
 
 _VOICE_LOCK = threading.Lock()
 # Debounce state — deliberately WITHOUT launch_url/token (never persisted).
@@ -5485,12 +5489,18 @@ _VOICE_ERROR_HUMAN = {
 }
 
 
-def _voice_launch_exec(purpose: str) -> "subprocess.CompletedProcess[str]":
+def _voice_launch_exec(
+    purpose: str,
+    mission_id: str = "",
+) -> "subprocess.CompletedProcess[str]":
     """Run the real mint script. Kept as its own tiny seam so tests replace it —
     every REAL invocation reserves the policy-configured amount and must never
     happen from a test."""
+    argv = [_VOICE_LAUNCH_BIN, purpose]
+    if mission_id:
+        argv.append(mission_id)
     return subprocess.run(
-        [_VOICE_LAUNCH_BIN, purpose],
+        argv,
         capture_output=True, text=True, timeout=_VOICE_LAUNCH_TIMEOUT_S,
     )
 
@@ -5524,10 +5534,19 @@ def _voice_remaining_seconds(now: Optional[datetime] = None) -> Optional[int]:
     return max(0, int((exp - ref).total_seconds()))
 
 
-def jarvis_voice_launch(purpose: str = "") -> Dict[str, Any]:
+def jarvis_voice_launch(
+    purpose: str = "",
+    mission_id: str = "",
+) -> Dict[str, Any]:
     """Mint ONE voice-session launch URL via the existing launcher. See the
     guardrail block above; raises 409 while a previous mint window is open."""
     goal = (purpose or "").strip()[:_VOICE_PURPOSE_MAX] or _VOICE_PURPOSE_DEFAULT
+    continuation = str(mission_id or "").strip()
+    if continuation and not _VOICE_MISSION_RE.fullmatch(continuation):
+        raise HTTPException(status_code=400, detail={
+            "status": "mission_invalid",
+            "message": "Die Realtime-Mission für die Fortsetzung ist ungültig.",
+        })
     now = datetime.now(timezone.utc)
     with _VOICE_LOCK:
         if _VOICE_ACTIVE.get("in_flight"):
@@ -5546,7 +5565,10 @@ def jarvis_voice_launch(purpose: str = "") -> Dict[str, Any]:
             })
         _VOICE_ACTIVE.update({"in_flight": True})
     try:
-        proc = _voice_launch_exec(goal)
+        proc = (
+            _voice_launch_exec(goal, continuation)
+            if continuation else _voice_launch_exec(goal)
+        )
     except subprocess.TimeoutExpired:
         # The internal POST may have completed right before the kill → the
         # reservation may exist. Block the full TTL: cap protection first.
@@ -5823,7 +5845,10 @@ def _voice_inline_public() -> Dict[str, Any]:
     }
 
 
-def jarvis_voice_inline_prepare(purpose: str = "") -> Dict[str, Any]:
+def jarvis_voice_inline_prepare(
+    purpose: str = "",
+    mission_id: str = "",
+) -> Dict[str, Any]:
     """Mint and immediately exchange the one-shot capability on loopback."""
     with _VOICE_INLINE_LOCK:
         if _VOICE_INLINE.get("phase") in {
@@ -5840,7 +5865,10 @@ def jarvis_voice_inline_prepare(purpose: str = "") -> Dict[str, Any]:
         _voice_inline_reset_locked(phase="preparing")
 
     try:
-        launch = jarvis_voice_launch(purpose)
+        launch = (
+            jarvis_voice_launch(purpose, mission_id)
+            if mission_id else jarvis_voice_launch(purpose)
+        )
     except HTTPException:
         with _VOICE_INLINE_LOCK:
             _voice_inline_reset_locked(phase="error")
@@ -5983,16 +6011,26 @@ def jarvis_voice_inline_session(inline_id: str, sdp_offer: str) -> Dict[str, Any
             "nonce": None,
         })
         public = _voice_inline_public()
+    # The one-shot capability is now consumed and the live inline handle is
+    # the sole concurrency guard. Keeping the old 120-second mint debounce
+    # open would incorrectly block a verified early reconnect/rollover.
+    with _VOICE_LOCK:
+        _VOICE_ACTIVE.update({
+            "in_flight": False,
+            "expires_at": None,
+            "mission_id": None,
+            "reason": "consumed",
+        })
     return {"ok": True, "sdp": answer_text, **public}
 
 
 def jarvis_voice_inline_control(inline_id: str, action: str) -> Dict[str, Any]:
     """Serialized status/hangup control; returns only a sanitized readback."""
     requested = str(action or "").strip().lower()
-    if requested not in {"status", "hangup"}:
+    if requested not in {"status", "hangup", "rollover"}:
         raise HTTPException(status_code=400, detail={
             "status": "control_invalid",
-            "message": "Nur status oder hangup ist erlaubt.",
+            "message": "Nur status, hangup oder rollover ist erlaubt.",
         })
     with _VOICE_INLINE_LOCK:
         if (
@@ -6010,7 +6048,7 @@ def jarvis_voice_inline_control(inline_id: str, action: str) -> Dict[str, Any]:
         _VOICE_INLINE["control_sequence"] = int(
             _VOICE_INLINE.get("control_sequence") or 0) + 1
         sequence = int(_VOICE_INLINE["control_sequence"])
-        if requested == "hangup":
+        if requested in {"hangup", "rollover"}:
             _VOICE_INLINE["phase"] = "stopping"
 
         status, body, _headers = _voice_json_response(
@@ -6047,10 +6085,13 @@ def jarvis_voice_inline_control(inline_id: str, action: str) -> Dict[str, Any]:
                     continue
                 speaker = str(item.get("speaker") or "")
                 text = str(item.get("text") or "")
-                if speaker not in {"operator", "assistant"} or not text:
+                if speaker not in {"operator", "assistant", "jarvis"} or not text:
                     continue
                 transcript.append({
-                    "speaker": speaker,
+                    # Voice-Web's canonical Sideband projection uses
+                    # ``jarvis`` while older fixtures used ``assistant``.
+                    # Keep one stable public speaker vocabulary for the UI.
+                    "speaker": "assistant" if speaker == "jarvis" else speaker,
                     "text": text[:4000],
                 })
             last_tool_raw = visual.get("last_tool_result")
@@ -6091,9 +6132,23 @@ def jarvis_voice_inline_control(inline_id: str, action: str) -> Dict[str, Any]:
                 "ackObservation": str(
                     visual.get("ack_observation") or "")[:120] or None,
             }
-        if requested == "hangup":
+        terminal_status = str(safe.get("status") or "")
+        if requested in {"hangup", "rollover"}:
             _voice_inline_reset_locked(
-                phase="ended" if status == 200 else "reconcile_required")
+                phase=(
+                    "rolled_over"
+                    if requested == "rollover" and status == 200
+                    else "ended" if status == 200
+                    else "reconcile_required"
+                )
+            )
+        elif requested == "status" and terminal_status in {
+            "verified", "reconcile_required",
+        }:
+            # A provider-side terminal state is authoritative. Never leave the
+            # dashboard's in-memory inline handle stuck as active after the
+            # Sideband has already closed and persisted the lifecycle.
+            _voice_inline_reset_locked(phase=terminal_status)
         elif status != 200:
             _VOICE_INLINE["phase"] = "reconcile_required"
 
@@ -6193,7 +6248,8 @@ def jarvis_voice_inline_prepare_route(
     if not isinstance(payload, dict):
         payload = {}
     purpose = str(payload.get("purpose") or payload.get("zweck") or "")
-    return jarvis_voice_inline_prepare(purpose)
+    mission_id = str(payload.get("missionId") or payload.get("mission_id") or "")
+    return jarvis_voice_inline_prepare(purpose, mission_id)
 
 
 @router.post("/jarvis/voice/session")
