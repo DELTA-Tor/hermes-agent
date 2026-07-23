@@ -30,6 +30,7 @@ import { Separator } from "@nous-research/ui/ui/components/separator";
 import { Tabs, TabsList, TabsTrigger } from "@nous-research/ui/ui/components/tabs";
 import { useI18n } from "@/i18n";
 import { registerSlot, PluginSlot } from "./slots";
+import { openPluginChat } from "@/lib/plugin-chat";
 
 // ---------------------------------------------------------------------------
 // Plugin registry — plugins call register() to add their component.
@@ -138,6 +139,10 @@ export function exposePluginSDK() {
     // Lower-level: resolve just the [authParamName, authParamValue] pair, for
     // plugins that need to build the WS URL themselves.
     buildWsAuthParam,
+    // Open the host's persistent Hermes chat in-place. First-party plugins use
+    // this instead of navigating away, so their page remains the stable front
+    // door while the normal PTY/memory/tools session stays mounted underneath.
+    openChat: openPluginChat,
 
     // UI components — Nous DS where available, shadcn/ui primitives elsewhere.
     components: {

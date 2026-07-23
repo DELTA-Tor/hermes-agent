@@ -101,6 +101,10 @@ import { useTheme } from "@/themes";
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 import { api } from "@/lib/api";
 import type { StatusResponse, UpdateCheckResponse } from "@/lib/api";
+import {
+  PLUGIN_CHAT_OPEN_EVENT,
+  pluginChatPrompt,
+} from "@/lib/plugin-chat";
 
 function RootRedirect() {
   return <Navigate to="/sessions" replace />;
@@ -353,6 +357,28 @@ export default function App() {
   const { theme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const closeMobile = useCallback(() => setMobileOpen(false), []);
+  const [pluginChat, setPluginChat] = useState({
+    open: false,
+    prompt: "",
+    nonce: 0,
+  });
+  const closePluginChat = useCallback(() => {
+    setPluginChat((prev) => ({ ...prev, open: false }));
+  }, []);
+
+  useEffect(() => {
+    const onOpen = (event: Event) => {
+      const prompt = pluginChatPrompt(event);
+      if (!prompt) return;
+      setPluginChat((prev) => ({
+        open: true,
+        prompt,
+        nonce: prev.nonce + 1,
+      }));
+    };
+    window.addEventListener(PLUGIN_CHAT_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(PLUGIN_CHAT_OPEN_EVENT, onOpen);
+  }, []);
 
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -377,6 +403,8 @@ export default function App() {
   const isDocsRoute = pathname === "/docs" || pathname === "/docs/";
   const normalizedPath = pathname.replace(/\/$/, "") || "/";
   const isChatRoute = normalizedPath === "/chat";
+  const isPluginChatOverlay = pluginChat.open && !isChatRoute;
+  const isChatSurfaceActive = isChatRoute || isPluginChatOverlay;
   const embeddedChat = isDashboardEmbeddedChatEnabled();
 
   // `dashboard.show_token_analytics` gates the Analytics nav item.  The
@@ -718,7 +746,8 @@ export default function App() {
           <PageHeaderProvider pluginTabs={pluginTabMeta}>
             <div
               className={cn(
-                "relative z-2 flex min-w-0 min-h-0 flex-1 flex-col",
+                "relative flex min-w-0 min-h-0 flex-1 flex-col",
+                isPluginChatOverlay ? "z-[70]" : "z-2",
                 "px-3 sm:px-6",
                 isChatRoute
                   ? "pb-0 pt-1 sm:pt-2 lg:pt-4"
@@ -753,7 +782,7 @@ export default function App() {
                 {embeddedChat &&
                   !chatOverriddenByPlugin &&
                   (pluginsLoading ? (
-                    isChatRoute ? (
+                    isChatSurfaceActive ? (
                       <div
                         className="flex min-h-0 min-w-0 flex-1 items-center justify-center"
                         aria-busy="true"
@@ -767,14 +796,43 @@ export default function App() {
                     ) : null
                   ) : (
                     <div
-                      data-chat-active={isChatRoute ? "true" : "false"}
+                      data-chat-active={isChatSurfaceActive ? "true" : "false"}
+                      data-chat-overlay={isPluginChatOverlay ? "true" : "false"}
                       className={cn(
                         "min-h-0 min-w-0",
-                        isChatRoute ? "flex flex-1 flex-col" : "hidden",
+                        isChatRoute && "flex flex-1 flex-col",
+                        isPluginChatOverlay &&
+                          "fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-background px-3 pb-[env(safe-area-inset-bottom,0px)] pt-2 sm:px-6 sm:pt-4",
+                        !isChatSurfaceActive && "hidden",
                       )}
-                      aria-hidden={!isChatRoute}
+                      aria-hidden={!isChatSurfaceActive}
                     >
-                      <ChatPage isActive={isChatRoute} />
+                      {isPluginChatOverlay ? (
+                        <div className="mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold">
+                              Jarvis in Mikael OS
+                            </div>
+                            <div className="truncate text-xs text-muted-foreground">
+                              Dieselbe Hermes-Sitzung mit Memory und Werkzeugen
+                            </div>
+                          </div>
+                          <Button
+                            outlined
+                            size="sm"
+                            onClick={closePluginChat}
+                            aria-label="Zu Mikael OS zurückkehren"
+                          >
+                            <X className="mr-1 h-4 w-4" />
+                            Zurück
+                          </Button>
+                        </div>
+                      ) : null}
+                      <ChatPage
+                        isActive={isChatSurfaceActive}
+                        externalSeed={pluginChat.prompt}
+                        externalSeedNonce={pluginChat.nonce}
+                      />
                     </div>
                   ))}
               </div>

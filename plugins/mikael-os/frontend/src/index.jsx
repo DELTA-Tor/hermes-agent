@@ -2667,7 +2667,7 @@ function ReviewSurface(props) {
 // are mirrored in the copy so the surface teaches the method, not just numbers.
 // ===========================================================================
 const COACH_TABS = [
-  { id: "countdown", icon: "calendar-clock", label: "Countdown" },
+  { id: "countdown", icon: "calendar-clock", label: "Klausur-Countdown" },
   { id: "feynman", icon: "message-square", label: "Feynman" },
   { id: "plan", icon: "list-todo", label: "Lernplan" },
   { id: "material", icon: "file-plus", label: "PDFs" },
@@ -5558,10 +5558,13 @@ function MikaelOS() {
     if (e && e.preventDefault) e.preventDefault();
     const objective = command.trim();
     if (!objective) return;
-    // Hand the turn to Hermes' real persistent TUI session. ChatPage consumes
-    // ``prompt`` once after its authenticated PTY opens, then removes it from
-    // the URL. This preserves the normal Jarvis memory/tool/session path.
-    window.location.assign("/chat?prompt=" + encodeURIComponent(objective));
+    // Keep MIKAEL OS as the stable front door. New dashboard hosts open their
+    // already-mounted Hermes chat over this page; older hosts fall back to the
+    // compatible /chat seed route. Both paths use the normal Jarvis
+    // memory/tool/session chain rather than a plugin-local imitation.
+    const sdk = (typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__) || {};
+    if (typeof sdk.openChat === "function") sdk.openChat(objective);
+    else window.location.assign("/chat?prompt=" + encodeURIComponent(objective));
     setCommand("");
   }, [command]);
 
