@@ -83,6 +83,10 @@ def test_gated_status_is_public(gated_app):
     "/api/model/info",
     "/api/dashboard/themes",
     "/api/dashboard/plugins",
+    "/api/plugins/mikael-os/pwa/manifest.webmanifest",
+    "/api/plugins/mikael-os/pwa/sw.js",
+    "/api/plugins/mikael-os/pwa/offline.html",
+    "/api/plugins/mikael-os/pwa/icon.svg",
 ])
 def test_other_public_api_paths_are_public_under_gate(gated_app, path):
     """The remaining ``PUBLIC_API_PATHS`` entries must also bypass the
@@ -105,6 +109,15 @@ def test_other_public_api_paths_are_public_under_gate(gated_app, path):
             f"{path} redirected to {location} — should be public, "
             "not bounced to /login"
         )
+
+
+def test_mikael_os_pwa_allowlist_is_exact(gated_app):
+    """Publishing PWA assets must not expose neighbouring Mikael OS APIs."""
+    response = gated_app.get(
+        "/api/plugins/mikael-os/pwa/private-state",
+        follow_redirects=False,
+    )
+    assert response.status_code == 401
 
 
 def test_gated_html_redirects_to_login(gated_app):
