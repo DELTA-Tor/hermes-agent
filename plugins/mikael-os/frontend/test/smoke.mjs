@@ -140,6 +140,8 @@ const mustContain = [
   "Aktive Missionen", "Missions-Evidenz", "Kalender & Aufgaben",
   "Gezielte Freigaben", "System & Services", "Surface-Katalog",
   "Native API zuerst", "Computer Use", "Nachricht an Jarvis",
+  "Alle Lebensbereiche", "Dashboards, Quellen und Bedienwege",
+  "Zukunftsradar", "Vollständiger Abschluss",
 ];
 const missing = mustContain.filter((s) => !html.includes(s));
 if (missing.length) {
@@ -152,12 +154,24 @@ if (missing.length) {
 // cannot flip). Assert on the bundle SOURCE that this content is still present —
 // so a regression that drops the Konstellation is still caught.
 const constellationMust = [
-  "Konzeptdaten", "JARVIS", "Engineering / Codex",
-  "Feature: KI Fokus-Modus", "Modul hinzufügen", "Ziehen um neu zu ordnen",
+  "Quelle wird geladen", "JARVIS", "Engineering / Codex",
+  "Keine bestätigte Quelle", "Modul hinzufügen", "Ziehen um neu zu ordnen",
 ];
 const constMissing = constellationMust.filter((s) => !code.includes(s));
 if (constMissing.length) {
   console.error("FAIL: bundle missing Konstellation-scene content:", constMissing);
+  process.exit(1);
+}
+const fakeDataMarkers = [
+  "Feature: KI Fokus-Modus",
+  "Rom · Städtereise",
+  "2.105 kcal",
+  "Sehr gute Ausgangslage für Deep Work",
+  "Morning Light & Bewegung",
+];
+const fakeDataLeak = fakeDataMarkers.filter((s) => code.includes(s));
+if (fakeDataLeak.length) {
+  console.error("FAIL: visible concept fixture values remain in the product bundle:", fakeDataLeak);
   process.exit(1);
 }
 

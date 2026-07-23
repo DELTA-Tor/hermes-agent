@@ -181,32 +181,31 @@ var MikaelOSPlugin = function() {
     });
   }
   const MODULES = [
-    { id: "tasks", title: "Aufgaben & Ziele", icon: "list-todo", accent: "amber", meta: "7 aktiv · 3 heute", metric: "7", metricSub: "aktiv · 3 heute", pos: { x: 47, y: 9 } },
-    { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "Anki-Sync bereit", metric: "—", metricSub: "Karten fällig", pos: { x: 67, y: 14 } },
-    { id: "risel", title: "Rise-L Prozesse", icon: "server", accent: "blue", meta: "5 Workflows aktiv", metric: "5", metricSub: "Workflows aktiv", pos: { x: 86, y: 22 } },
-    { id: "travel", title: "Reisen", icon: "plane", accent: "cyan", meta: "Rom · 18. Jun", metric: "3 T", metricSub: "bis Rom", pos: { x: 89, y: 41 } },
-    { id: "nutrition", title: "Ernährung", icon: "leaf", accent: "emerald", meta: "2.105 kcal", metric: "2.105", metricSub: "kcal heute", pos: { x: 89, y: 58 } },
+    { id: "tasks", title: "Aufgaben & Ziele", icon: "list-todo", accent: "amber", meta: "Quelle wird geprüft", metric: "—", metricSub: "Aufgaben", pos: { x: 47, y: 9 } },
+    { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "Quelle wird geprüft", metric: "—", metricSub: "Lernen", pos: { x: 67, y: 14 } },
+    { id: "risel", title: "Rise-L Prozesse", icon: "server", accent: "blue", meta: "Quelle wird geprüft", metric: "—", metricSub: "Prozesse", pos: { x: 86, y: 22 } },
+    { id: "travel", title: "Reisen", icon: "plane", accent: "cyan", meta: "Noch nicht verbunden", metric: "—", metricSub: "Reisen", pos: { x: 89, y: 41 } },
+    { id: "nutrition", title: "Ernährung", icon: "leaf", accent: "emerald", meta: "Noch nicht verbunden", metric: "—", metricSub: "Ernährung", pos: { x: 89, y: 58 } },
     { id: "company", title: "Firma-Signale", icon: "building-2", accent: "neutral", meta: "Nur lesen", metric: "—", metricSub: "Nur lesen", readOnly: true, pos: { x: 85, y: 75 } },
-    { id: "journal", title: "Journal", icon: "notebook-pen", accent: "neutral", meta: "1 Eintrag heute", metric: "1", metricSub: "Eintrag heute", pos: { x: 13, y: 70 } },
-    { id: "body", title: "Körper / WHOOP", icon: "heart-pulse", accent: "emerald", meta: "Recovery 82%", metric: "82 %", metricSub: "Recovery", pos: { x: 9, y: 51 } },
-    { id: "kalender", title: "Kalender", icon: "calendar-days", accent: "cyan", meta: "Nächster · 10:30", metric: "10:30", metricSub: "nächstes Ereignis", pos: { x: 11, y: 32 } },
-    { id: "today", title: "Heute", icon: "sun", accent: "cyan", meta: "9 Ereignisse", metric: "9", metricSub: "Ereignisse", pos: { x: 26, y: 15 } }
+    { id: "journal", title: "Journal", icon: "notebook-pen", accent: "neutral", meta: "Noch nicht verbunden", metric: "—", metricSub: "Journal", pos: { x: 13, y: 70 } },
+    { id: "body", title: "Körper / WHOOP", icon: "heart-pulse", accent: "emerald", meta: "Quelle wird geprüft", metric: "—", metricSub: "Körperstatus", pos: { x: 9, y: 51 } },
+    { id: "kalender", title: "Kalender", icon: "calendar-days", accent: "cyan", meta: "Quelle wird geprüft", metric: "—", metricSub: "nächstes Ereignis", pos: { x: 11, y: 32 } },
+    { id: "today", title: "Heute", icon: "sun", accent: "cyan", meta: "Quelle wird geprüft", metric: "—", metricSub: "Ereignisse", pos: { x: 26, y: 15 } }
   ];
-  const TIMELINE = [
-    { id: "briefing", period: "morgen", time: "06:45", end: "07:00", title: "Morgenbriefing", sub: "Tagesstart & Fokus setzen", icon: "sun", accent: "cyan", moduleId: "today" },
-    { id: "training", period: "morgen", time: "07:30", end: "08:30", title: "Training", sub: "Hyrox + Mobility", icon: "activity", accent: "emerald", moduleId: "body" },
-    { id: "deep1", period: "morgen", time: "09:00", end: "11:00", title: "Deep Work Block 1", sub: "Codex Build Sprint", icon: "code-xml", accent: "cyan", moduleId: "engineering" },
-    { id: "learn", period: "morgen", time: "11:00", end: "11:45", title: "Lernplan", sub: "KI-Systeme · Kapitel 4", icon: "graduation-cap", accent: "violet", moduleId: "learning" },
-    { id: "claude", period: "mittag", time: "11:45", end: "12:30", title: "Claude Mission", sub: "Research & Draft", icon: "sparkles", accent: "violet", moduleId: "engineering" },
-    { id: "biz", period: "mittag", time: "13:00", end: "13:45", title: "Business Review", sub: "KPIs & Team-Sync", icon: "building-2", accent: "amber", moduleId: "company" },
-    { id: "focus2", period: "mittag", time: "14:30", end: "16:00", title: "Focus Block 2", sub: "Engineering & Delivery", icon: "zap", accent: "cyan", moduleId: "engineering" },
-    { id: "riselp", period: "mittag", time: "16:00", end: "16:30", title: "Rise-L Process", sub: "Weekly Verification", icon: "server", accent: "emerald", moduleId: "risel" },
-    { id: "route", period: "abend", time: "17:00", end: "18:30", title: "Route & Reisen", sub: "Flughafen ZRH – MUC", icon: "plane", accent: "amber", moduleId: "travel" },
-    { id: "dinner", period: "abend", time: "19:00", end: "21:00", title: "Abendessen", sub: "High Protein + Greens", icon: "utensils", accent: "emerald", moduleId: "nutrition" },
-    { id: "journalx", period: "abend", time: "21:30", end: "22:00", title: "Journal & Reflexion", sub: "Tagesreview & Dankbarkeit", icon: "notebook-pen", accent: "violet", moduleId: "journal" }
-  ];
-  const TODAY = { long: "Donnerstag, 26. Juni" };
-  const TIMELINE_NOW = { after: "riselp", time: "16:42", suggestion: "Kurze Pause vor der Fahrt einlegen.", tag: "Hydration" };
+  ({
+    long: new Intl.DateTimeFormat("de-DE", {
+      timeZone: "Europe/Berlin",
+      weekday: "long",
+      day: "2-digit",
+      month: "long"
+    }).format(/* @__PURE__ */ new Date()),
+    short: new Intl.DateTimeFormat("de-DE", {
+      timeZone: "Europe/Berlin",
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit"
+    }).format(/* @__PURE__ */ new Date())
+  });
   const CORE_POS = { x: 50, y: 33 };
   const PERIODS = [
     { id: "morgen", label: "Morgen", icon: "sun" },
@@ -214,161 +213,17 @@ var MikaelOSPlugin = function() {
     { id: "abend", label: "Abend", icon: "moon-star" }
   ];
   const LENS = {
-    engineering: {
-      icon: "code-xml",
-      accent: "violet",
-      title: "Engineering / Codex",
-      sub: "Fokus-Linse · 4 Missionen",
-      source: "GitHub",
-      freshness: "vor 7 Min",
-      permission: "Lesen & Schreiben",
-      rows: [
-        { icon: "rocket", accent: "emerald", title: "Feature: KI Fokus-Modus", sub: "Sprint 42 · Frontend", status: "running", statusLabel: "Läuft", value: "68 %" },
-        { icon: "lock", accent: "amber", title: "API: Permissions Service", sub: "Backend · Sicherheit", status: "waiting", statusLabel: "Wartet auf Review", value: "—" },
-        { icon: "circle-check-big", accent: "cyan", title: "Refactor: Workspace Core", sub: "Architektur", status: "verified", statusLabel: "Verifiziert", value: "100 %" },
-        { icon: "flask-round", accent: "emerald", title: "Test Suite: E2E Stabilität", sub: "Qualitätssicherung", status: "running", statusLabel: "Läuft", value: "24 %" }
-      ]
-    },
-    today: {
-      icon: "sun",
-      accent: "cyan",
-      title: "Heute",
-      sub: "Tagesplan · 9 Ereignisse",
-      source: "Kalender",
-      freshness: "vor 2 Min",
-      permission: "Nur lesen",
-      rows: [
-        { icon: "sun", accent: "cyan", title: "Morning Light & Bewegung", sub: "20 Min · Tagesstart", value: "07:30" },
-        { icon: "brain", accent: "emerald", title: "Strategy Deep Work", sub: "90 Min · Fokus", value: "09:00" },
-        { icon: "target", accent: "violet", title: "Leadership Sync", sub: "45 Min · Team", value: "12:30" },
-        { icon: "plane", accent: "cyan", title: "Kunden-Call · Projekt A", sub: "60 Min", value: "16:30" }
-      ]
-    },
-    tasks: {
-      icon: "target",
-      accent: "emerald",
-      title: "Aufgaben & Ziele",
-      sub: "7 aktiv · 3 heute fällig",
-      source: "Personal OS",
-      freshness: "vor 5 Min",
-      permission: "Lesen & Schreiben",
-      rows: [
-        { icon: "circle-check-big", accent: "emerald", title: "Strategie Review", sub: "Diese Woche", status: "running", statusLabel: "Läuft", value: "60 %" },
-        { icon: "circle-check-big", accent: "amber", title: "Team Alignment", sub: "Diese Woche", status: "waiting", statusLabel: "Wartet", value: "30 %" },
-        { icon: "circle-check-big", accent: "violet", title: "Produkt Roadmap", sub: "Nächste Woche", value: "10 %" }
-      ]
-    },
-    learning: {
-      icon: "graduation-cap",
-      accent: "violet",
-      title: "Lernplan",
-      sub: "Spaced Repetition · Anki",
-      source: "anki-sync (read-only)",
-      freshness: "—",
-      permission: "Nur lesen (mode=ro)",
-      rows: [
-        { icon: "graduation-cap", accent: "violet", title: "Fällig heute", sub: "Anki-Karten", value: "—" },
-        { icon: "target", accent: "cyan", title: "Retention", sub: "letzte 30 Tage", value: "—" },
-        { icon: "flame", accent: "violet", title: "Streak", sub: "Lern-Tage in Folge", value: "—" }
-      ]
-    },
-    risel: {
-      icon: "server",
-      accent: "amber",
-      title: "Rise-L Prozesse",
-      sub: "5 Workflows aktiv",
-      source: "systemd --user",
-      freshness: "07:15",
-      permission: "Nur lesen",
-      rows: [
-        { icon: "server", accent: "emerald", title: "Systeme online", sub: "Alle Kernsysteme stabil", status: "verified", statusLabel: "Verifiziert", value: "OK" },
-        { icon: "activity", accent: "amber", title: "Mail-Sync · Dispatch-Pulse", sub: "Letzter Lauf heute", value: "5" },
-        { icon: "clock", accent: "cyan", title: "Letzter Check", sub: "Heute", value: "07:15" }
-      ]
-    },
-    travel: {
-      icon: "plane",
-      accent: "cyan",
-      title: "Reisen",
-      sub: "Nächste Reise · Rom",
-      source: "Reiseplan",
-      freshness: "vor 3 Std",
-      permission: "Nur lesen",
-      rows: [
-        { icon: "plane", accent: "cyan", title: "Rom · Städtereise", sub: "Abflug 18. Jun · 08:20", value: "3 T" },
-        { icon: "map", accent: "emerald", title: "Hotel bestätigt", sub: "Trastevere", status: "verified", statusLabel: "Verifiziert", value: "OK" },
-        { icon: "clock", accent: "amber", title: "Check-in öffnet", sub: "17. Jun", value: "—" }
-      ]
-    },
-    nutrition: {
-      icon: "leaf",
-      accent: "emerald",
-      title: "Ernährung",
-      sub: "Heute · 2.105 kcal",
-      source: "Ernährungs-Log",
-      freshness: "vor 40 Min",
-      permission: "Lesen & Schreiben",
-      rows: [
-        { icon: "utensils", accent: "emerald", title: "Protein", sub: "Ziel 160 g", status: "running", statusLabel: "Läuft", value: "142 g" },
-        { icon: "leaf", accent: "cyan", title: "Wasser", sub: "Ziel 3 L", value: "2,1 L" },
-        { icon: "activity", accent: "amber", title: "Koffein", sub: "Letzte Tasse 14:00", value: "2×" }
-      ]
-    },
-    company: {
-      icon: "building-2",
-      accent: "neutral",
-      title: "Firma-Signale",
-      sub: "Nur lesen · Approval-Cards",
-      source: "Delta-Tor",
-      freshness: "vor 12 Min",
-      permission: "Nur lesen",
-      rows: [
-        { icon: "activity", accent: "emerald", title: "Team Momentum", sub: "Auslastung stabil", status: "verified", statusLabel: "Stark", value: "" },
-        { icon: "message-square", accent: "cyan", title: "Stakeholder Feedback", sub: "360 Feedback", value: "Positiv" },
-        { icon: "shield-check", accent: "amber", title: "Risiko Radar", sub: "Keine Eskalation", value: "Niedrig" }
-      ]
-    },
-    kalender: {
-      icon: "calendar-days",
-      accent: "cyan",
-      title: "Kalender / Route",
-      sub: "Nächster Termin · 10:30",
-      source: "Kalender",
-      freshness: "vor 2 Min",
-      permission: "Nur lesen",
-      rows: [
-        { icon: "target", accent: "cyan", title: "Leadership Sync", sub: "Team-Update", value: "10:30" },
-        { icon: "brain", accent: "emerald", title: "Strategie Review", sub: "Q2 Planung", value: "14:00" },
-        { icon: "plane", accent: "amber", title: "Kunden-Call · Projekt A", sub: "Anfahrt 36 Min · Leichtverkehr", value: "16:30" }
-      ]
-    },
-    body: {
-      icon: "heart-pulse",
-      accent: "emerald",
-      title: "Körper / WHOOP",
-      sub: "Recovery 82% · Gut",
-      source: "WHOOP",
-      freshness: "Stand 06:12",
-      permission: "Nur lesen",
-      rows: [
-        { icon: "heart-pulse", accent: "emerald", title: "Recovery", sub: "Bereit für hohe Belastung", status: "verified", statusLabel: "Gut", value: "82 %" },
-        { icon: "moon", accent: "cyan", title: "Schlaf", sub: "Erholsam", value: "7 h 26 m" },
-        { icon: "activity", accent: "amber", title: "Ruhepuls · Belastung", sub: "48 bpm · Strain 32", value: "+12 %" }
-      ]
-    },
-    journal: {
-      icon: "notebook-pen",
-      accent: "cyan",
-      title: "Journal",
-      sub: "1 Eintrag heute",
-      source: "Journal",
-      freshness: "vor 6 Std",
-      permission: "Lesen & Schreiben",
-      rows: [
-        { icon: "notebook-pen", accent: "cyan", title: "Wie fühlt sich Fokus heute an?", sub: "Sprach- oder Text-Eintrag", value: "—" },
-        { icon: "audio-lines", accent: "violet", title: "Voice-Memo", sub: "Heute 06:40", value: "0:48" }
-      ]
-    }
+    engineering: { icon: "code-xml", accent: "violet", title: "Engineering / Codex", sub: "mission.v2", rows: [] },
+    today: { icon: "sun", accent: "cyan", title: "Heute", sub: "Kalender-Projektion", rows: [] },
+    tasks: { icon: "target", accent: "emerald", title: "Aufgaben & Ziele", sub: "mission.v2 + Policy", rows: [] },
+    learning: { icon: "graduation-cap", accent: "violet", title: "Lernplan", sub: "Anki + Crashcamp", rows: [] },
+    risel: { icon: "server", accent: "amber", title: "Rise-L Prozesse", sub: "systemd + Registry", rows: [] },
+    travel: { icon: "plane", accent: "cyan", title: "Reisen", sub: "Noch nicht verbunden", rows: [] },
+    nutrition: { icon: "leaf", accent: "emerald", title: "Ernährung", sub: "Noch nicht verbunden", rows: [] },
+    company: { icon: "building-2", accent: "neutral", title: "Firma-Signale", sub: "Read-only", rows: [] },
+    kalender: { icon: "calendar-days", accent: "cyan", title: "Kalender", sub: "calendar-evidence", rows: [] },
+    body: { icon: "heart-pulse", accent: "emerald", title: "Körper / WHOOP", sub: "WHOOP-Connector", rows: [] },
+    journal: { icon: "notebook-pen", accent: "cyan", title: "Journal", sub: "Noch nicht verbunden", rows: [] }
   };
   const NOT_WIRED = "Noch nicht verbunden — in dieser Fläche keine Ausführung.";
   const LENS_TOOLS = [
@@ -438,6 +293,7 @@ var MikaelOSPlugin = function() {
   const REFLEXION_OVERVIEW_API = PLUGIN_API + "/reflexion/overview";
   const GESUNDHEIT_OVERVIEW_API = PLUGIN_API + "/gesundheit/overview";
   const BETRIEB_OVERVIEW_API = PLUGIN_API + "/betrieb/overview";
+  const LIFE_OVERVIEW_API = PLUGIN_API + "/life/overview";
   const MAC_PROPOSE_API = PLUGIN_API + "/betrieb/mac/propose";
   const PWA_MANIFEST_HREF = PLUGIN_API + "/pwa/manifest.webmanifest";
   const PWA_SW_HREF = PLUGIN_API + "/pwa/sw.js";
@@ -478,6 +334,13 @@ var MikaelOSPlugin = function() {
     if (typeof sdk.fetchJSON === "function") return Promise.resolve(sdk.fetchJSON(url));
     if (typeof fetch === "function") return fetch(url).then((r) => r.ok ? r.json() : Promise.reject(r.status));
     return Promise.reject(new Error("no transport"));
+  }
+  function openJarvisChat(objective) {
+    const text = String(objective || "").trim();
+    if (!text || typeof window === "undefined") return;
+    const sdk = window.__HERMES_PLUGIN_SDK__ || {};
+    if (typeof sdk.openChat === "function") sdk.openChat(text);
+    else window.location.assign("/chat?prompt=" + encodeURIComponent(text));
   }
   function sdkRequestJSON(url, method, body) {
     const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
@@ -1017,13 +880,13 @@ var MikaelOSPlugin = function() {
       accent: L && L.accent || fixture.accent,
       title: L && L.title || fixture.title,
       sub: L && L.meta || fixture.sub,
-      rows: fixture.rows,
-      source: "Konzept",
-      freshness: "Konzeptdaten",
-      permission: fixture.permission,
-      state: L ? "fresh" : "loading",
-      demo: true,
-      note: L && L._note
+      rows: [],
+      source: L && L._source || "Quelle wird geladen",
+      freshness: "—",
+      permission: L && L._permission || "—",
+      state: L ? L._state || "empty" : "loading",
+      demo: false,
+      note: L && L._note || "Keine bestätigte Quelle; keine Konzeptwerte angezeigt."
     };
   }
   const LENS_MAX_ROWS = 4;
@@ -1133,6 +996,68 @@ var MikaelOSPlugin = function() {
       )
     );
   }
+  function berlinTimeFromIso(value) {
+    if (!value || /^\d{4}-\d{2}-\d{2}$/.test(value)) return "ganztägig";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat("de-DE", {
+      timeZone: "Europe/Berlin",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(date);
+  }
+  function berlinDayFromIso(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("de-DE", {
+      timeZone: "Europe/Berlin",
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit"
+    }).format(date);
+  }
+  function timelinePeriod(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "morgen";
+    const hour = Number(new Intl.DateTimeFormat("de-DE", {
+      timeZone: "Europe/Berlin",
+      hour: "2-digit",
+      hour12: false
+    }).format(date));
+    if (hour < 12) return "morgen";
+    if (hour < 18) return "mittag";
+    return "abend";
+  }
+  function realTimelineEvents(byId) {
+    const sources = [byId.today, byId.kalender].filter(Boolean);
+    const seen = /* @__PURE__ */ new Set();
+    const events = [];
+    sources.forEach((module) => {
+      const rows = Array.isArray(module._rows) ? module._rows : [];
+      rows.forEach((row, index) => {
+        if (!row || !row.startsAt) return;
+        const key = [row.startsAt, row.title, row.workspace].join("|");
+        if (seen.has(key)) return;
+        seen.add(key);
+        const company = row.workspace === "company_signal";
+        events.push({
+          id: "calendar-" + String(row.startsAt) + "-" + index + "-" + (company ? "company" : "private"),
+          period: timelinePeriod(row.startsAt),
+          time: berlinTimeFromIso(row.startsAt),
+          end: row.endsAt ? berlinTimeFromIso(row.endsAt) : "—",
+          day: berlinDayFromIso(row.startsAt),
+          title: row.title || "(ohne Titel)",
+          sub: row.sub || (company ? "Firma-Signal · nur lesen" : "Privat"),
+          icon: company ? "building-2" : "calendar-days",
+          accent: company ? "neutral" : "cyan",
+          moduleId: "kalender",
+          startsAt: row.startsAt
+        });
+      });
+    });
+    return events.sort((a, b) => String(a.startsAt).localeCompare(String(b.startsAt))).slice(0, 24);
+  }
   function TimelineCard(props) {
     const e = props.event;
     const m = props.module;
@@ -1153,7 +1078,7 @@ var MikaelOSPlugin = function() {
           "span",
           { className: "mos__tl-card-top" },
           h("span", { className: "mos__tl-card-title" }, e.title),
-          h("span", { className: "mos__tl-card-range" }, e.time + " – " + e.end)
+          h("span", { className: "mos__tl-card-range" }, [e.day, e.time + (e.end !== "—" ? " – " + e.end : "")].filter(Boolean).join(" · "))
         ),
         h("span", { className: "mos__tl-card-sub" }, e.sub),
         // Keep the rail calm (reference has no pills on rows): only the focused card
@@ -1164,31 +1089,25 @@ var MikaelOSPlugin = function() {
       )
     );
   }
-  function TimelineNow() {
-    return h(
-      "div",
-      { className: "mos__tl-row mos__tl-row--now" },
-      h("span", { className: "mos__tl-time mos__tl-time--now" }, TIMELINE_NOW.time),
-      h("span", { className: "mos__tl-now-node", "aria-hidden": "true" }, "J"),
-      h(
-        "div",
-        { className: "mos__tl-now-card" },
-        h("span", { className: "mos__tl-now-k" }, h(Icon, { name: "orbit", size: 13 }), "Jarvis · Vorschlag"),
-        h(
-          "span",
-          { className: "mos__tl-now-text" },
-          TIMELINE_NOW.suggestion,
-          h("span", { className: "mos__tl-now-tag" }, "+" + TIMELINE_NOW.tag)
-        ),
-        h("span", { className: "mos__pip mos__pip--konzept" }, h(Icon, { name: "flask-conical", size: 11 }), "schreibt nichts")
-      )
-    );
-  }
   function TimelineAxis(props) {
     const rows = [];
+    const events = Array.isArray(props.events) ? props.events : realTimelineEvents(props.byId || {});
+    if (!events.length) {
+      return h(
+        "div",
+        { className: "mos__tl-axis mos__tl-axis--empty" },
+        h(
+          "div",
+          { className: "mos__vcd-empty" },
+          h(Icon, { name: "calendar-days", size: 18 }),
+          h("span", null, "Keine bestätigten Kalenderereignisse in der Projektion."),
+          h("small", null, "Es werden keine Beispieltermine eingesetzt.")
+        )
+      );
+    }
     PERIODS.forEach((per) => {
       rows.push(h("div", { key: "p-" + per.id, className: "mos__tl-period" }, h(Icon, { name: per.icon, size: 14 }), per.label));
-      TIMELINE.filter((e) => e.period === per.id).forEach((e) => {
+      events.filter((e) => e.period === per.id).forEach((e) => {
         rows.push(
           h(
             "div",
@@ -1198,7 +1117,6 @@ var MikaelOSPlugin = function() {
             h(TimelineCard, { event: e, module: props.byId[e.moduleId], active: props.activeEventId === e.id, onActivate: props.onActivate })
           )
         );
-        if (props.showNow && e.id === TIMELINE_NOW.after) rows.push(h(TimelineNow, { key: "now" }));
       });
     });
     rows.push(h("div", { key: "p-night", className: "mos__tl-period mos__tl-period--last" }, h(Icon, { name: "moon", size: 14 }), "Nacht"));
@@ -1229,13 +1147,26 @@ var MikaelOSPlugin = function() {
   function TimelineFocusPanel(props) {
     const e = props.event;
     const byId = props.byId;
+    if (!e) {
+      return h(
+        "aside",
+        { className: "mos__tlfocus", "aria-label": "Kalenderstatus" },
+        h(
+          "div",
+          { className: "mos__vcd-empty" },
+          h(Icon, { name: "calendar-days", size: 18 }),
+          h("span", null, "Kein Termin ausgewählt."),
+          h("small", null, "Kalender und Aufgaben bleiben unten vollständig sichtbar.")
+        )
+      );
+    }
     const linked = byId[e.moduleId];
     const cal = byId["kalender"];
     const tasks = byId["tasks"];
     const body = byId["body"];
     const liveSignals = Object.keys(byId).map((k) => byId[k]).filter((m) => m && !m._demo && m.title && m.icon && (m._state === "fresh" || m._state === "stale" || m._state === "partial")).sort((a, b) => (a._state === "fresh" ? -1 : 1) - (b._state === "fresh" ? -1 : 1)).slice(0, 4);
-    const calRows = (cal && cal._rows && cal._rows.length ? cal._rows : LENS.kalender.rows).slice(0, 3);
-    const topRows = (tasks && tasks._rows && tasks._rows.length ? tasks._rows : LENS.tasks.rows).slice(0, 3);
+    const calRows = (cal && cal._rows && cal._rows.length ? cal._rows : []).slice(0, 3);
+    const topRows = (tasks && tasks._rows && tasks._rows.length ? tasks._rows : []).slice(0, 3);
     return h(
       "aside",
       { className: "mos__tlfocus", "aria-label": "Fokus: " + e.title },
@@ -1354,18 +1285,6 @@ var MikaelOSPlugin = function() {
             )
           );
         }(),
-        // Jarvis Empfehlung
-        h(
-          "section",
-          { className: "mos__tlfocus-sec mos__tlfocus-rec" },
-          h("h3", { className: "mos__tlfocus-h3" }, h(Icon, { name: "orbit", size: 14 }), "Jarvis Empfehlung"),
-          h(
-            "p",
-            { className: "mos__tlfocus-rec-text" },
-            "Sehr gute Ausgangslage für Deep Work am Vormittag. Plane Fokusblöcke vor 11:30 und schütze deine Energie. Nachmittags Meetings & Kommunikation."
-          ),
-          h("span", { className: "mos__pip mos__pip--konzept" }, h(Icon, { name: "flask-conical", size: 11 }), "schreibt nichts")
-        ),
         // Live-Signale — real read-model modules only (honest state + freshness)
         liveSignals.length ? h(
           "section",
@@ -1407,7 +1326,15 @@ var MikaelOSPlugin = function() {
     );
   }
   function TimelineScene(props) {
-    const focusEvent = TIMELINE.find((e) => e.moduleId === props.focusId) || TIMELINE.find((e) => e.id === TIMELINE_NOW.after) || TIMELINE[0];
+    const events = realTimelineEvents(props.byId || {});
+    const focusEvent = events.find((e) => e.moduleId === props.focusId) || events[0] || null;
+    const now = /* @__PURE__ */ new Date();
+    const today = new Intl.DateTimeFormat("de-DE", {
+      timeZone: "Europe/Berlin",
+      weekday: "long",
+      day: "2-digit",
+      month: "long"
+    }).format(now);
     return h(
       "div",
       { className: "mos__timeline" },
@@ -1422,10 +1349,15 @@ var MikaelOSPlugin = function() {
             "span",
             { className: "mos__tl-head-titles" },
             h("span", { className: "mos__tl-head-title" }, "Living Timeline"),
-            h("span", { className: "mos__tl-head-sub" }, TODAY.long + " · Morgen → Nacht")
+            h("span", { className: "mos__tl-head-sub" }, today + " · echte Kalender-Projektion")
           )
         ),
-        h("div", { className: "mos__tl-scroll" }, h(TimelineAxis, { byId: props.byId, activeEventId: focusEvent.id, onActivate: props.onActivate, showNow: true }))
+        h("div", { className: "mos__tl-scroll" }, h(TimelineAxis, {
+          byId: props.byId,
+          events,
+          activeEventId: focusEvent ? focusEvent.id : null,
+          onActivate: props.onActivate
+        }))
       ),
       h(TimelineFocusPanel, { event: focusEvent, byId: props.byId, onClose: props.onClose })
     );
@@ -5472,6 +5404,325 @@ var MikaelOSPlugin = function() {
       )
     );
   }
+  function sourceStateMeta(state) {
+    if (state === "fresh") return { label: "Live", tone: "verified" };
+    if (state === "partial" || state === "stale") return { label: "Teilweise", tone: "blue" };
+    if (state === "empty") return { label: "Leer", tone: "muted" };
+    if (state === "loading") return { label: "Lädt …", tone: "muted" };
+    return { label: "Nicht verbunden", tone: "amber" };
+  }
+  function LifeAtlas(props) {
+    const areas = props.life && Array.isArray(props.life.areas) ? props.life.areas : [];
+    return h(
+      "section",
+      { className: "mos__life-section", "aria-labelledby": "mos-life-title" },
+      h(
+        "header",
+        { className: "mos__life-heading" },
+        h(
+          "div",
+          null,
+          h("span", { className: "mos__life-kicker" }, "Persönliches System"),
+          h("h2", { id: "mos-life-title" }, "Alle Lebensbereiche — klar getrennt"),
+          h("p", null, "Mikael OS ordnet. Die jeweilige Quelle bleibt Wahrheit. Jarvis liest, steuert und belegt.")
+        ),
+        h(
+          "span",
+          { className: "mos__life-count" },
+          areas.length ? areas.filter((area) => area.lifecycle === "active").length + " aktiv · " + areas.length + " gesamt" : props.load === "loading" ? "Lädt …" : "Nicht erreichbar"
+        )
+      ),
+      areas.length ? h(
+        "div",
+        { className: "mos__life-grid" },
+        areas.map((area) => {
+          const state = sourceStateMeta(area.state);
+          return h(
+            "article",
+            { key: area.id, className: "mos__life-card is-" + area.lifecycle },
+            h(
+              "div",
+              { className: "mos__life-cardtop" },
+              h("span", { className: "mos__life-icon" }, h(Icon, { name: area.icon || "layers", size: 18 })),
+              h(
+                "div",
+                { className: "mos__life-title" },
+                h("strong", null, area.title),
+                h("span", null, area.lifecycle === "active" ? "Aktiver Bereich" : "Erschließbar")
+              ),
+              h(
+                "span",
+                { className: "mos__pip mos__pip--" + state.tone },
+                h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+                state.label
+              )
+            ),
+            h(
+              "div",
+              { className: "mos__life-coverage" },
+              h("span", null, area.connectedSources + "/" + area.sourceCount + " Quellen verbunden"),
+              h(
+                "span",
+                { className: "mos__life-bar", "aria-label": area.coverage + " Prozent Quellenabdeckung" },
+                h("span", { style: { width: Math.max(0, Math.min(100, area.coverage || 0)) + "%" } })
+              )
+            ),
+            h(
+              "p",
+              { className: "mos__life-sources", title: (area.sourceLabels || []).join(" · ") },
+              (area.sourceLabels || []).length ? area.sourceLabels.join(" · ") : "Noch keine Quelle"
+            ),
+            h(
+              "div",
+              { className: "mos__life-actions" },
+              area.scene ? h(
+                "button",
+                { type: "button", onClick: () => props.onOpen(area.scene) },
+                h(Icon, { name: "panels-top-left", size: 13 }),
+                "Ansehen"
+              ) : null,
+              h(
+                "button",
+                {
+                  type: "button",
+                  className: "is-jarvis",
+                  onClick: () => props.onJarvis(area.jarvisPrompt)
+                },
+                h(Icon, { name: "sparkles", size: 13 }),
+                "Mit Jarvis"
+              ),
+              h(
+                "button",
+                {
+                  type: "button",
+                  className: "is-manage",
+                  onClick: () => props.onJarvis(area.managePrompt),
+                  "aria-label": area.title + " verwalten"
+                },
+                h(Icon, { name: "settings", size: 13 })
+              )
+            )
+          );
+        })
+      ) : h(
+        "div",
+        { className: "mos__vcd-empty" },
+        h(Icon, { name: "layers", size: 18 }),
+        h("span", null, props.load === "loading" ? "Lebensbereiche werden geladen …" : "Life-Atlas nicht erreichbar."),
+        h("small", null, "Keine Ersatz- oder Beispieldaten.")
+      )
+    );
+  }
+  function DashboardObservatory(props) {
+    const dashboards = props.life && Array.isArray(props.life.dashboards) ? props.life.dashboards : [];
+    return h(
+      "section",
+      { className: "mos__life-section mos__dashboards", "aria-labelledby": "mos-dashboards-title" },
+      h(
+        "header",
+        { className: "mos__life-heading" },
+        h(
+          "div",
+          null,
+          h("span", { className: "mos__life-kicker" }, "Oberflächenatlas"),
+          h("h2", { id: "mos-dashboards-title" }, "Dashboards, Quellen und Bedienwege"),
+          h("p", null, "Live-Zustand über Rise-L-Loopback · Links ausschließlich Tailnet · dieselbe Jarvis-Lane")
+        ),
+        h(
+          "span",
+          { className: "mos__life-count" },
+          dashboards.length ? dashboards.filter((item) => item.reachable).length + "/" + dashboards.length + " erreichbar" : "Nicht geprüft"
+        )
+      ),
+      dashboards.length ? h(
+        "div",
+        { className: "mos__dashboard-grid" },
+        dashboards.map((item) => {
+          const meta = sourceStateMeta(item.state);
+          return h(
+            "article",
+            { key: item.id, className: "mos__dashboard-card" },
+            h(
+              "div",
+              { className: "mos__dashboard-head" },
+              h("span", { className: "mos__dashboard-icon" }, h(Icon, { name: item.icon || "monitor", size: 17 })),
+              h("div", null, h("strong", null, item.label), h("small", null, item.purpose)),
+              h(
+                "span",
+                { className: "mos__pip mos__pip--" + meta.tone },
+                h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+                meta.label
+              )
+            ),
+            h(
+              "dl",
+              { className: "mos__dashboard-meta" },
+              h("div", null, h("dt", null, "Wahrheit"), h("dd", null, item.truth)),
+              h("div", null, h("dt", null, "Bedienung"), h("dd", null, item.actionMode)),
+              h("div", null, h("dt", null, "Nutzer"), h("dd", null, (item.audiences || []).join(" · ")))
+            ),
+            h(
+              "div",
+              { className: "mos__dashboard-actions" },
+              item.url ? h(
+                "button",
+                {
+                  type: "button",
+                  onClick: () => props.onDashboard(item),
+                  disabled: !item.reachable
+                },
+                h(Icon, { name: "external-link", size: 13 }),
+                "Öffnen"
+              ) : null,
+              h(
+                "button",
+                {
+                  type: "button",
+                  className: "is-jarvis",
+                  onClick: () => props.onJarvis(item.jarvisPrompt)
+                },
+                h(Icon, { name: "sparkles", size: 13 }),
+                "Jarvis steuert"
+              )
+            )
+          );
+        })
+      ) : h(
+        "div",
+        { className: "mos__vcd-empty" },
+        h(Icon, { name: "monitor", size: 18 }),
+        h("span", null, props.load === "loading" ? "Dashboards werden geprüft …" : "Dashboard-Katalog nicht erreichbar."),
+        h("small", null, "Keine öffentliche Route wird angelegt.")
+      )
+    );
+  }
+  function FutureRadar(props) {
+    const radar = props.life && props.life.futureRadar;
+    const items = radar && Array.isArray(radar.items) ? radar.items : [];
+    return h(
+      "section",
+      { className: "mos__life-section mos__future", "aria-labelledby": "mos-future-title" },
+      h(
+        "header",
+        { className: "mos__life-heading" },
+        h(
+          "div",
+          null,
+          h("span", { className: "mos__life-kicker" }, "Vorausschau"),
+          h("h2", { id: "mos-future-title" }, "Zukunftsradar"),
+          h("p", null, "Bestätigte Termine und mission.v2-Arbeit — keine erfundenen Prognosen")
+        ),
+        h("button", {
+          type: "button",
+          className: "mos__life-jarvis",
+          onClick: () => props.onJarvis(
+            "Analysiere meinen Zukunftshorizont aus Kalender, Aufgaben, Zielen und Lernquellen. Trenne Fakten, Risiken, Chancen und Vorschläge; erfinde nichts."
+          )
+        }, h(Icon, { name: "radar", size: 14 }), "Mit Jarvis prüfen")
+      ),
+      items.length ? h(
+        "div",
+        { className: "mos__future-strip" },
+        items.slice(0, 12).map((item, index) => h(
+          "article",
+          { key: (item.kind || "item") + "-" + index, className: "mos__future-item" },
+          h(
+            "span",
+            { className: "mos__future-kind" },
+            h(Icon, { name: item.kind === "calendar" ? "calendar-days" : "rocket", size: 13 }),
+            item.kind === "calendar" ? "Termin" : "Mission"
+          ),
+          h("strong", null, item.title || "Ohne Titel"),
+          h("span", null, item.when || "Kein Zeitpunkt"),
+          h("small", null, item.workspace === "company_signal" ? "Firma-Signal · nur lesen" : "Privat")
+        ))
+      ) : h(
+        "div",
+        { className: "mos__vcd-empty" },
+        h(Icon, { name: "radar", size: 18 }),
+        h("span", null, "Keine bestätigten Zukunftssignale."),
+        h("small", null, "Kalender- und Missionsquellen bleiben maßgeblich.")
+      )
+    );
+  }
+  function FullCalendarTasks(props) {
+    const bundle = props.life && props.life.calendarAndTasks;
+    const calendar = bundle && bundle.calendar;
+    const tasks = bundle && bundle.tasks;
+    const columns = [
+      { id: "calendar", title: "Kalender", icon: "calendar-days", item: calendar },
+      { id: "tasks", title: "Aufgaben & Missionen", icon: "list-todo", item: tasks }
+    ];
+    return h(
+      "section",
+      { className: "mos__life-section mos__full-planner", "aria-labelledby": "mos-planner-title" },
+      h(
+        "header",
+        { className: "mos__life-heading" },
+        h(
+          "div",
+          null,
+          h("span", { className: "mos__life-kicker" }, "Vollständiger Abschluss"),
+          h("h2", { id: "mos-planner-title" }, "Kalender & Aufgaben"),
+          h("p", null, "Private Termine, Firma-Dispo und Missionen bleiben sichtbar getrennt")
+        ),
+        h("button", {
+          type: "button",
+          className: "mos__life-jarvis",
+          onClick: () => props.onJarvis(
+            "Öffne meine vollständige Kalender- und Aufgabenlage. Trenne private Termine, Firma-Dispo und Missionen. Hilf mir priorisieren und ändere nur über die zuständige Quelle."
+          )
+        }, h(Icon, { name: "sparkles", size: 14 }), "Planen mit Jarvis")
+      ),
+      h(
+        "div",
+        { className: "mos__planner-grid" },
+        columns.map((column) => {
+          const rows = column.item && Array.isArray(column.item.rows) ? column.item.rows : [];
+          const state = sourceStateMeta(column.item && column.item.state);
+          return h(
+            "article",
+            { key: column.id, className: "mos__planner-column" },
+            h(
+              "div",
+              { className: "mos__planner-head" },
+              h("span", null, h(Icon, { name: column.icon, size: 16 }), h("strong", null, column.title)),
+              h(
+                "span",
+                { className: "mos__pip mos__pip--" + state.tone },
+                h("span", { className: "mos__pip-dot", "aria-hidden": "true" }),
+                state.label
+              )
+            ),
+            rows.length ? h(
+              "div",
+              { className: "mos__planner-list" },
+              rows.slice(0, 16).map((row, index) => h(
+                "div",
+                {
+                  key: (row.missionId || row.startsAt || row.title || "row") + "-" + index,
+                  className: "mos__planner-row is-" + (row.workspace || "private")
+                },
+                h("span", { className: "mos__planner-rowicon" }, h(Icon, { name: row.icon || column.icon, size: 14 })),
+                h(
+                  "div",
+                  null,
+                  h("strong", null, row.title || "Ohne Titel"),
+                  h("small", null, row.sub || row.owner || (column.id === "calendar" ? "Privat" : "Mission"))
+                ),
+                h("span", { className: "mos__planner-value" }, row.value || row.statusLabel || "—")
+              ))
+            ) : h(
+              "div",
+              { className: "mos__vcd-empty" },
+              h("span", null, "Keine bestätigten Einträge."),
+              h("small", null, column.item && column.item.note ? column.item.note : "Quelle nicht verfügbar.")
+            )
+          );
+        })
+      )
+    );
+  }
   function VoiceCommandDeck(props) {
     const [voiceStatus, setVoiceStatus] = useState(null);
     return h(
@@ -5479,48 +5730,66 @@ var MikaelOSPlugin = function() {
       { className: "mos__vcd" },
       h(
         "div",
-        { className: "mos__vcd-main" },
-        h(RealtimeVoiceDeck, {
-          command: props.command,
-          onCommand: props.onCommand,
-          onTextFallback: props.onTextFallback,
-          onStatus: setVoiceStatus
-        }),
-        h(SurfaceCatalog, {
-          byId: props.byId,
-          firma: props.firma,
-          komm: props.komm,
-          sessions: props.sessions,
-          betrieb: props.betrieb,
-          onOpen: props.onOpen,
-          onComputerUse: props.onComputerUse
-        })
+        { className: "mos__vcd-above" },
+        h(
+          "div",
+          { className: "mos__vcd-main" },
+          h(RealtimeVoiceDeck, {
+            command: props.command,
+            onCommand: props.onCommand,
+            onTextFallback: props.onTextFallback,
+            onStatus: setVoiceStatus
+          }),
+          h(SurfaceCatalog, {
+            byId: props.byId,
+            firma: props.firma,
+            komm: props.komm,
+            sessions: props.sessions,
+            betrieb: props.betrieb,
+            onOpen: props.onOpen,
+            onComputerUse: props.onComputerUse
+          })
+        ),
+        h(
+          "aside",
+          { className: "mos__vcd-side" },
+          h(ActiveMissionsPanel, {
+            sessions: props.sessions,
+            load: props.sessionsLoad,
+            onOpen: () => props.onOpen("sessions")
+          }),
+          h(MissionEvidencePanel, {
+            sessions: props.sessions,
+            load: props.sessionsLoad,
+            onOpen: () => props.onOpen("sessions")
+          }),
+          h(CalendarTasksPanel, { byId: props.byId, onOpen: () => props.onOpen("timeline") }),
+          h(ApprovalGatePanel, {
+            approvals: props.cockpit.approvals,
+            onOpen: () => props.onOpen("approvals")
+          }),
+          h(SystemHealthPanel, {
+            betrieb: props.betrieb,
+            voice: voiceStatus,
+            loadState: props.load,
+            onOpen: () => props.onOpen("betrieb")
+          })
+        )
       ),
-      h(
-        "aside",
-        { className: "mos__vcd-side" },
-        h(ActiveMissionsPanel, {
-          sessions: props.sessions,
-          load: props.sessionsLoad,
-          onOpen: () => props.onOpen("sessions")
-        }),
-        h(MissionEvidencePanel, {
-          sessions: props.sessions,
-          load: props.sessionsLoad,
-          onOpen: () => props.onOpen("sessions")
-        }),
-        h(CalendarTasksPanel, { byId: props.byId, onOpen: () => props.onOpen("timeline") }),
-        h(ApprovalGatePanel, {
-          approvals: props.cockpit.approvals,
-          onOpen: () => props.onOpen("approvals")
-        }),
-        h(SystemHealthPanel, {
-          betrieb: props.betrieb,
-          voice: voiceStatus,
-          loadState: props.load,
-          onOpen: () => props.onOpen("betrieb")
-        })
-      )
+      h(LifeAtlas, {
+        life: props.life,
+        load: props.lifeLoad,
+        onOpen: props.onOpen,
+        onJarvis: props.onJarvis
+      }),
+      h(DashboardObservatory, {
+        life: props.life,
+        load: props.lifeLoad,
+        onDashboard: props.onDashboard,
+        onJarvis: props.onJarvis
+      }),
+      h(FutureRadar, { life: props.life, onJarvis: props.onJarvis }),
+      h(FullCalendarTasks, { life: props.life, onJarvis: props.onJarvis })
     );
   }
   function CockpitScene(props) {
@@ -5582,6 +5851,8 @@ var MikaelOSPlugin = function() {
     const [gesundheitLoad, setGesundheitLoad] = useState("loading");
     const [betrieb, setBetrieb] = useState(null);
     const [betriebLoad, setBetriebLoad] = useState("loading");
+    const [life, setLife] = useState(null);
+    const [lifeLoad, setLifeLoad] = useState("loading");
     const [displayEnv, setDisplayEnv] = useState(() => detectDisplayEnv());
     const [pwaStatus, setPwaStatus] = useState({ manifest: false, sw: "unknown" });
     const [approvalsFlash, setApprovalsFlash] = useState(false);
@@ -5715,6 +5986,15 @@ var MikaelOSPlugin = function() {
         setBetriebLoad((p) => p === "ready" ? "ready" : "offline");
       });
     }, []);
+    const loadLife = useCallback(() => {
+      setLifeLoad((p) => p === "ready" ? "ready" : "loading");
+      sdkGet(LIFE_OVERVIEW_API).then((data) => {
+        setLife(data);
+        setLifeLoad("ready");
+      }).catch(() => {
+        setLifeLoad((p) => p === "ready" ? "ready" : "offline");
+      });
+    }, []);
     useEffect(
       () => {
         loadOverview();
@@ -5726,8 +6006,9 @@ var MikaelOSPlugin = function() {
         loadReflexion();
         loadGesundheit();
         loadBetrieb();
+        loadLife();
       },
-      [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb]
+      [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb, loadLife]
     );
     useEffect(() => {
       if (typeof window === "undefined") return;
@@ -5741,6 +6022,7 @@ var MikaelOSPlugin = function() {
         loadReflexion();
         loadGesundheit();
         loadBetrieb();
+        loadLife();
       };
       const onVisible = () => {
         if (document.visibilityState === "visible") reload();
@@ -5758,7 +6040,7 @@ var MikaelOSPlugin = function() {
         window.removeEventListener("focus", reload);
         document.removeEventListener("visibilitychange", onVisible);
       };
-    }, [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb]);
+    }, [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb, loadLife]);
     useEffect(() => {
       const visible = scene === "sessions" || isMobile && mobileScreen === "sessions";
       if (!visible || typeof window === "undefined") return void 0;
@@ -6175,9 +6457,7 @@ var MikaelOSPlugin = function() {
       if (e && e.preventDefault) e.preventDefault();
       const objective = command.trim();
       if (!objective) return;
-      const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
-      if (typeof sdk.openChat === "function") sdk.openChat(objective);
-      else window.location.assign("/chat?prompt=" + encodeURIComponent(objective));
+      openJarvisChat(objective);
       setCommand("");
     }, [command]);
     useIdleTimer(
@@ -6217,6 +6497,18 @@ var MikaelOSPlugin = function() {
       const label = entry && entry.label ? entry.label : "Surface";
       setCommand(label + " per Computer Use öffnen — Status und Evidenz sichtbar halten");
       setScene("betrieb");
+    }, []);
+    const onJarvisAction = useCallback((objective) => {
+      openJarvisChat(objective);
+    }, []);
+    const onDashboard = useCallback((entry) => {
+      if (!entry || !entry.url || typeof window === "undefined") return;
+      try {
+        const target = new URL(entry.url);
+        if (target.protocol !== "https:" || !target.hostname.endsWith(".tailbc3df5.ts.net")) return;
+        window.location.assign(target.toString());
+      } catch (_e) {
+      }
     }, []);
     const commandForm = h(
       "form",
@@ -6319,8 +6611,12 @@ var MikaelOSPlugin = function() {
             sessionsLoad,
             betrieb,
             betriebLoad,
+            life,
+            lifeLoad,
             onOpen: setScene,
-            onComputerUse
+            onComputerUse,
+            onJarvis: onJarvisAction,
+            onDashboard
           })
         ) : scene === "firma" ? h(
           "div",

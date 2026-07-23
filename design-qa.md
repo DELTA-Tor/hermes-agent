@@ -16,13 +16,18 @@ final result: blocked
    not in a parallel app.
 2. The default responsive tree contains Jarvis Voice, Codex/Claude/Executor
    missions, mission evidence, calendar/tasks, the three current approval gates,
-   system health and the complete surface catalogue.
+   system health and the source surface catalogue.
 3. Empty or unavailable sources render honestly; the new default screen contains
    no fixture metrics.
 4. The embedded Realtime route stays in the same PWA, uses WebRTC and
    Hermes-Sideband, and ships no expiring voice-launch link.
 5. Keyboard focus styling, dialog focus trap/Escape, live transcript semantics
    and reduced-motion behavior are present in source.
+6. The expanded same-screen Life Atlas contains 17 differentiated life areas,
+   a 13-surface Tailnet-only Dashboard Observatory, factual future radar and the
+   full calendar/task projection at the end of the screen.
+7. Constellation and Timeline no longer expose concept fixture events or values;
+   missing travel, nutrition and journal sources remain explicit connection gaps.
 
 ## Blocking comparison
 

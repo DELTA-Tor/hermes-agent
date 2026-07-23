@@ -84,6 +84,7 @@ import sys
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
@@ -987,6 +988,9 @@ def _cal_row(ev: Dict[str, Any], today_str: str, *, firma: bool) -> Dict[str, An
         "title": str(ev.get("summary") or "")[:70],
         "sub": sub,
         "value": _cal_event_value(str(ev.get("starts_at") or ""), today_str),
+        "startsAt": str(ev.get("starts_at") or "") or None,
+        "endsAt": str(ev.get("ends_at") or "") or None,
+        "location": str(ev.get("location") or "")[:160] or None,
         # Structural workspace marking per row (nicht nur sub-Text):
         "workspace": "company_signal" if firma else "private",
     }
@@ -1017,11 +1021,11 @@ def _cal_module(*, window: str) -> Dict[str, Any]:
     if window == "today":
         lo = today_str
         hi = (now_local.date() + timedelta(days=1)).isoformat()
-        limit = 6
+        limit = 24
     else:  # upcoming: from now to +CAL_HORIZON_DAYS
         lo = now_local.isoformat(timespec="seconds")
         hi = (now_local.date() + timedelta(days=CAL_HORIZON_DAYS + 1)).isoformat()
-        limit = 4
+        limit = 32
     data = _cal_query_window(lo, hi, limit)
     if not data["ok"]:
         return _cal_unavailable(
@@ -1042,7 +1046,7 @@ def _cal_module(*, window: str) -> Dict[str, Any]:
             "als Ersatz angezeigt.",
         )
     # Private block first, Firma-Signal block after — each row self-labelled.
-    n_priv, n_firma = (4, 3) if window == "today" else (3, 2)
+    n_priv, n_firma = (12, 8) if window == "today" else (16, 10)
     rows = [_cal_row(e, today_str, firma=False) for e in priv[:n_priv]]
     rows += [_cal_row(e, today_str, firma=True) for e in firma[:n_firma]]
     empty = not rows
@@ -2312,35 +2316,29 @@ def propose_study_plan(objective: str, dry_run: bool = True) -> Dict[str, Any]:
 
 
 def module_travel() -> Dict[str, Any]:
-    return _fixture(
-        "travel", workspace="private", summary="Rom · 18. Jun (Konzept)",
-        rows=[
-            {"icon": "plane", "accent": "cyan", "title": "Rom · Städtereise", "sub": "Abflug 18. Jun · 08:20", "value": "3 T"},
-            {"icon": "map", "accent": "emerald", "title": "Hotel bestätigt", "sub": "Trastevere", "status": "verified", "statusLabel": "Verifiziert", "value": "OK"},
-        ],
-        note="Keine Reise-Datenquelle angebunden.",
+    return _prov(
+        state="unavailable", source="keine Quelle angebunden", source_kind="konzept",
+        workspace="private", permission="Über Jarvis Quelle verbinden",
+        summary="Reisen · noch nicht verbunden", rows=[],
+        note="Kein Reise-Read-Modell vorhanden. Es werden keine Reise-, Flug- oder Hoteldaten erfunden.",
     )
 
 
 def module_nutrition() -> Dict[str, Any]:
-    return _fixture(
-        "nutrition", workspace="private", summary="2.105 kcal (Konzept)",
-        rows=[
-            {"icon": "utensils", "accent": "emerald", "title": "Protein", "sub": "Ziel 160 g", "status": "running", "statusLabel": "Läuft", "value": "142 g"},
-            {"icon": "leaf", "accent": "cyan", "title": "Wasser", "sub": "Ziel 3 L", "value": "2,1 L"},
-        ],
-        note="Ernährungs-Log noch nicht angebunden (privat).",
+    return _prov(
+        state="unavailable", source="keine Quelle angebunden", source_kind="konzept",
+        workspace="private", permission="Über Jarvis Quelle verbinden",
+        summary="Ernährung · noch nicht verbunden", rows=[],
+        note="Kein Ernährungs-Read-Modell vorhanden. Es werden keine Kalorien-, Protein- oder Wasserwerte erfunden.",
     )
 
 
 def module_journal() -> Dict[str, Any]:
-    return _fixture(
-        "journal", workspace="private", summary="1 Eintrag heute (Konzept)",
-        rows=[
-            {"icon": "notebook-pen", "accent": "cyan", "title": "Wie fühlt sich Fokus heute an?", "sub": "Sprach- oder Text-Eintrag", "value": "—"},
-            {"icon": "audio-lines", "accent": "violet", "title": "Voice-Memo", "sub": "Heute 06:40", "value": "0:48"},
-        ],
-        note="Journal ist privat und noch ohne Read-Modell.",
+    return _prov(
+        state="unavailable", source="keine private Quelle angebunden", source_kind="konzept",
+        workspace="private", permission="Über Jarvis Quelle verbinden",
+        summary="Journal · noch nicht verbunden", rows=[],
+        note="Kein privater Journal-Store vorhanden. Es werden keine Einträge oder Voice-Memos erfunden.",
     )
 
 
@@ -4985,6 +4983,363 @@ def betrieb_overview() -> Dict[str, Any]:
     }
 
 
+# ===========================================================================
+# M6 — LIFE ATLAS + SURFACE OBSERVATORY
+#
+# This is a catalog/projection, never another truth database. It joins the
+# existing module read models with a versioned description of Rise-L surfaces.
+# Runtime health is checked server-side against loopback; browser links point
+# only to already Tailnet-served surfaces. Missing personal domains remain
+# explicit ``unavailable`` areas with no invented rows or values.
+# ===========================================================================
+_TAILNET_ORIGIN_DEFAULT = "https://delta-ai-01.tailbc3df5.ts.net"
+_tailnet_origin_raw = os.environ.get(
+    "MIKAELOS_TAILNET_ORIGIN", _TAILNET_ORIGIN_DEFAULT).rstrip("/")
+_tailnet_origin_parsed = urlsplit(_tailnet_origin_raw)
+TAILNET_ORIGIN = (
+    _tailnet_origin_raw
+    if _tailnet_origin_parsed.scheme == "https"
+    and _tailnet_origin_parsed.hostname == "delta-ai-01.tailbc3df5.ts.net"
+    and _tailnet_origin_parsed.port is None
+    and not _tailnet_origin_parsed.path
+    and not _tailnet_origin_parsed.query
+    and not _tailnet_origin_parsed.fragment
+    else _TAILNET_ORIGIN_DEFAULT
+)
+DASHBOARD_PROBE_TIMEOUT = float(os.environ.get(
+    "MIKAELOS_DASHBOARD_PROBE_TIMEOUT", "0.8"))
+
+_DASHBOARD_CATALOG: List[Dict[str, Any]] = [
+    {
+        "id": "mikael-os", "label": "Mikael OS", "icon": "sparkles",
+        "purpose": "Persönliches Jarvis Command Center",
+        "loopback": "http://127.0.0.1:9120/mikael-os",
+        "url": f"{TAILNET_ORIGIN}:9119/mikael-os",
+        "audiences": ["mikael"], "workspace": "private",
+        "owner": "Jarvis / Nous", "truth": "Projektion, keine eigene Truth-DB",
+        "actionMode": "native_read + jarvis",
+    },
+    {
+        "id": "fsm", "label": "FSM-Cockpit", "icon": "clipboard-list",
+        "purpose": "Aufträge, Einsätze und Disposition",
+        "loopback": "http://127.0.0.1:18065/",
+        "url": f"{TAILNET_ORIGIN}:18065/",
+        "audiences": ["mikael", "office"], "workspace": "company",
+        "owner": "FSM-Cockpit", "truth": "fsm.db · Single Writer nur Cockpit",
+        "actionMode": "source_native + jarvis",
+    },
+    {
+        "id": "freescout", "label": "FreeScout", "icon": "inbox",
+        "purpose": "Büro-Shared-Inbox und Mail-Threads",
+        "loopback": "http://127.0.0.1:18070/",
+        "url": f"{TAILNET_ORIGIN}:18070/",
+        "audiences": ["mikael", "office"], "workspace": "company",
+        "owner": "FreeScout", "truth": "FreeScout + IMAP",
+        "actionMode": "source_native + jarvis_gated_outbound",
+    },
+    {
+        "id": "paperless", "label": "Paperless", "icon": "folder-check",
+        "purpose": "Dokumente, OCR und Metadaten",
+        "loopback": "http://127.0.0.1:18075/",
+        "url": f"{TAILNET_ORIGIN}:18075/",
+        "audiences": ["mikael", "office"], "workspace": "company",
+        "owner": "Paperless", "truth": "Paperless Dokument-Truth",
+        "actionMode": "source_native + jarvis",
+    },
+    {
+        "id": "unified-search", "label": "Unified Search", "icon": "search",
+        "purpose": "Föderierte Suche über Belege, Mails und Wissen",
+        "loopback": "http://127.0.0.1:18055/",
+        "url": f"{TAILNET_ORIGIN}:18055/",
+        "audiences": ["mikael"], "workspace": "mixed",
+        "owner": "Search-Lane", "truth": "Read-only Suchindex",
+        "actionMode": "native_read + jarvis",
+    },
+    {
+        "id": "vehicles", "label": "Fahrzeug-KI", "icon": "truck",
+        "purpose": "Leasing- und Fahrzeug-Radar",
+        "loopback": "http://127.0.0.1:13130/",
+        "url": f"{TAILNET_ORIGIN}:13130/",
+        "audiences": ["mikael"], "workspace": "private",
+        "owner": "Fahrzeug-KI", "truth": "Fahrzeug-KI Projektion",
+        "actionMode": "source_native + jarvis",
+    },
+    {
+        "id": "learning", "label": "Konstruktionslehre", "icon": "graduation-cap",
+        "purpose": "Crashcamp, Quiz, Quellen und Lernfortschritt",
+        "loopback": "http://127.0.0.1:13150/",
+        "url": f"{TAILNET_ORIGIN}:13150/",
+        "audiences": ["mikael"], "workspace": "private",
+        "owner": "Crashcamp", "truth": "Crashcamp-Fortschritt + FTS",
+        "actionMode": "source_native + jarvis",
+    },
+    {
+        "id": "nocodb", "label": "NocoDB", "icon": "database",
+        "purpose": "Read-only Tabellenansicht der FSM-Replik",
+        "loopback": "http://127.0.0.1:13160/",
+        "url": f"{TAILNET_ORIGIN}:13160/",
+        "audiences": ["mikael"], "workspace": "company",
+        "owner": "FSM-Replik", "truth": "fsm-ro · read-only",
+        "actionMode": "native_read",
+    },
+    {
+        "id": "technik", "label": "Techniker-Gateway", "icon": "wrench",
+        "purpose": "Techniker-Tagesliste und Berichtslane",
+        "loopback": "http://127.0.0.1:18066/technik",
+        "url": f"{TAILNET_ORIGIN}:18066/technik",
+        "audiences": ["mikael", "field"], "workspace": "company",
+        "owner": "FSM-Techniker-Gateway", "truth": "FSM-Cockpit bleibt Writer",
+        "actionMode": "source_native",
+    },
+    {
+        "id": "delta-web", "label": "DELTA-Web", "icon": "monitor",
+        "purpose": "Private Vorschau der DELTA-Webseite",
+        "loopback": "http://127.0.0.1:13110/",
+        "url": f"{TAILNET_ORIGIN}:13110/",
+        "audiences": ["mikael"], "workspace": "company",
+        "owner": "DELTA-Web", "truth": "Git/Deploy-Artefakt",
+        "actionMode": "native_read + jarvis",
+    },
+    {
+        "id": "wensauer-web", "label": "Wensauer-Web", "icon": "monitor",
+        "purpose": "Private Vorschau der Wensauer-Webseite",
+        "loopback": "http://127.0.0.1:13111/",
+        "url": f"{TAILNET_ORIGIN}:13111/",
+        "audiences": ["mikael"], "workspace": "company",
+        "owner": "Wensauer-Web", "truth": "Git/Deploy-Artefakt",
+        "actionMode": "native_read + jarvis",
+    },
+    {
+        "id": "hermes-webui", "label": "Hermes WebUI", "icon": "message-square",
+        "purpose": "Legacy-Hermes-Oberfläche bis Mikael-OS-Parität",
+        "loopback": "http://127.0.0.1:8787/",
+        "url": f"{TAILNET_ORIGIN}:8787/",
+        "audiences": ["mikael"], "workspace": "engineering",
+        "owner": "Hermes", "truth": "Legacy UI über gemeinsamer Hermes-Lane",
+        "actionMode": "native_read + jarvis",
+    },
+    {
+        "id": "schaltzentrale", "label": "Schaltzentrale", "icon": "layout-dashboard",
+        "purpose": "Legacy-Firmenoberfläche in Retirement-Beobachtung",
+        "loopback": "http://127.0.0.1:13000/",
+        "url": f"{TAILNET_ORIGIN}:13000/",
+        "audiences": ["mikael", "office"], "workspace": "company",
+        "owner": "Legacy", "truth": "Neue Aufträge gehören ins FSM",
+        "actionMode": "native_read",
+    },
+]
+
+_LIFE_AREA_META: List[Dict[str, Any]] = [
+    {"id": "now", "title": "Jetzt & Fokus", "icon": "sun", "scene": "cockpit",
+     "refs": ["module:today", "module:tasks", "module:body"]},
+    {"id": "calendar", "title": "Kalender & Zeit", "icon": "calendar-days", "scene": "timeline",
+     "refs": ["module:kalender"]},
+    {"id": "tasks", "title": "Aufgaben & Ziele", "icon": "list-todo", "scene": "ziele",
+     "refs": ["module:tasks", "module:engineering"]},
+    {"id": "health", "title": "Gesundheit & Energie", "icon": "heart-pulse", "scene": "gesundheit",
+     "refs": ["module:body", "module:nutrition"]},
+    {"id": "learning", "title": "Lernen & Entwicklung", "icon": "graduation-cap", "scene": "ziele",
+     "refs": ["module:learning", "surface:learning"]},
+    {"id": "reflection", "title": "Reflexion & Erinnerung", "icon": "notebook-pen", "scene": "reflexion",
+     "refs": ["module:journal"]},
+    {"id": "relationships", "title": "Beziehungen & Familie", "icon": "users",
+     "refs": []},
+    {"id": "home", "title": "Zuhause & Leben", "icon": "house",
+     "refs": []},
+    {"id": "personal-finance", "title": "Private Finanzen", "icon": "banknote",
+     "refs": []},
+    {"id": "travel", "title": "Reisen & Erlebnisse", "icon": "plane",
+     "refs": ["module:travel"]},
+    {"id": "mobility", "title": "Fahrzeuge & Mobilität", "icon": "truck",
+     "refs": ["surface:vehicles"]},
+    {"id": "work", "title": "Firma & Arbeit", "icon": "building-2", "scene": "firma",
+     "refs": ["module:company", "surface:fsm", "surface:freescout", "surface:paperless"]},
+    {"id": "knowledge", "title": "Wissen & Dokumente", "icon": "folder-open", "scene": "wissen",
+     "refs": ["surface:unified-search", "surface:paperless"]},
+    {"id": "communication", "title": "Kommunikation", "icon": "radio-tower", "scene": "kommunikation",
+     "refs": ["surface:freescout", "module:company"]},
+    {"id": "technology", "title": "Geräte & Systeme", "icon": "monitor", "scene": "betrieb",
+     "refs": ["module:risel", "surface:mikael-os"]},
+    {"id": "agents", "title": "Agenten & Automation", "icon": "bot", "scene": "sessions",
+     "refs": ["module:engineering", "module:risel"]},
+    {"id": "future", "title": "Zukunft & Horizonte", "icon": "radar", "scene": "timeline",
+     "refs": ["module:kalender", "module:tasks", "module:learning"]},
+]
+
+
+def _probe_dashboard_surface(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Bounded loopback reachability check. HTTP auth/redirect responses still
+    prove the service is reachable; no body, secret or redirect target is
+    exposed to the browser."""
+    code: Optional[int] = None
+    reachable = False
+    try:
+        request = Request(
+            str(item["loopback"]),
+            headers={"User-Agent": "mikael-os-surface-probe/1"},
+            method="GET",
+        )
+        with urlopen(request, timeout=DASHBOARD_PROBE_TIMEOUT) as response:
+            code = int(getattr(response, "status", 200))
+            response.read(64)
+            reachable = code < 500
+    except HTTPError as exc:
+        code = int(exc.code)
+        reachable = code < 500
+    except (OSError, URLError, ValueError):
+        reachable = False
+    return {
+        **{key: value for key, value in item.items() if key != "loopback"},
+        "state": "fresh" if reachable else "unavailable",
+        "reachable": reachable,
+        "httpStatus": code,
+        "visibility": "tailnet-only",
+        "observedAt": _iso(_now()),
+        "jarvisPrompt": (
+            f"Öffne und steuere {item['label']} über den besten nativen Adapter. "
+            "Falls kein nativer Adapter existiert, nutze sichtbaren Computer Use. "
+            "Zeige vor und nach jeder Änderung Status und Evidenz."
+        ),
+    }
+
+
+def dashboard_catalog() -> List[Dict[str, Any]]:
+    workers = min(8, max(1, len(_DASHBOARD_CATALOG)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(_probe_dashboard_surface, _DASHBOARD_CATALOG))
+
+
+def _area_state(states: List[str]) -> str:
+    if any(state == "fresh" for state in states):
+        return "fresh"
+    if any(state in {"partial", "stale"} for state in states):
+        return "partial"
+    if any(state == "empty" for state in states):
+        return "empty"
+    return "unavailable"
+
+
+def life_overview() -> Dict[str, Any]:
+    """One honest, extensible life-system projection.
+
+    The catalog is configuration; source values remain in their native systems.
+    Area activation/closure is intentionally delegated to the shared Jarvis
+    conversation so no plugin-local memory or task store is introduced.
+    """
+    readers = _build_readers()
+    modules = {
+        meta["id"]: _safe_read(readers[meta["id"]], meta)
+        for meta in _MODULE_META
+    }
+    dashboards = dashboard_catalog()
+    dashboard_by_id = {item["id"]: item for item in dashboards}
+
+    def resolve(ref: str) -> Optional[Dict[str, Any]]:
+        kind, _, source_id = ref.partition(":")
+        if kind == "module":
+            return modules.get(source_id)
+        if kind == "surface":
+            return dashboard_by_id.get(source_id)
+        return None
+
+    areas: List[Dict[str, Any]] = []
+    for meta in _LIFE_AREA_META:
+        refs = list(meta.get("refs") or [])
+        resolved = [item for item in (resolve(ref) for ref in refs) if item]
+        states = [str(item.get("state") or "unavailable") for item in resolved]
+        state = _area_state(states)
+        connected = sum(1 for source in resolved if str(source.get("state")) in {
+            "fresh", "partial", "stale", "empty"})
+        source_labels = [
+            str(source.get("label") or source.get("title") or source.get("source") or ref)
+            for ref, source in zip(refs, resolved)
+        ]
+        lifecycle = "active" if connected else "discoverable"
+        areas.append({
+            **meta,
+            "workspace": "company" if meta["id"] == "work" else "private",
+            "state": state,
+            "lifecycle": lifecycle,
+            "connectedSources": connected,
+            "sourceCount": len(refs),
+            "coverage": round((connected / len(refs)) * 100) if refs else 0,
+            "sourceLabels": source_labels,
+            "read": state != "unavailable",
+            "changeMode": (
+                "source-native-or-visible-computer-use"
+                if connected else "connect-through-jarvis"
+            ),
+            "jarvisPrompt": (
+                f"Öffne den Lebensbereich {meta['title']}. "
+                "Lies alle verbundenen Quellen, zeige Lücken und führe Änderungen "
+                "nur im jeweiligen Quellsystem aus. Nutze bei fehlendem nativen "
+                "Adapter sichtbaren Computer Use und belege das Ergebnis."
+            ),
+            "managePrompt": (
+                f"Prüfe den Lebensbereich {meta['title']}: aktivieren, neu strukturieren "
+                "oder schließen. Bewahre vorhandene Quellwahrheiten und die gemeinsame "
+                "Jarvis-Memory-/Mission-Identität."
+            ),
+        })
+
+    calendar = modules["kalender"]
+    tasks = modules["tasks"]
+    future_items: List[Dict[str, Any]] = []
+    for row in list(calendar.get("rows") or [])[:16]:
+        future_items.append({
+            "kind": "calendar",
+            "title": row.get("title"),
+            "when": row.get("value"),
+            "startsAt": row.get("startsAt"),
+            "workspace": row.get("workspace"),
+            "source": calendar.get("source"),
+        })
+    for row in list(tasks.get("rows") or [])[:8]:
+        future_items.append({
+            "kind": "mission",
+            "title": row.get("title"),
+            "when": row.get("statusLabel"),
+            "missionId": row.get("missionId"),
+            "workspace": "private",
+            "source": tasks.get("source"),
+        })
+
+    return {
+        "identity": {
+            "owner": "Mikael",
+            "frontdoor": "Mikael OS / Jarvis",
+            "truthModel": "source-of-truth systems + one shared mission/memory identity",
+        },
+        "authority": {
+            "personal": "full internal authority through Jarvis/Hermes",
+            "office": "company-only, simple source-native surfaces",
+            "gates": ["money", "external_customer_send", "truth_schema_migration"],
+            "directTruthWrites": False,
+            "publicExposure": False,
+        },
+        "areas": areas,
+        "dashboards": dashboards,
+        "calendarAndTasks": {
+            "calendar": calendar,
+            "tasks": tasks,
+            "separation": "private calendar and company dispo remain structurally separated",
+        },
+        "futureRadar": {
+            "state": "fresh" if future_items else "empty",
+            "horizonDays": CAL_HORIZON_DAYS,
+            "items": future_items,
+            "note": "Only real calendar events and mission.v2 work are shown; no predicted event is invented.",
+        },
+        "evolution": {
+            "store": "none in Mikael OS",
+            "areaLifecycle": ["active", "discoverable", "archived"],
+            "changePath": "shared Jarvis conversation -> typed source action / mission / visible computer use",
+            "note": "New and closed areas change catalog/configuration, not a second life-truth database.",
+        },
+        "observedAt": _iso(_now()),
+    }
+
+
 # --- PWA static payloads (served by the plugin; installable/offline as far as a
 # --- plugin can go — the honest limit is documented in the runbook). ---------
 _PWA_MANIFEST = {
@@ -5902,6 +6257,16 @@ def betrieb_overview_route() -> Dict[str, Any]:
     (Dashboard=Leser · Telegram=Schreiber · Hermes-App=nicht beobachtet) über
     mission.v2 + Approval-Cards. Nur lesen; Ausführung bleibt gated."""
     return betrieb_overview()
+
+
+@router.get("/life/overview")
+def life_overview_route() -> Dict[str, Any]:
+    """READ-ONLY personal system atlas: differentiated life areas, real source
+    coverage, Tailnet-only dashboard observatory, full calendar/task rows and a
+    factual future radar. It owns no second task, memory or life-truth store.
+    Changes are routed through the shared Jarvis conversation to native source
+    actions, typed gates or visible Computer Use."""
+    return life_overview()
 
 
 @router.post("/betrieb/mac/propose")

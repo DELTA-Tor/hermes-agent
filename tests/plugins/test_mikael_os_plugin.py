@@ -79,6 +79,7 @@ def test_manifest_health_and_router_contract_are_aligned(plugin_api) -> None:
         "/reflexion/overview",
         "/gesundheit/overview",
         "/betrieb/overview",
+        "/life/overview",
         "/betrieb/mac/propose",
         "/study/plan",
         "/study/plan/propose",
@@ -90,6 +91,98 @@ def test_manifest_health_and_router_contract_are_aligned(plugin_api) -> None:
         "/jarvis/voice/control",
         "/health",
     } <= route_paths
+
+
+def test_life_atlas_keeps_one_truth_model_and_separates_personal_from_office(
+    plugin_api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def module_payload(module_id: str) -> dict:
+        payload = {
+            "state": "fresh",
+            "source": f"source:{module_id}",
+            "sourceKind": "file",
+            "workspace": "private",
+            "permission": "Nur lesen",
+            "summary": f"{module_id} live",
+            "rows": [],
+        }
+        if module_id == "kalender":
+            payload["rows"] = [{
+                "title": "Bestätigter Termin",
+                "value": "24.07. 09:00",
+                "startsAt": "2026-07-24T09:00:00+02:00",
+                "workspace": "private",
+            }]
+        if module_id == "tasks":
+            payload["rows"] = [{
+                "title": "Bestätigte Mission",
+                "statusLabel": "Läuft",
+                "missionId": "mis-test",
+            }]
+        return payload
+
+    monkeypatch.setattr(
+        plugin_api,
+        "_build_readers",
+        lambda: {
+            meta["id"]: (lambda module_id=meta["id"]: module_payload(module_id))
+            for meta in plugin_api._MODULE_META
+        },
+    )
+    monkeypatch.setattr(plugin_api, "dashboard_catalog", lambda: [{
+        "id": "fsm",
+        "label": "FSM-Cockpit",
+        "state": "fresh",
+        "reachable": True,
+        "visibility": "tailnet-only",
+        "audiences": ["mikael", "office"],
+        "url": "https://delta-ai-01.tailbc3df5.ts.net:18065/",
+    }])
+
+    result = plugin_api.life_overview()
+    by_id = {area["id"]: area for area in result["areas"]}
+
+    assert len(result["areas"]) == 17
+    assert result["identity"]["frontdoor"] == "Mikael OS / Jarvis"
+    assert result["authority"]["directTruthWrites"] is False
+    assert result["authority"]["publicExposure"] is False
+    assert result["authority"]["gates"] == [
+        "money",
+        "external_customer_send",
+        "truth_schema_migration",
+    ]
+    assert result["evolution"]["store"] == "none in Mikael OS"
+    assert by_id["work"]["workspace"] == "company"
+    assert by_id["relationships"]["lifecycle"] == "discoverable"
+    assert by_id["relationships"]["coverage"] == 0
+    assert result["calendarAndTasks"]["calendar"]["rows"][0]["title"] == "Bestätigter Termin"
+    assert result["calendarAndTasks"]["tasks"]["rows"][0]["missionId"] == "mis-test"
+    assert {item["kind"] for item in result["futureRadar"]["items"]} == {
+        "calendar",
+        "mission",
+    }
+
+
+def test_personal_gap_modules_never_ship_concept_values(plugin_api) -> None:
+    for reader in (
+        plugin_api.module_travel,
+        plugin_api.module_nutrition,
+        plugin_api.module_journal,
+    ):
+        result = reader()
+        assert result["state"] == "unavailable"
+        assert result["rows"] == []
+        assert result.get("demo") is not True
+
+
+def test_dashboard_catalog_links_are_existing_tailnet_surfaces_only(plugin_api) -> None:
+    assert plugin_api._DASHBOARD_CATALOG
+    for item in plugin_api._DASHBOARD_CATALOG:
+        assert item["loopback"].startswith("http://127.0.0.1:")
+        assert item["url"].startswith(
+            "https://delta-ai-01.tailbc3df5.ts.net:"
+        )
+        assert "funnel" not in item["url"].lower()
 
 
 def test_pwa_scope_is_private_to_mikael_os_and_never_caches_api_truth(
