@@ -46,6 +46,14 @@ PUBLIC_API_PATHS: frozenset[str] = frozenset({
     # Read-only theme + plugin manifests for the dashboard skin engine.
     "/api/dashboard/themes",
     "/api/dashboard/plugins",
+    # Static Mikael OS PWA resources. Browsers fetch the manifest, service
+    # worker, offline shell, and icon outside the dashboard's authenticated
+    # fetch wrapper, so they cannot attach the ephemeral session header.
+    # These exact routes contain no user, mission, source, or runtime data.
+    "/api/plugins/mikael-os/pwa/manifest.webmanifest",
+    "/api/plugins/mikael-os/pwa/sw.js",
+    "/api/plugins/mikael-os/pwa/offline.html",
+    "/api/plugins/mikael-os/pwa/icon.svg",
     # Chronos managed-cron fire webhook (NAS -> agent). NOT cookie-gated: it
     # carries its own short-lived NAS-minted JWT (purpose=cron_fire), which the
     # handler verifies as the real auth. Must bypass the dashboard auth gate so

@@ -39,6 +39,19 @@ def test_loopback_status_is_public(client_loopback):
     assert "version" in body
 
 
+@pytest.mark.parametrize("path", [
+    "/api/plugins/mikael-os/pwa/manifest.webmanifest",
+    "/api/plugins/mikael-os/pwa/sw.js",
+    "/api/plugins/mikael-os/pwa/offline.html",
+    "/api/plugins/mikael-os/pwa/icon.svg",
+])
+def test_loopback_mikael_os_pwa_assets_do_not_require_session_header(
+    client_loopback, path
+):
+    response = client_loopback.get(path)
+    assert response.status_code != 401
+
+
 def test_loopback_protected_route_requires_token(client_loopback):
     """Any non-public /api/ route must require the session token."""
     # /api/sessions exists and is auth-gated by auth_middleware.
