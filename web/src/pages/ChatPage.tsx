@@ -153,11 +153,21 @@ function terminalLineHeightForWidth(layoutWidthPx: number): number {
   return layoutWidthPx < 1024 ? 1.02 : 1.15;
 }
 
-export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
+export default function ChatPage({
+  isActive = true,
+  externalSeed = "",
+  externalSeedNonce = 0,
+}: {
+  isActive?: boolean;
+  externalSeed?: string;
+  externalSeedNonce?: number;
+}) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const pendingExternalSeedRef = useRef("");
+  const lastExternalSeedNonceRef = useRef(0);
   // Exposed to the main metrics-sync effect so it can refit the terminal
   // the moment `isActive` flips back to true (display:none → display:flex
   // collapses the host's box, so ResizeObserver never fires on return).
@@ -173,6 +183,23 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
   useEffect(() => {
     setHasActivated((prev) => latchChatActivation(prev, isActive));
   }, [isActive]);
+  useEffect(() => {
+    const seed = externalSeed.trim();
+    if (!seed || externalSeedNonce === lastExternalSeedNonceRef.current) return;
+    lastExternalSeedNonceRef.current = externalSeedNonce;
+    pendingExternalSeedRef.current = seed;
+    const ws = wsRef.current;
+    if (ws?.readyState !== WebSocket.OPEN) return;
+    pendingExternalSeedRef.current = "";
+    const timer = window.setTimeout(() => {
+      try {
+        wsRef.current?.send(seed + "\r");
+      } catch {
+        pendingExternalSeedRef.current = seed;
+      }
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [externalSeed, externalSeedNonce]);
   const [searchParams, setSearchParams] = useSearchParams();
   // Lazy-init: the missing-token check happens at construction so the effect
   // body doesn't have to setState (React 19's set-state-in-effect rule).
@@ -975,16 +1002,25 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
       // typed into the real Hermes TUI composer after the PTY is connected, so
       // the seeded turn keeps normal session persistence, memory and tools.
       const { seed, next } = consumeChatSeed(searchParams);
+      const external = pendingExternalSeedRef.current;
+      pendingExternalSeedRef.current = "";
       if (seed) {
         setSearchParams(next, { replace: true });
+      }
+      const queuedSeeds = [seed, external].filter(
+        (value, index, values) => value && values.indexOf(value) === index,
+      );
+      if (queuedSeeds.length) {
         // Delay so Ink's composer has mounted and grabbed focus before input.
-        setTimeout(() => {
-          try {
-            wsRef.current?.send(seed + "\r");
-          } catch {
-            /* PTY not ready / closed — user can retype */
-          }
-        }, 800);
+        queuedSeeds.forEach((queuedSeed, index) => {
+          setTimeout(() => {
+            try {
+              wsRef.current?.send(queuedSeed + "\r");
+            } catch {
+              pendingExternalSeedRef.current = queuedSeed;
+            }
+          }, 800 + index * 500);
+        });
       }
     };
 

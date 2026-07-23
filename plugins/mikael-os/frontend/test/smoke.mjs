@@ -17,7 +17,11 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const bundlePath = path.resolve(__dirname, "../../dashboard/dist/index.js");
 const code = fs.readFileSync(bundlePath, "utf8");
-if (!code.includes('"/chat?prompt="') || !code.includes("mikael-os:voice-open")) {
+if (
+  !code.includes("openChat") ||
+  !code.includes('"/chat?prompt="') ||
+  !code.includes("mikael-os:voice-open")
+) {
   console.error("FAIL: MIKAEL OS text/voice controls are not wired to real Jarvis entry points");
   process.exit(1);
 }

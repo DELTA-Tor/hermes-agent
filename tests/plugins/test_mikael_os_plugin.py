@@ -65,7 +65,7 @@ def test_manifest_health_and_router_contract_are_aligned(plugin_api) -> None:
     health = plugin_api.health()
     route_paths = {route.path for route in plugin_api.router.routes}
 
-    assert manifest["version"] == health["version"] == "0.8.0"
+    assert manifest["version"] == health["version"] == "0.9.0"
     assert health["phase"] == 5
     assert {
         "/cockpit/kpi",

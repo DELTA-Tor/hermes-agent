@@ -123,6 +123,8 @@ export interface HermesPluginSDK {
   buildWsUrl: BuildWsUrl;
   /** Resolve just the WS auth query-param pair. */
   buildWsAuthParam: BuildWsAuthParam;
+  /** Open the host's persistent Hermes chat over the current plugin page. */
+  openChat: (prompt: string) => void;
 
   /**
    * Shared UI primitives (Nous DS / shadcn). Typed permissively at the

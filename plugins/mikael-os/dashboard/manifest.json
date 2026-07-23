@@ -3,7 +3,7 @@
   "label": "MIKAEL OS",
   "description": "Private Personal OS cockpit with persistent Jarvis chat, GPT Realtime voice, source-labelled projections and gated proposals. Mac actions remain typed previews only.",
   "icon": "Sparkles",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "tab": {
     "path": "/mikael-os",
     "position": "end"

@@ -2656,7 +2656,7 @@ var MikaelOSPlugin = function() {
     );
   }
   const COACH_TABS = [
-    { id: "countdown", icon: "calendar-clock", label: "Countdown" },
+    { id: "countdown", icon: "calendar-clock", label: "Klausur-Countdown" },
     { id: "feynman", icon: "message-square", label: "Feynman" },
     { id: "plan", icon: "list-todo", label: "Lernplan" },
     { id: "material", icon: "file-plus", label: "PDFs" }
@@ -6495,7 +6495,9 @@ var MikaelOSPlugin = function() {
       if (e && e.preventDefault) e.preventDefault();
       const objective = command.trim();
       if (!objective) return;
-      window.location.assign("/chat?prompt=" + encodeURIComponent(objective));
+      const sdk = typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__ || {};
+      if (typeof sdk.openChat === "function") sdk.openChat(objective);
+      else window.location.assign("/chat?prompt=" + encodeURIComponent(objective));
       setCommand("");
     }, [command]);
     useIdleTimer(
