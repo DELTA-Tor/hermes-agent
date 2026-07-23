@@ -626,6 +626,23 @@ async def api_auth_ws_ticket(request: Request):
     expected pattern.
     """
     sess = getattr(request.state, "session", None)
+    if sess is None and getattr(request.state, "token_authenticated", False):
+        # Header-token clients (Hermes Desktop remote gateway, curl smoke
+        # tests) authenticate with X-Hermes-Session-Token and carry no cookie
+        # session. The auth middleware has already validated the token, so
+        # mint under a synthetic internal principal — same trust level as the
+        # token itself, which the UI documents as "used for REST and
+        # WebSocket access".
+        from hermes_cli.dashboard_auth.ws_tickets import TTL_SECONDS, mint_ticket
+
+        ticket = mint_ticket(user_id="session-token-client", provider="internal")
+        audit_log(
+            AuditEvent.WS_TICKET_MINTED,
+            provider="internal",
+            user_id="session-token-client",
+            ip=_client_ip(request),
+        )
+        return {"ticket": ticket, "ttl_seconds": TTL_SECONDS}
     if sess is None:
         # Middleware should already have rejected, but check defensively.
         raise HTTPException(status_code=401, detail="Unauthorized")
