@@ -5299,7 +5299,7 @@ function RealtimeVoiceDeck(props) {
         !result.ok
         || body.ok === false
         || body.status !== "verified"
-        || body.reason !== "session_rollover"
+        || body.action !== "rollover"
       ) {
         throw new Error("Rollover nicht eindeutig bestätigt.");
       }
