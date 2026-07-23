@@ -17,6 +17,14 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const bundlePath = path.resolve(__dirname, "../../dashboard/dist/index.js");
 const code = fs.readFileSync(bundlePath, "utf8");
+if (!code.includes('"/chat?prompt="') || !code.includes("mikael-os:voice-open")) {
+  console.error("FAIL: MIKAEL OS text/voice controls are not wired to real Jarvis entry points");
+  process.exit(1);
+}
+if (code.includes("Halten zum Sprechen (Demo)")) {
+  console.error("FAIL: obsolete demo voice control is still shipped");
+  process.exit(1);
+}
 
 // --- minimal mock React ---------------------------------------------------
 const Fragment = Symbol("Fragment");

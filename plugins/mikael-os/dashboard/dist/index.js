@@ -423,6 +423,7 @@ var MikaelOSPlugin = function() {
   const KPI_API = PLUGIN_API + "/cockpit/kpi";
   const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
   const VOICE_LAUNCH_API = PLUGIN_API + "/jarvis/launch";
+  const VOICE_OPEN_EVENT = "mikael-os:voice-open";
   const LEARNING_LAUNCH_API = PLUGIN_API + "/learning/konstruktionslehre/launch";
   const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
   const FIRMA_OVERVIEW_API = PLUGIN_API + "/firma/overview";
@@ -1573,9 +1574,9 @@ var MikaelOSPlugin = function() {
       ),
       h(
         "button",
-        { type: "button", className: "mos__mjarvis-ptt", onClick: props.onSpeak, "aria-label": "Halten zum Sprechen (Demo)" },
+        { type: "button", className: "mos__mjarvis-ptt", onClick: props.onSpeak, "aria-label": "Jarvis Realtime-Sprachchat starten" },
         h(Icon, { name: "mic", size: 20 }),
-        "Halten zum Sprechen"
+        "Sprachchat"
       ),
       // Real Realtime entry (same self-contained flow as the desktop Cockpit):
       // confirm → mint (5,50 $ Reservierung) → new tab / anchor fallback.
@@ -3428,6 +3429,11 @@ var MikaelOSPlugin = function() {
   function JarvisVoiceLaunch(props) {
     const [st, setSt] = useState(null);
     const [, tick] = useState(0);
+    useEffect(() => {
+      const open = () => setSt({ phase: "confirm" });
+      window.addEventListener(VOICE_OPEN_EVENT, open);
+      return () => window.removeEventListener(VOICE_OPEN_EVENT, open);
+    }, []);
     useEffect(() => {
       if (!st || st.phase !== "open" && st.phase !== "busy") return void 0;
       const t = setInterval(() => tick((x) => x + 1), 1e3);
@@ -6201,8 +6207,8 @@ var MikaelOSPlugin = function() {
       setSheetOpen(false);
     }, []);
     const onSpeak = useCallback(() => {
-      runStateSequence();
-    }, [runStateSequence]);
+      window.dispatchEvent(new CustomEvent(VOICE_OPEN_EVENT));
+    }, []);
     const onQuick = useCallback((label) => {
       setCommand(label);
       runStateSequence();
@@ -6487,9 +6493,11 @@ var MikaelOSPlugin = function() {
     useEffect(() => () => clearTimers(), [clearTimers]);
     const submit = useCallback((e) => {
       if (e && e.preventDefault) e.preventDefault();
-      runStateSequence();
+      const objective = command.trim();
+      if (!objective) return;
+      window.location.assign("/chat?prompt=" + encodeURIComponent(objective));
       setCommand("");
-    }, [runStateSequence]);
+    }, [command]);
     useIdleTimer(
       scene === "cockpit" && stateIndex === 0 && !isMobile,
       9e4,
@@ -6623,7 +6631,12 @@ var MikaelOSPlugin = function() {
       h(
         "div",
         { className: "mos__command-bar" },
-        h("button", { type: "button", className: "mos__mic", "aria-label": "Sprachbefehl starten" }, h(Icon, { name: "mic", size: 22 })),
+        h("button", {
+          type: "button",
+          className: "mos__mic",
+          "aria-label": "Jarvis Realtime-Sprachchat starten",
+          onClick: onSpeak
+        }, h(Icon, { name: "mic", size: 22 })),
         h("input", {
           ref: inputRef,
           className: "mos__command-input",
