@@ -4913,7 +4913,7 @@ var MikaelOSPlugin = function() {
         action: "rollover"
       }).then((result) => {
         const body = sdkResponseBody(result);
-        if (!result.ok || body.ok === false || body.status !== "verified" || body.reason !== "session_rollover") {
+        if (!result.ok || body.ok === false || body.status !== "verified" || body.action !== "rollover") {
           throw new Error("Rollover nicht eindeutig bestätigt.");
         }
         releaseMedia();
