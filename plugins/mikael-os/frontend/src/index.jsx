@@ -5242,13 +5242,11 @@ function RealtimeVoiceDeck(props) {
           reconnectTimerRef.current = window.setTimeout(() => {
             if (peer.connectionState !== "connected") {
               setError("WebRTC-Verbindung blieb unterbrochen. Neu verbinden braucht eine bestätigte neue Reservierung.");
-              releaseMedia();
               setPhase("error");
             }
           }, 5000);
         } else if (state === "failed" || state === "closed") {
           setError("WebRTC-Verbindung ist beendet. Neu verbinden braucht eine bestätigte neue Reservierung.");
-          releaseMedia();
           setPhase("error");
         }
       };
@@ -5292,7 +5290,6 @@ function RealtimeVoiceDeck(props) {
       return;
     }
     setPhase("reconnecting");
-    releaseMedia();
     sdkRequestJSON(VOICE_CONTROL_API, "POST", {
       inlineId: handle,
       action: "rollover",
@@ -5306,6 +5303,10 @@ function RealtimeVoiceDeck(props) {
       ) {
         throw new Error("Rollover nicht eindeutig bestätigt.");
       }
+      // The old peer must stay open until Sideband has authoritatively
+      // verified hangup, usage, outcome and budget. Closing it first races
+      // Voice-Web's unknown-exit guard and correctly forces reconciliation.
+      releaseMedia();
       inlineRef.current = "";
       setInlineId("");
       return begin({
@@ -5313,6 +5314,7 @@ function RealtimeVoiceDeck(props) {
         preserveTranscript: true,
       });
     }).catch(() => {
+      releaseMedia();
       setError("Neu verbinden wurde nicht eindeutig bestätigt. Keine automatische zweite Reservierung.");
       setPhase("error");
     });
