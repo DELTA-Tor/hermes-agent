@@ -36,6 +36,7 @@ import { usePageHeader } from "@/contexts/usePageHeader";
 import { useI18n } from "@/i18n";
 import { api } from "@/lib/api";
 import { latchChatActivation } from "@/lib/chat-activation";
+import { consumeChatSeed } from "@/lib/chat-seed";
 import { normalizeSessionTitle } from "@/lib/chat-title";
 import {
   PTY_CONNECTING_TIMEOUT_MS,
@@ -969,20 +970,17 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
       // follow up with the authoritative measurement — at worst Ink
       // reflows once after the PTY boots, which is imperceptible.
       ws.send(`\x1b[RESIZE:${term.cols};${term.rows}]`);
-      // One-shot: a ?learn=<text> param (set by the Skills page "Learn a
-      // skill" panel) is typed into the composer as a /learn command once the
-      // PTY is up. /learn resolves via command.dispatch → a normal agent turn,
-      // so this reuses the existing composer path — no special PTY protocol.
-      const learnSeed = searchParams.get("learn");
-      if (learnSeed) {
-        const next = new URLSearchParams(searchParams);
-        next.delete("learn");
+      // One-shot seeded turns. ``learn`` is set by the Skills page; ``prompt``
+      // is used by first-party dashboard surfaces such as MIKAEL OS. Both are
+      // typed into the real Hermes TUI composer after the PTY is connected, so
+      // the seeded turn keeps normal session persistence, memory and tools.
+      const { seed, next } = consumeChatSeed(searchParams);
+      if (seed) {
         setSearchParams(next, { replace: true });
-        const cmd = `/learn ${learnSeed}`.trim();
         // Delay so Ink's composer has mounted and grabbed focus before input.
         setTimeout(() => {
           try {
-            wsRef.current?.send(cmd + "\r");
+            wsRef.current?.send(seed + "\r");
           } catch {
             /* PTY not ready / closed — user can retype */
           }

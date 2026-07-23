@@ -5669,7 +5669,7 @@ def health() -> Dict[str, Any]:
     return {
         "status": "ok",
         "plugin": "mikael-os",
-        "version": "0.7.0",
+        "version": "0.8.0",
         "phase": 5,
         "readPaths": {
             "missions_dir": str(MISSIONS_DIR),

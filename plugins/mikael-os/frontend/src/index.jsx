@@ -369,6 +369,7 @@ const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
 // frame-ancestors 'none' — an iframe can never work). 409 = a mint window is
 // still open (debounce; orphan reservations eat the monthly cap).
 const VOICE_LAUNCH_API = PLUGIN_API + "/jarvis/launch";
+const VOICE_OPEN_EVENT = "mikael-os:voice-open";
 const LEARNING_LAUNCH_API = PLUGIN_API + "/learning/konstruktionslehre/launch";
 const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
 // M2 — FIRMA/Rise-L read-only projection bundle + one approval card's full
@@ -1683,8 +1684,8 @@ function MobileJarvis(props) {
     ),
     h(
       "button",
-      { type: "button", className: "mos__mjarvis-ptt", onClick: props.onSpeak, "aria-label": "Halten zum Sprechen (Demo)" },
-      h(Icon, { name: "mic", size: 20 }), "Halten zum Sprechen",
+      { type: "button", className: "mos__mjarvis-ptt", onClick: props.onSpeak, "aria-label": "Jarvis Realtime-Sprachchat starten" },
+      h(Icon, { name: "mic", size: 20 }), "Sprachchat",
     ),
     // Real Realtime entry (same self-contained flow as the desktop Cockpit):
     // confirm → mint (5,50 $ Reservierung) → new tab / anchor fallback.
@@ -3299,6 +3300,11 @@ function LernmodusLaunch() {
 function JarvisVoiceLaunch(props) {
   const [st, setSt] = useState(null); // null | {phase: confirm|launching|open|busy|error, ...}
   const [, tick] = useState(0);
+  useEffect(() => {
+    const open = () => setSt({ phase: "confirm" });
+    window.addEventListener(VOICE_OPEN_EVENT, open);
+    return () => window.removeEventListener(VOICE_OPEN_EVENT, open);
+  }, []);
   // 1-s ticker only while a countdown is visible (open/busy); mock hooks in the
   // smoke harness are inert, which is fine — st stays null there.
   useEffect(() => {
@@ -5286,7 +5292,9 @@ function MikaelOS() {
   // the choice survives a scene/tab switch, exactly like the desktop lens).
   const openModule = useCallback((id) => { setFocusId(id); setStateIndex(1); setSheetDetent(1); setSheetOpen(true); }, []);
   const closeSheet = useCallback(() => { setSheetOpen(false); }, []);
-  const onSpeak = useCallback(() => { runStateSequence(); }, [runStateSequence]);
+  const onSpeak = useCallback(() => {
+    window.dispatchEvent(new CustomEvent(VOICE_OPEN_EVENT));
+  }, []);
   const onQuick = useCallback((label) => { setCommand(label); runStateSequence(); }, [runStateSequence]);
 
   // --- Phase 3: propose lifecycle handlers (propose-only, gate-led) ---------
@@ -5548,9 +5556,14 @@ function MikaelOS() {
 
   const submit = useCallback((e) => {
     if (e && e.preventDefault) e.preventDefault();
-    runStateSequence();
+    const objective = command.trim();
+    if (!objective) return;
+    // Hand the turn to Hermes' real persistent TUI session. ChatPage consumes
+    // ``prompt`` once after its authenticated PTY opens, then removes it from
+    // the URL. This preserves the normal Jarvis memory/tool/session path.
+    window.location.assign("/chat?prompt=" + encodeURIComponent(objective));
     setCommand("");
-  }, [runStateSequence]);
+  }, [command]);
 
   // Cockpit → Konstellation idle-morph (§0): only while the Cockpit is showing,
   // Jarvis is at rest (stateIndex 0 / ready), and not on mobile. Disabled under
@@ -5636,7 +5649,8 @@ function MikaelOS() {
     h(
       "div",
       { className: "mos__command-bar" },
-      h("button", { type: "button", className: "mos__mic", "aria-label": "Sprachbefehl starten" }, h(Icon, { name: "mic", size: 22 })),
+      h("button", { type: "button", className: "mos__mic", "aria-label": "Jarvis Realtime-Sprachchat starten",
+        onClick: onSpeak }, h(Icon, { name: "mic", size: 22 })),
       h("input", {
         ref: inputRef,
         className: "mos__command-input",
