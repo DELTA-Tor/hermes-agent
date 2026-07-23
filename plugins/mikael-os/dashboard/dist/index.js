@@ -4861,13 +4861,11 @@ var MikaelOSPlugin = function() {
             reconnectTimerRef.current = window.setTimeout(() => {
               if (peer.connectionState !== "connected") {
                 setError("WebRTC-Verbindung blieb unterbrochen. Neu verbinden braucht eine bestätigte neue Reservierung.");
-                releaseMedia();
                 setPhase("error");
               }
             }, 5e3);
           } else if (state2 === "failed" || state2 === "closed") {
             setError("WebRTC-Verbindung ist beendet. Neu verbinden braucht eine bestätigte neue Reservierung.");
-            releaseMedia();
             setPhase("error");
           }
         };
@@ -4910,7 +4908,6 @@ var MikaelOSPlugin = function() {
         return;
       }
       setPhase("reconnecting");
-      releaseMedia();
       sdkRequestJSON(VOICE_CONTROL_API, "POST", {
         inlineId: handle,
         action: "rollover"
@@ -4919,6 +4916,7 @@ var MikaelOSPlugin = function() {
         if (!result.ok || body.ok === false || body.status !== "verified" || body.reason !== "session_rollover") {
           throw new Error("Rollover nicht eindeutig bestätigt.");
         }
+        releaseMedia();
         inlineRef.current = "";
         setInlineId("");
         return begin({
@@ -4926,6 +4924,7 @@ var MikaelOSPlugin = function() {
           preserveTranscript: true
         });
       }).catch(() => {
+        releaseMedia();
         setError("Neu verbinden wurde nicht eindeutig bestätigt. Keine automatische zweite Reservierung.");
         setPhase("error");
       });
