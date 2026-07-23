@@ -65,8 +65,8 @@ def test_manifest_health_and_router_contract_are_aligned(plugin_api) -> None:
     health = plugin_api.health()
     route_paths = {route.path for route in plugin_api.router.routes}
 
-    assert manifest["version"] == health["version"] == "0.9.0"
-    assert health["phase"] == 5
+    assert manifest["version"] == health["version"] == "1.0.0"
+    assert health["phase"] == 6
     assert {
         "/cockpit/kpi",
         "/cockpit/jarvis-state",
@@ -79,12 +79,122 @@ def test_manifest_health_and_router_contract_are_aligned(plugin_api) -> None:
         "/reflexion/overview",
         "/gesundheit/overview",
         "/betrieb/overview",
+        "/life/overview",
         "/betrieb/mac/propose",
         "/study/plan",
         "/study/plan/propose",
         "/learning/intake/analyze",
+        "/jarvis/voice/status",
+        "/jarvis/voice/healthz",
+        "/jarvis/voice/prepare",
+        "/jarvis/voice/session",
+        "/jarvis/voice/control",
         "/health",
     } <= route_paths
+
+
+def test_life_atlas_keeps_one_truth_model_and_separates_personal_from_office(
+    plugin_api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def module_payload(module_id: str) -> dict:
+        payload = {
+            "state": "fresh",
+            "source": f"source:{module_id}",
+            "sourceKind": "file",
+            "workspace": "private",
+            "permission": "Nur lesen",
+            "summary": f"{module_id} live",
+            "rows": [],
+        }
+        if module_id == "kalender":
+            payload["rows"] = [{
+                "title": "Bestätigter Termin",
+                "value": "24.07. 09:00",
+                "startsAt": "2026-07-24T09:00:00+02:00",
+                "workspace": "private",
+            }]
+        if module_id == "tasks":
+            payload["rows"] = [{
+                "title": "Bestätigte Mission",
+                "statusLabel": "Läuft",
+                "missionId": "mis-test",
+            }]
+        return payload
+
+    monkeypatch.setattr(
+        plugin_api,
+        "_build_readers",
+        lambda: {
+            meta["id"]: (lambda module_id=meta["id"]: module_payload(module_id))
+            for meta in plugin_api._MODULE_META
+        },
+    )
+    monkeypatch.setattr(plugin_api, "dashboard_catalog", lambda: [{
+        "id": "fsm",
+        "label": "FSM-Cockpit",
+        "state": "fresh",
+        "reachable": True,
+        "visibility": "tailnet-only",
+        "audiences": ["mikael", "office"],
+        "url": "https://delta-ai-01.tailbc3df5.ts.net:18065/",
+    }])
+
+    result = plugin_api.life_overview()
+    by_id = {area["id"]: area for area in result["areas"]}
+
+    assert len(result["areas"]) == 17
+    assert result["identity"]["frontdoor"] == "Mikael OS / Jarvis"
+    assert result["authority"]["directTruthWrites"] is False
+    assert result["authority"]["publicExposure"] is False
+    assert result["authority"]["gates"] == [
+        "money",
+        "external_customer_send",
+        "truth_schema_migration",
+    ]
+    assert result["evolution"]["store"] == "none in Mikael OS"
+    assert by_id["work"]["workspace"] == "company"
+    assert by_id["relationships"]["lifecycle"] == "discoverable"
+    assert by_id["relationships"]["coverage"] == 0
+    assert result["calendarAndTasks"]["calendar"]["rows"][0]["title"] == "Bestätigter Termin"
+    assert result["calendarAndTasks"]["tasks"]["rows"][0]["missionId"] == "mis-test"
+    assert {item["kind"] for item in result["futureRadar"]["items"]} == {
+        "calendar",
+        "mission",
+    }
+
+
+def test_personal_gap_modules_never_ship_concept_values(plugin_api) -> None:
+    for reader in (
+        plugin_api.module_travel,
+        plugin_api.module_nutrition,
+        plugin_api.module_journal,
+    ):
+        result = reader()
+        assert result["state"] == "unavailable"
+        assert result["rows"] == []
+        assert result.get("demo") is not True
+
+
+def test_dashboard_catalog_links_are_existing_tailnet_surfaces_only(plugin_api) -> None:
+    assert plugin_api._DASHBOARD_CATALOG
+    for item in plugin_api._DASHBOARD_CATALOG:
+        assert item["loopback"].startswith("http://127.0.0.1:")
+        assert item["url"].startswith(
+            "https://delta-ai-01.tailbc3df5.ts.net:"
+        )
+        assert "funnel" not in item["url"].lower()
+
+
+def test_pwa_scope_is_private_to_mikael_os_and_never_caches_api_truth(
+    plugin_api,
+) -> None:
+    assert plugin_api._PWA_MANIFEST["start_url"] == "/mikael-os"
+    assert plugin_api._PWA_MANIFEST["scope"] == "/mikael-os"
+    assert 'url.pathname === "/mikael-os"' in plugin_api._PWA_SW_JS
+    assert "req.destination === \"script\"" in plugin_api._PWA_SW_JS
+    assert "plugin API JSON" in plugin_api._PWA_SW_JS
+    assert "c.put(req, copy)" in plugin_api._PWA_SW_JS
+    assert 'k.startsWith("mikael-os-shell-")' in plugin_api._PWA_SW_JS
 
 
 def test_dashboard_multi_pdf_upload_is_ephemeral_and_uses_shared_adapter(
@@ -220,8 +330,113 @@ def test_agent_sessions_projects_bounded_redacted_live_delegation_tail(
     assert live["rows"][0]["state"] == "running"
     task = live["rows"][0]["tasks"][0]
     assert task["goal"] == "Hermes Update live prüfen"
-    assert [event["kind"] for event in task["events"]] == ["think", "tool", "result"]
+    assert [event["kind"] for event in task["events"]] == ["tool", "result"]
     assert all("forbidden" not in event["text"] for event in task["events"])
+
+
+def test_mission_projection_exposes_only_product_safe_work_and_evidence(
+    plugin_api,
+) -> None:
+    row = plugin_api._mission_row({
+        "mission_id": "mis-test",
+        "state": "running",
+        "goal": "Mikael OS als Jarvis-Frontdoor abschließen",
+        "owner_agent": "jarvis",
+        "job_type": "computer-use",
+        "plan": ["Implementieren", "Testen", "Live verifizieren"],
+        "next_action": "Responsive QA durchführen",
+        "expected_result": "Eine stabile PWA",
+        "evidence_refs": ["test:smoke-pass"],
+        "receipts": ["receipt:deploy-sha"],
+        "updated_at": "2026-07-23T18:00:00+00:00",
+        "private_reasoning": "must never be projected",
+    })
+
+    assert row["missionId"] == "mis-test"
+    assert row["goal"] == "Mikael OS als Jarvis-Frontdoor abschließen"
+    assert row["plan"] == ["Implementieren", "Testen", "Live verifizieren"]
+    assert row["currentStep"] == "Responsive QA durchführen"
+    assert row["tool"] == "computer-use"
+    assert row["expectedResult"] == "Eine stabile PWA"
+    assert row["evidence"] == ["test:smoke-pass", "receipt:deploy-sha"]
+    assert "private_reasoning" not in row
+    assert "reasoning" not in json.dumps(row).lower()
+
+
+def test_personal_telegram_and_company_office_signals_never_blend_workspaces(
+    plugin_api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(plugin_api, "_komm_telegram", lambda: {
+        "state": "fresh",
+        "workspace": "private",
+        "source": "operator-bot",
+        "rows": [{"title": "Privater Jarvis-Turn"}],
+    })
+    monkeypatch.setattr(plugin_api, "module_company", lambda: {
+        "state": "fresh",
+        "workspace": "company_signal",
+        "source": "approvals",
+        "rows": [{"title": "Firmenvorschlag"}],
+        "pending": 1,
+    })
+    monkeypatch.setattr(plugin_api, "_freescout_signals", lambda: {
+        "state": "fresh",
+        "workspace": "company_signal",
+        "source": "freescout",
+        "rows": [{"title": "Büroticket"}],
+        "open": 1,
+    })
+
+    result = plugin_api.module_kommunikation()
+    by_group = {row["group"]: row for row in result["rows"]}
+
+    assert result["workspaces"] == ["private", "company_signal"]
+    assert by_group["telegram"]["workspace"] == "private"
+    assert by_group["vorschlaege"]["workspace"] == "company_signal"
+    assert by_group["freescout"]["workspace"] == "company_signal"
+    assert result["readOnly"] is True
+
+
+def test_dashboard_telegram_and_voice_project_one_shared_mission(
+    plugin_api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(plugin_api, "_read_missions", lambda: [{
+        "contract_version": "mission.v2",
+        "mission_id": "mis-shared",
+        "goal": "Geteilte Jarvis-Mission",
+        "state": "running",
+        "owner_agent": "jarvis",
+        "channel_correlations": [
+            "telegram:operator-test",
+            "realtime:voice-test",
+        ],
+    }])
+    monkeypatch.setattr(plugin_api, "_read_approval_cards", lambda: ([], True))
+    monkeypatch.setattr(
+        plugin_api,
+        "control_plane_status",
+        lambda: {"reachable": True},
+    )
+    monkeypatch.setattr(
+        plugin_api,
+        "_http_get_json",
+        lambda *_args, **_kwargs: (200, {}),
+    )
+
+    result = plugin_api.betrieb_overview()
+    frontdoors = result["frontdoors"]
+    channels = {row["id"]: row for row in frontdoors["channels"]}
+
+    assert frontdoors["shared"]["missions"] == 1
+    assert frontdoors["shared"]["missionsWithCorrelation"] == 1
+    assert frontdoors["missionsSample"][0]["channelCorrelations"] == [
+        "telegram:operator-test",
+        "realtime:voice-test",
+    ]
+    assert channels["dashboard"]["role"] == "reader"
+    assert channels["telegram"]["role"] == "writer"
+    assert frontdoors["_prov"]["source"].startswith("mission.v2")
+    assert frontdoors["_prov"]["readOnly"] is True
 
 
 def test_study_plan_default_is_dry_run_and_business_scope_is_refused(

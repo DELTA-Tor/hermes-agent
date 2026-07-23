@@ -29,6 +29,24 @@ if (code.includes("Halten zum Sprechen (Demo)")) {
   console.error("FAIL: obsolete demo voice control is still shipped");
   process.exit(1);
 }
+const realtimeMust = [
+  "/jarvis/voice/status", "/jarvis/voice/prepare", "/jarvis/voice/session",
+  "/jarvis/voice/control", "RTCPeerConnection",
+  "input_audio_buffer.speech_started", "response.output_audio_transcript.delta",
+  "response.function_call_arguments.done", "conversation.item.create",
+  "Hermes-Sideband", "Neu verbinden",
+];
+const realtimeMissing = realtimeMust.filter((s) => !code.includes(s));
+if (realtimeMissing.length) {
+  console.error("FAIL: embedded Realtime contract missing:", realtimeMissing);
+  process.exit(1);
+}
+const retiredVoiceMarkers = ["VOICE_LAUNCH_API", "5,50", "Jarvis-Sprachsession"];
+const retiredVoiceLeak = retiredVoiceMarkers.filter((s) => code.includes(s));
+if (retiredVoiceLeak.length) {
+  console.error("FAIL: retired expiring-link voice flow is still shipped:", retiredVoiceLeak);
+  process.exit(1);
+}
 
 // --- minimal mock React ---------------------------------------------------
 const Fragment = Symbol("Fragment");
@@ -113,15 +131,17 @@ try {
 }
 
 // The default scene is the Cockpit (index.jsx: useState("cockpit")). These
-// strings are rendered in the Cockpit's initial static pass (TopBar identity,
-// the four KPI labels, the three zone cards, the 7-state rail incl. the new
-// FOKUS state, and the shared command bar).
+// strings are rendered in the Cockpit's initial static pass. They prove the
+// selected Voice Command Deck is the default personal front door and that its
+// operational panels stay in the same tree on desktop and narrow screens.
 const mustContain = [
-  "MIKAEL OS", "Privates System", "Mikael",
-  "Kennzahlen", "Recovery", "Nächste Klausur", "Offene Freigaben", "Laufende Jobs",
-  "Heute", "Jarvis", "Firma / Rise-L", "Freigaben",
-  "Bereit", "Fokus", "Verifiziert",
-  'Sage „Jarvis“',
+  "MIKAEL OS", "Persönliches Command Center", "Mikael", "JARVIS",
+  "Realtime-Status wird geladen", "Noch kein Realtime-Transkript",
+  "Aktive Missionen", "Missions-Evidenz", "Kalender & Aufgaben",
+  "Gezielte Freigaben", "System & Services", "Surface-Katalog",
+  "Native API zuerst", "Computer Use", "Nachricht an Jarvis",
+  "Alle Lebensbereiche", "Dashboards, Quellen und Bedienwege",
+  "Zukunftsradar", "Vollständiger Abschluss",
 ];
 const missing = mustContain.filter((s) => !html.includes(s));
 if (missing.length) {
@@ -134,12 +154,24 @@ if (missing.length) {
 // cannot flip). Assert on the bundle SOURCE that this content is still present —
 // so a regression that drops the Konstellation is still caught.
 const constellationMust = [
-  "Konzeptdaten", "JARVIS", "Engineering / Codex",
-  "Feature: KI Fokus-Modus", "Modul hinzufügen", "Ziehen um neu zu ordnen",
+  "Quelle wird geladen", "JARVIS", "Engineering / Codex",
+  "Keine bestätigte Quelle", "Modul hinzufügen", "Ziehen um neu zu ordnen",
 ];
 const constMissing = constellationMust.filter((s) => !code.includes(s));
 if (constMissing.length) {
   console.error("FAIL: bundle missing Konstellation-scene content:", constMissing);
+  process.exit(1);
+}
+const fakeDataMarkers = [
+  "Feature: KI Fokus-Modus",
+  "Rom · Städtereise",
+  "2.105 kcal",
+  "Sehr gute Ausgangslage für Deep Work",
+  "Morning Light & Bewegung",
+];
+const fakeDataLeak = fakeDataMarkers.filter((s) => code.includes(s));
+if (fakeDataLeak.length) {
+  console.error("FAIL: visible concept fixture values remain in the product bundle:", fakeDataLeak);
   process.exit(1);
 }
 
@@ -149,7 +181,8 @@ if (constMissing.length) {
 const liveWorkMust = [
   "Live-Arbeit der Agenten",
   "Hermes-0.19-Live-Transkripte",
-  "Denkt",
+  "Schritt",
+  "Evidenz",
   "Änderungen per Text oder Sprache an Jarvis geben",
   "setInterval",
 ];

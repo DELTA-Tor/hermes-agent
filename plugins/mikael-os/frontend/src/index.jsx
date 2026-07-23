@@ -104,43 +104,29 @@ function Icon(props) {
 // mutates and what reproduces the reference ring composition. The top row sits
 // clear of the (lowered, smaller) core so no card ever overlaps the orb.
 const MODULES = [
-  { id: "tasks", title: "Aufgaben & Ziele", icon: "list-todo", accent: "amber", meta: "7 aktiv · 3 heute", metric: "7", metricSub: "aktiv · 3 heute", pos: { x: 47, y: 9 } },
-  { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "Anki-Sync bereit", metric: "—", metricSub: "Karten fällig", pos: { x: 67, y: 14 } },
-  { id: "risel", title: "Rise-L Prozesse", icon: "server", accent: "blue", meta: "5 Workflows aktiv", metric: "5", metricSub: "Workflows aktiv", pos: { x: 86, y: 22 } },
-  { id: "travel", title: "Reisen", icon: "plane", accent: "cyan", meta: "Rom · 18. Jun", metric: "3 T", metricSub: "bis Rom", pos: { x: 89, y: 41 } },
-  { id: "nutrition", title: "Ernährung", icon: "leaf", accent: "emerald", meta: "2.105 kcal", metric: "2.105", metricSub: "kcal heute", pos: { x: 89, y: 58 } },
+  { id: "tasks", title: "Aufgaben & Ziele", icon: "list-todo", accent: "amber", meta: "Quelle wird geprüft", metric: "—", metricSub: "Aufgaben", pos: { x: 47, y: 9 } },
+  { id: "learning", title: "Lernplan", icon: "graduation-cap", accent: "violet", meta: "Quelle wird geprüft", metric: "—", metricSub: "Lernen", pos: { x: 67, y: 14 } },
+  { id: "risel", title: "Rise-L Prozesse", icon: "server", accent: "blue", meta: "Quelle wird geprüft", metric: "—", metricSub: "Prozesse", pos: { x: 86, y: 22 } },
+  { id: "travel", title: "Reisen", icon: "plane", accent: "cyan", meta: "Noch nicht verbunden", metric: "—", metricSub: "Reisen", pos: { x: 89, y: 41 } },
+  { id: "nutrition", title: "Ernährung", icon: "leaf", accent: "emerald", meta: "Noch nicht verbunden", metric: "—", metricSub: "Ernährung", pos: { x: 89, y: 58 } },
   { id: "company", title: "Firma-Signale", icon: "building-2", accent: "neutral", meta: "Nur lesen", metric: "—", metricSub: "Nur lesen", readOnly: true, pos: { x: 85, y: 75 } },
-  { id: "journal", title: "Journal", icon: "notebook-pen", accent: "neutral", meta: "1 Eintrag heute", metric: "1", metricSub: "Eintrag heute", pos: { x: 13, y: 70 } },
-  { id: "body", title: "Körper / WHOOP", icon: "heart-pulse", accent: "emerald", meta: "Recovery 82%", metric: "82 %", metricSub: "Recovery", pos: { x: 9, y: 51 } },
-  { id: "kalender", title: "Kalender", icon: "calendar-days", accent: "cyan", meta: "Nächster · 10:30", metric: "10:30", metricSub: "nächstes Ereignis", pos: { x: 11, y: 32 } },
-  { id: "today", title: "Heute", icon: "sun", accent: "cyan", meta: "9 Ereignisse", metric: "9", metricSub: "Ereignisse", pos: { x: 26, y: 15 } },
+  { id: "journal", title: "Journal", icon: "notebook-pen", accent: "neutral", meta: "Noch nicht verbunden", metric: "—", metricSub: "Journal", pos: { x: 13, y: 70 } },
+  { id: "body", title: "Körper / WHOOP", icon: "heart-pulse", accent: "emerald", meta: "Quelle wird geprüft", metric: "—", metricSub: "Körperstatus", pos: { x: 9, y: 51 } },
+  { id: "kalender", title: "Kalender", icon: "calendar-days", accent: "cyan", meta: "Quelle wird geprüft", metric: "—", metricSub: "nächstes Ereignis", pos: { x: 11, y: 32 } },
+  { id: "today", title: "Heute", icon: "sun", accent: "cyan", meta: "Quelle wird geprüft", metric: "—", metricSub: "Ereignisse", pos: { x: 26, y: 15 } },
 ];
 
-// Living-Timeline event fixtures (Phase 4). Each event links to a ring module id
-// so the timeline reuses the same Phase-2 read-model honesty: a card whose linked
-// module is live shows its live state pip; concept modules keep the Konzept badge.
-// `period` groups the day into Morgen / Mittag / Abend for the axis dividers.
-const TIMELINE = [
-  { id: "briefing", period: "morgen", time: "06:45", end: "07:00", title: "Morgenbriefing", sub: "Tagesstart & Fokus setzen", icon: "sun", accent: "cyan", moduleId: "today" },
-  { id: "training", period: "morgen", time: "07:30", end: "08:30", title: "Training", sub: "Hyrox + Mobility", icon: "activity", accent: "emerald", moduleId: "body" },
-  { id: "deep1", period: "morgen", time: "09:00", end: "11:00", title: "Deep Work Block 1", sub: "Codex Build Sprint", icon: "code-xml", accent: "cyan", moduleId: "engineering" },
-  { id: "learn", period: "morgen", time: "11:00", end: "11:45", title: "Lernplan", sub: "KI-Systeme · Kapitel 4", icon: "graduation-cap", accent: "violet", moduleId: "learning" },
-  { id: "claude", period: "mittag", time: "11:45", end: "12:30", title: "Claude Mission", sub: "Research & Draft", icon: "sparkles", accent: "violet", moduleId: "engineering" },
-  { id: "biz", period: "mittag", time: "13:00", end: "13:45", title: "Business Review", sub: "KPIs & Team-Sync", icon: "building-2", accent: "amber", moduleId: "company" },
-  { id: "focus2", period: "mittag", time: "14:30", end: "16:00", title: "Focus Block 2", sub: "Engineering & Delivery", icon: "zap", accent: "cyan", moduleId: "engineering" },
-  { id: "riselp", period: "mittag", time: "16:00", end: "16:30", title: "Rise-L Process", sub: "Weekly Verification", icon: "server", accent: "emerald", moduleId: "risel" },
-  { id: "route", period: "abend", time: "17:00", end: "18:30", title: "Route & Reisen", sub: "Flughafen ZRH – MUC", icon: "plane", accent: "amber", moduleId: "travel" },
-  { id: "dinner", period: "abend", time: "19:00", end: "21:00", title: "Abendessen", sub: "High Protein + Greens", icon: "utensils", accent: "emerald", moduleId: "nutrition" },
-  { id: "journalx", period: "abend", time: "21:30", end: "22:00", title: "Journal & Reflexion", sub: "Tagesreview & Dankbarkeit", icon: "notebook-pen", accent: "violet", moduleId: "journal" },
-];
-// Single date source for the whole shell — the desktop top-bar, the desktop
-// timeline sub-header and the mobile timeline hero all read from here, so the
-// same day can never appear as two different dates on one screen.
-const TODAY = { long: "Donnerstag, 26. Juni", short: "Do, 26. Juni" };
-// The conceptual "now" the Jarvis marker sits at (writes NOTHING — a suggestion
-// only). 16:42 sits chronologically AFTER the 16:00 Rise-L block and before the
-// 17:00 departure, so the rail never contradicts its own timestamp.
-const TIMELINE_NOW = { after: "riselp", time: "16:42", suggestion: "Kurze Pause vor der Fahrt einlegen.", tag: "Hydration" };
+// Legacy mobile helpers also consume these constants. The event list is
+// intentionally empty; realTimelineEvents() hydrates the visible timeline.
+const TIMELINE = [];
+const TODAY = {
+  long: new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin", weekday: "long", day: "2-digit", month: "long",
+  }).format(new Date()),
+  short: new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin", weekday: "short", day: "2-digit", month: "2-digit",
+  }).format(new Date()),
+};
 // Shared orb centre (% of the constellation stage). The core CSS anchor, the
 // connector origin and the lens clearance are all derived from this single pair,
 // so the geometry can't drift into an orb⇄card collision. Kept in sync with
@@ -155,109 +141,20 @@ const PERIODS = [
   { id: "abend", label: "Abend", icon: "moon-star" },
 ];
 
-// Focus-Lens payloads (keyed by module id, plus the "engineering" home lens the
-// reference shows by default). Rows reuse one generic renderer.
+// Focus-Lens presentation metadata only. Values and rows always come from the
+// live read models; there are deliberately no fixture records here.
 const LENS = {
-  engineering: {
-    icon: "code-xml", accent: "violet", title: "Engineering / Codex", sub: "Fokus-Linse · 4 Missionen",
-    source: "GitHub", freshness: "vor 7 Min", permission: "Lesen & Schreiben",
-    rows: [
-      { icon: "rocket", accent: "emerald", title: "Feature: KI Fokus-Modus", sub: "Sprint 42 · Frontend", status: "running", statusLabel: "Läuft", value: "68 %" },
-      { icon: "lock", accent: "amber", title: "API: Permissions Service", sub: "Backend · Sicherheit", status: "waiting", statusLabel: "Wartet auf Review", value: "—" },
-      { icon: "circle-check-big", accent: "cyan", title: "Refactor: Workspace Core", sub: "Architektur", status: "verified", statusLabel: "Verifiziert", value: "100 %" },
-      { icon: "flask-round", accent: "emerald", title: "Test Suite: E2E Stabilität", sub: "Qualitätssicherung", status: "running", statusLabel: "Läuft", value: "24 %" },
-    ],
-  },
-  today: {
-    icon: "sun", accent: "cyan", title: "Heute", sub: "Tagesplan · 9 Ereignisse",
-    source: "Kalender", freshness: "vor 2 Min", permission: "Nur lesen",
-    rows: [
-      { icon: "sun", accent: "cyan", title: "Morning Light & Bewegung", sub: "20 Min · Tagesstart", value: "07:30" },
-      { icon: "brain", accent: "emerald", title: "Strategy Deep Work", sub: "90 Min · Fokus", value: "09:00" },
-      { icon: "target", accent: "violet", title: "Leadership Sync", sub: "45 Min · Team", value: "12:30" },
-      { icon: "plane", accent: "cyan", title: "Kunden-Call · Projekt A", sub: "60 Min", value: "16:30" },
-    ],
-  },
-  tasks: {
-    icon: "target", accent: "emerald", title: "Aufgaben & Ziele", sub: "7 aktiv · 3 heute fällig",
-    source: "Personal OS", freshness: "vor 5 Min", permission: "Lesen & Schreiben",
-    rows: [
-      { icon: "circle-check-big", accent: "emerald", title: "Strategie Review", sub: "Diese Woche", status: "running", statusLabel: "Läuft", value: "60 %" },
-      { icon: "circle-check-big", accent: "amber", title: "Team Alignment", sub: "Diese Woche", status: "waiting", statusLabel: "Wartet", value: "30 %" },
-      { icon: "circle-check-big", accent: "violet", title: "Produkt Roadmap", sub: "Nächste Woche", value: "10 %" },
-    ],
-  },
-  learning: {
-    icon: "graduation-cap", accent: "violet", title: "Lernplan", sub: "Spaced Repetition · Anki",
-    source: "anki-sync (read-only)", freshness: "—", permission: "Nur lesen (mode=ro)",
-    rows: [
-      { icon: "graduation-cap", accent: "violet", title: "Fällig heute", sub: "Anki-Karten", value: "—" },
-      { icon: "target", accent: "cyan", title: "Retention", sub: "letzte 30 Tage", value: "—" },
-      { icon: "flame", accent: "violet", title: "Streak", sub: "Lern-Tage in Folge", value: "—" },
-    ],
-  },
-  risel: {
-    icon: "server", accent: "amber", title: "Rise-L Prozesse", sub: "5 Workflows aktiv",
-    source: "systemd --user", freshness: "07:15", permission: "Nur lesen",
-    rows: [
-      { icon: "server", accent: "emerald", title: "Systeme online", sub: "Alle Kernsysteme stabil", status: "verified", statusLabel: "Verifiziert", value: "OK" },
-      { icon: "activity", accent: "amber", title: "Mail-Sync · Dispatch-Pulse", sub: "Letzter Lauf heute", value: "5" },
-      { icon: "clock", accent: "cyan", title: "Letzter Check", sub: "Heute", value: "07:15" },
-    ],
-  },
-  travel: {
-    icon: "plane", accent: "cyan", title: "Reisen", sub: "Nächste Reise · Rom",
-    source: "Reiseplan", freshness: "vor 3 Std", permission: "Nur lesen",
-    rows: [
-      { icon: "plane", accent: "cyan", title: "Rom · Städtereise", sub: "Abflug 18. Jun · 08:20", value: "3 T" },
-      { icon: "map", accent: "emerald", title: "Hotel bestätigt", sub: "Trastevere", status: "verified", statusLabel: "Verifiziert", value: "OK" },
-      { icon: "clock", accent: "amber", title: "Check-in öffnet", sub: "17. Jun", value: "—" },
-    ],
-  },
-  nutrition: {
-    icon: "leaf", accent: "emerald", title: "Ernährung", sub: "Heute · 2.105 kcal",
-    source: "Ernährungs-Log", freshness: "vor 40 Min", permission: "Lesen & Schreiben",
-    rows: [
-      { icon: "utensils", accent: "emerald", title: "Protein", sub: "Ziel 160 g", status: "running", statusLabel: "Läuft", value: "142 g" },
-      { icon: "leaf", accent: "cyan", title: "Wasser", sub: "Ziel 3 L", value: "2,1 L" },
-      { icon: "activity", accent: "amber", title: "Koffein", sub: "Letzte Tasse 14:00", value: "2×" },
-    ],
-  },
-  company: {
-    icon: "building-2", accent: "neutral", title: "Firma-Signale", sub: "Nur lesen · Approval-Cards",
-    source: "Delta-Tor", freshness: "vor 12 Min", permission: "Nur lesen",
-    rows: [
-      { icon: "activity", accent: "emerald", title: "Team Momentum", sub: "Auslastung stabil", status: "verified", statusLabel: "Stark", value: "" },
-      { icon: "message-square", accent: "cyan", title: "Stakeholder Feedback", sub: "360 Feedback", value: "Positiv" },
-      { icon: "shield-check", accent: "amber", title: "Risiko Radar", sub: "Keine Eskalation", value: "Niedrig" },
-    ],
-  },
-  kalender: {
-    icon: "calendar-days", accent: "cyan", title: "Kalender / Route", sub: "Nächster Termin · 10:30",
-    source: "Kalender", freshness: "vor 2 Min", permission: "Nur lesen",
-    rows: [
-      { icon: "target", accent: "cyan", title: "Leadership Sync", sub: "Team-Update", value: "10:30" },
-      { icon: "brain", accent: "emerald", title: "Strategie Review", sub: "Q2 Planung", value: "14:00" },
-      { icon: "plane", accent: "amber", title: "Kunden-Call · Projekt A", sub: "Anfahrt 36 Min · Leichtverkehr", value: "16:30" },
-    ],
-  },
-  body: {
-    icon: "heart-pulse", accent: "emerald", title: "Körper / WHOOP", sub: "Recovery 82% · Gut",
-    source: "WHOOP", freshness: "Stand 06:12", permission: "Nur lesen",
-    rows: [
-      { icon: "heart-pulse", accent: "emerald", title: "Recovery", sub: "Bereit für hohe Belastung", status: "verified", statusLabel: "Gut", value: "82 %" },
-      { icon: "moon", accent: "cyan", title: "Schlaf", sub: "Erholsam", value: "7 h 26 m" },
-      { icon: "activity", accent: "amber", title: "Ruhepuls · Belastung", sub: "48 bpm · Strain 32", value: "+12 %" },
-    ],
-  },
-  journal: {
-    icon: "notebook-pen", accent: "cyan", title: "Journal", sub: "1 Eintrag heute",
-    source: "Journal", freshness: "vor 6 Std", permission: "Lesen & Schreiben",
-    rows: [
-      { icon: "notebook-pen", accent: "cyan", title: "Wie fühlt sich Fokus heute an?", sub: "Sprach- oder Text-Eintrag", value: "—" },
-      { icon: "audio-lines", accent: "violet", title: "Voice-Memo", sub: "Heute 06:40", value: "0:48" },
-    ],
-  },
+  engineering: { icon: "code-xml", accent: "violet", title: "Engineering / Codex", sub: "mission.v2", rows: [] },
+  today: { icon: "sun", accent: "cyan", title: "Heute", sub: "Kalender-Projektion", rows: [] },
+  tasks: { icon: "target", accent: "emerald", title: "Aufgaben & Ziele", sub: "mission.v2 + Policy", rows: [] },
+  learning: { icon: "graduation-cap", accent: "violet", title: "Lernplan", sub: "Anki + Crashcamp", rows: [] },
+  risel: { icon: "server", accent: "amber", title: "Rise-L Prozesse", sub: "systemd + Registry", rows: [] },
+  travel: { icon: "plane", accent: "cyan", title: "Reisen", sub: "Noch nicht verbunden", rows: [] },
+  nutrition: { icon: "leaf", accent: "emerald", title: "Ernährung", sub: "Noch nicht verbunden", rows: [] },
+  company: { icon: "building-2", accent: "neutral", title: "Firma-Signale", sub: "Read-only", rows: [] },
+  kalender: { icon: "calendar-days", accent: "cyan", title: "Kalender", sub: "calendar-evidence", rows: [] },
+  body: { icon: "heart-pulse", accent: "emerald", title: "Körper / WHOOP", sub: "WHOOP-Connector", rows: [] },
+  journal: { icon: "notebook-pen", accent: "cyan", title: "Journal", sub: "Noch nicht verbunden", rows: [] },
 };
 
 // Honest tooltip for chrome buttons that remain intentionally unwired. They
@@ -370,6 +267,10 @@ const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
 // still open (debounce; orphan reservations eat the monthly cap).
 const VOICE_LAUNCH_API = PLUGIN_API + "/jarvis/launch";
 const VOICE_OPEN_EVENT = "mikael-os:voice-open";
+const VOICE_STATUS_API = PLUGIN_API + "/jarvis/voice/status";
+const VOICE_PREPARE_API = PLUGIN_API + "/jarvis/voice/prepare";
+const VOICE_SESSION_API = PLUGIN_API + "/jarvis/voice/session";
+const VOICE_CONTROL_API = PLUGIN_API + "/jarvis/voice/control";
 const LEARNING_LAUNCH_API = PLUGIN_API + "/learning/konstruktionslehre/launch";
 const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
 // M2 — FIRMA/Rise-L read-only projection bundle + one approval card's full
@@ -404,6 +305,7 @@ const GESUNDHEIT_OVERVIEW_API = PLUGIN_API + "/gesundheit/overview";
 // service worker are plugin-served under /pwa/* (injected at runtime, honest
 // about the host-side install limit).
 const BETRIEB_OVERVIEW_API = PLUGIN_API + "/betrieb/overview";
+const LIFE_OVERVIEW_API = PLUGIN_API + "/life/overview";
 const MAC_PROPOSE_API = PLUGIN_API + "/betrieb/mac/propose";
 const PWA_MANIFEST_HREF = PLUGIN_API + "/pwa/manifest.webmanifest";
 const PWA_SW_HREF = PLUGIN_API + "/pwa/sw.js";
@@ -445,6 +347,42 @@ function sdkGet(url) {
   if (typeof sdk.fetchJSON === "function") return Promise.resolve(sdk.fetchJSON(url));
   if (typeof fetch === "function") return fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
   return Promise.reject(new Error("no transport"));
+}
+
+function openJarvisChat(objective) {
+  const text = String(objective || "").trim();
+  if (!text || typeof window === "undefined") return;
+  const sdk = window.__HERMES_PLUGIN_SDK__ || {};
+  if (typeof sdk.openChat === "function") sdk.openChat(text);
+  else window.location.assign("/chat?prompt=" + encodeURIComponent(text));
+}
+
+function sdkRequestJSON(url, method, body) {
+  const sdk = (typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__) || {};
+  const opts = {
+    method: method || "GET",
+    headers: { "Content-Type": "application/json" },
+    body: body == null ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  };
+  const call = typeof sdk.authedFetch === "function"
+    ? Promise.resolve(sdk.authedFetch(url, opts))
+    : (typeof fetch === "function"
+      ? fetch(url, opts)
+      : Promise.reject(new Error("no transport")));
+  return call.then((r) => {
+    if (!r || typeof r.json !== "function") return { ok: true, body: r, status: 200 };
+    return r.json().catch(() => ({})).then((payload) => ({
+      ok: r.ok !== false && (r.status == null || r.status < 400),
+      body: payload,
+      status: r.status || 200,
+    }));
+  });
+}
+
+function sdkResponseBody(result) {
+  const body = result && result.body && typeof result.body === "object" ? result.body : {};
+  return body.detail && typeof body.detail === "object" ? body.detail : body;
 }
 
 // Lifecycle vocabulary for the ONE propose action. Every state carries text +
@@ -1013,13 +951,13 @@ function resolveLens(focusId, liveModule) {
       state: st, demo: false, note: L._note,
     };
   }
-  // Fixture / concept module (or pre-fetch): keep the concept lens + Konzept badge.
+  // Pre-fetch or a legacy fixture: never reveal fixture rows as product data.
   return {
     icon: (L && L.icon) || fixture.icon, accent: (L && L.accent) || fixture.accent,
     title: (L && L.title) || fixture.title, sub: (L && L.meta) || fixture.sub,
-    rows: fixture.rows, source: "Konzept", freshness: "Konzeptdaten",
-    permission: fixture.permission, state: L ? "fresh" : "loading",
-    demo: true, note: L && L._note,
+    rows: [], source: (L && L._source) || "Quelle wird geladen", freshness: "—",
+    permission: (L && L._permission) || "—", state: L ? (L._state || "empty") : "loading",
+    demo: false, note: (L && L._note) || "Keine bestätigte Quelle; keine Konzeptwerte angezeigt.",
   };
 }
 
@@ -1139,13 +1077,69 @@ function FocusLens(props) {
 }
 
 // ===========================================================================
-// Phase 4 · A — LIVING TIMELINE scene (desktop). A continuous Morgen→Nacht axis
-// of grounded event cards in time order + a fixed right-hand focus panel
-// (Kalender heute · Top-3 · WHOOP · Jarvis-Empfehlung). Reuses the SAME Phase-2
-// read-model honesty: each event's linked ring module drives its state pip, so
-// live modules read live and concept modules keep the Konzept badge. The Jarvis
-// marker at the conceptual "now" is a SUGGESTION only — it writes nothing.
+// Phase 4 · A — LIVING TIMELINE scene (desktop). The rail is built exclusively
+// from the real calendar-evidence rows. No fixture event or recommendation is
+// inserted when the calendar is empty.
 // ===========================================================================
+function berlinTimeFromIso(value) {
+  if (!value || /^\d{4}-\d{2}-\d{2}$/.test(value)) return "ganztägig";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit",
+  }).format(date);
+}
+
+function berlinDayFromIso(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin", weekday: "short", day: "2-digit", month: "2-digit",
+  }).format(date);
+}
+
+function timelinePeriod(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "morgen";
+  const hour = Number(new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin", hour: "2-digit", hour12: false,
+  }).format(date));
+  if (hour < 12) return "morgen";
+  if (hour < 18) return "mittag";
+  return "abend";
+}
+
+function realTimelineEvents(byId) {
+  const sources = [byId.today, byId.kalender].filter(Boolean);
+  const seen = new Set();
+  const events = [];
+  sources.forEach((module) => {
+    const rows = Array.isArray(module._rows) ? module._rows : [];
+    rows.forEach((row, index) => {
+      if (!row || !row.startsAt) return;
+      const key = [row.startsAt, row.title, row.workspace].join("|");
+      if (seen.has(key)) return;
+      seen.add(key);
+      const company = row.workspace === "company_signal";
+      events.push({
+        id: "calendar-" + String(row.startsAt) + "-" + index + "-" + (company ? "company" : "private"),
+        period: timelinePeriod(row.startsAt),
+        time: berlinTimeFromIso(row.startsAt),
+        end: row.endsAt ? berlinTimeFromIso(row.endsAt) : "—",
+        day: berlinDayFromIso(row.startsAt),
+        title: row.title || "(ohne Titel)",
+        sub: row.sub || (company ? "Firma-Signal · nur lesen" : "Privat"),
+        icon: company ? "building-2" : "calendar-days",
+        accent: company ? "neutral" : "cyan",
+        moduleId: "kalender",
+        startsAt: row.startsAt,
+      });
+    });
+  });
+  return events.sort((a, b) => String(a.startsAt).localeCompare(String(b.startsAt))).slice(0, 24);
+}
+
 function TimelineCard(props) {
   const e = props.event;
   const m = props.module;
@@ -1166,7 +1160,7 @@ function TimelineCard(props) {
         "span",
         { className: "mos__tl-card-top" },
         h("span", { className: "mos__tl-card-title" }, e.title),
-        h("span", { className: "mos__tl-card-range" }, e.time + " – " + e.end),
+        h("span", { className: "mos__tl-card-range" }, [e.day, e.time + (e.end !== "—" ? " – " + e.end : "")].filter(Boolean).join(" · ")),
       ),
       h("span", { className: "mos__tl-card-sub" }, e.sub),
       // Keep the rail calm (reference has no pills on rows): only the focused card
@@ -1178,34 +1172,21 @@ function TimelineCard(props) {
   );
 }
 
-function TimelineNow() {
-  return h(
-    "div",
-    { className: "mos__tl-row mos__tl-row--now" },
-    h("span", { className: "mos__tl-time mos__tl-time--now" }, TIMELINE_NOW.time),
-    h("span", { className: "mos__tl-now-node", "aria-hidden": "true" }, "J"),
-    h(
-      "div",
-      { className: "mos__tl-now-card" },
-      h("span", { className: "mos__tl-now-k" }, h(Icon, { name: "orbit", size: 13 }), "Jarvis · Vorschlag"),
-      h(
-        "span",
-        { className: "mos__tl-now-text" },
-        TIMELINE_NOW.suggestion,
-        h("span", { className: "mos__tl-now-tag" }, "+" + TIMELINE_NOW.tag),
-      ),
-      h("span", { className: "mos__pip mos__pip--konzept" }, h(Icon, { name: "flask-conical", size: 11 }), "schreibt nichts"),
-    ),
-  );
-}
-
 // Shared axis — used by both the desktop timeline scene and the mobile Timeline
-// tab. `showNow` inserts the Jarvis suggestion marker after the "now" event.
+// tab.
 function TimelineAxis(props) {
   const rows = [];
+  const events = Array.isArray(props.events) ? props.events : realTimelineEvents(props.byId || {});
+  if (!events.length) {
+    return h("div", { className: "mos__tl-axis mos__tl-axis--empty" },
+      h("div", { className: "mos__vcd-empty" },
+        h(Icon, { name: "calendar-days", size: 18 }),
+        h("span", null, "Keine bestätigten Kalenderereignisse in der Projektion."),
+        h("small", null, "Es werden keine Beispieltermine eingesetzt.")));
+  }
   PERIODS.forEach((per) => {
     rows.push(h("div", { key: "p-" + per.id, className: "mos__tl-period" }, h(Icon, { name: per.icon, size: 14 }), per.label));
-    TIMELINE.filter((e) => e.period === per.id).forEach((e) => {
+    events.filter((e) => e.period === per.id).forEach((e) => {
       rows.push(
         h(
           "div",
@@ -1215,7 +1196,6 @@ function TimelineAxis(props) {
           h(TimelineCard, { event: e, module: props.byId[e.moduleId], active: props.activeEventId === e.id, onActivate: props.onActivate }),
         ),
       );
-      if (props.showNow && e.id === TIMELINE_NOW.after) rows.push(h(TimelineNow, { key: "now" }));
     });
   });
   rows.push(h("div", { key: "p-night", className: "mos__tl-period mos__tl-period--last" }, h(Icon, { name: "moon", size: 14 }), "Nacht"));
@@ -1257,6 +1237,13 @@ function WhoopRing(props) {
 function TimelineFocusPanel(props) {
   const e = props.event;
   const byId = props.byId;
+  if (!e) {
+    return h("aside", { className: "mos__tlfocus", "aria-label": "Kalenderstatus" },
+      h("div", { className: "mos__vcd-empty" },
+        h(Icon, { name: "calendar-days", size: 18 }),
+        h("span", null, "Kein Termin ausgewählt."),
+        h("small", null, "Kalender und Aufgaben bleiben unten vollständig sichtbar.")));
+  }
   const linked = byId[e.moduleId];
   const cal = byId["kalender"];
   const tasks = byId["tasks"];
@@ -1270,8 +1257,8 @@ function TimelineFocusPanel(props) {
       (m._state === "fresh" || m._state === "stale" || m._state === "partial"))
     .sort((a, b) => (a._state === "fresh" ? -1 : 1) - (b._state === "fresh" ? -1 : 1))
     .slice(0, 4);
-  const calRows = (cal && cal._rows && cal._rows.length ? cal._rows : (LENS.kalender.rows)).slice(0, 3);
-  const topRows = (tasks && tasks._rows && tasks._rows.length ? tasks._rows : (LENS.tasks.rows)).slice(0, 3);
+  const calRows = (cal && cal._rows && cal._rows.length ? cal._rows : []).slice(0, 3);
+  const topRows = (tasks && tasks._rows && tasks._rows.length ? tasks._rows : []).slice(0, 3);
   return h(
     "aside",
     { className: "mos__tlfocus", "aria-label": "Fokus: " + e.title },
@@ -1389,18 +1376,6 @@ function TimelineFocusPanel(props) {
           ),
         );
       })(),
-      // Jarvis Empfehlung
-      h(
-        "section",
-        { className: "mos__tlfocus-sec mos__tlfocus-rec" },
-        h("h3", { className: "mos__tlfocus-h3" }, h(Icon, { name: "orbit", size: 14 }), "Jarvis Empfehlung"),
-        h(
-          "p",
-          { className: "mos__tlfocus-rec-text" },
-          "Sehr gute Ausgangslage für Deep Work am Vormittag. Plane Fokusblöcke vor 11:30 und schütze deine Energie. Nachmittags Meetings & Kommunikation.",
-        ),
-        h("span", { className: "mos__pip mos__pip--konzept" }, h(Icon, { name: "flask-conical", size: 11 }), "schreibt nichts"),
-      ),
       // Live-Signale — real read-model modules only (honest state + freshness)
       liveSignals.length
         ? h(
@@ -1437,7 +1412,12 @@ function TimelineFocusPanel(props) {
 }
 
 function TimelineScene(props) {
-  const focusEvent = TIMELINE.find((e) => e.moduleId === props.focusId) || TIMELINE.find((e) => e.id === TIMELINE_NOW.after) || TIMELINE[0];
+  const events = realTimelineEvents(props.byId || {});
+  const focusEvent = events.find((e) => e.moduleId === props.focusId) || events[0] || null;
+  const now = new Date();
+  const today = new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin", weekday: "long", day: "2-digit", month: "long",
+  }).format(now);
   return h(
     "div",
     { className: "mos__timeline" },
@@ -1452,10 +1432,14 @@ function TimelineScene(props) {
           "span",
           { className: "mos__tl-head-titles" },
           h("span", { className: "mos__tl-head-title" }, "Living Timeline"),
-          h("span", { className: "mos__tl-head-sub" }, TODAY.long + " · Morgen → Nacht"),
+          h("span", { className: "mos__tl-head-sub" }, today + " · echte Kalender-Projektion"),
         ),
       ),
-      h("div", { className: "mos__tl-scroll" }, h(TimelineAxis, { byId: props.byId, activeEventId: focusEvent.id, onActivate: props.onActivate, showNow: true })),
+      h("div", { className: "mos__tl-scroll" }, h(TimelineAxis, {
+        byId: props.byId, events: events,
+        activeEventId: focusEvent ? focusEvent.id : null,
+        onActivate: props.onActivate,
+      })),
     ),
     h(TimelineFocusPanel, { event: focusEvent, byId: props.byId, onClose: props.onClose }),
   );
@@ -2059,7 +2043,7 @@ function MobileShell(props) {
   return h(
     "div",
     { className: "mos__m" },
-    h("h1", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
+    h("h2", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
     h(LiveAnnouncer, { message: props.announce }),
     // The Jarvis surface has its own name/date header; the Timeline tab carries a
     // single compact "Living Timeline" header of its own — so the global MIKAEL OS
@@ -2103,6 +2087,17 @@ function SceneSwitcher(props) {
 }
 
 function TopBar(props) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const berlinTime = new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit",
+  }).format(now);
+  const berlinDate = new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin", weekday: "short", day: "2-digit", month: "2-digit",
+  }).format(now);
   return h(
     "header",
     { className: "mos__topbar" },
@@ -2114,7 +2109,7 @@ function TopBar(props) {
         "span",
         null,
         h("span", { className: "mos__identity-name" }, "Mikael"),
-        h("span", { className: "mos__identity-sub" }, "Privates System"),
+        h("span", { className: "mos__identity-sub" }, "Persönliches Command Center"),
       ),
     ),
     h("div", { className: "mos__wordmark" }, "MIKAEL OS"),
@@ -2136,35 +2131,22 @@ function TopBar(props) {
         if (liveN > 0) {
           return h("span",
             { className: "mos__concept mos__concept--live",
-              title: liveN + " Module projizieren echte Read-Modelle mit Herkunft und Freshness; übrige bleiben sichtbar Konzept." },
+              title: liveN + " Module projizieren echte Read-Modelle mit Herkunft und Freshness." },
             h(Icon, { name: "activity", size: 14 }),
-            liveN + " Live · " + Math.max(0, (props.total || 0) - liveN) + " Konzept");
+            liveN + " Quellen live");
         }
         return h("span",
           { className: "mos__concept", title: ls === "offline"
-              ? "Read-Modelle nicht erreichbar — Konzeptdaten angezeigt."
-              : "Konzeptdaten. Keine Live-Wahrheit." },
-          h(Icon, { name: "flask-conical", size: 14 }),
-          ls === "offline" ? "Quellen offline · Konzept" : "Konzeptdaten");
+              ? "Read-Modelle nicht erreichbar."
+              : "Noch keine Live-Quelle bestätigt." },
+          h(Icon, { name: "unplug", size: 14 }),
+          ls === "offline" ? "Quellen offline" : "Keine Live-Quelle");
       })(),
-      // Weather is DROPPED on the M2 drill-down scenes: there is no weather data
-      // source in the stack, so a "22° Klar" reading would be a fabricated value —
-      // the honesty doctrine forbids it. The clock (real, static) stays.
-      props.onBack ? null : h(
-        "span",
-        { className: "mos__topchip" },
-        h(Icon, { name: "cloud-moon", size: 16 }),
-        h("strong", null, "22°"),
-        " Klar",
-      ),
       h(
         "span",
         { className: "mos__topchip mos__topchip-time" },
-        // Scene-consistent clock: on the Timeline the bar shows the same "now"
-        // the Jarvis marker sits at (16:42), so a single screen never shows two
-        // contradicting times; the Konstellation keeps its night reference time.
-        h("b", null, props.scene === "timeline" ? TIMELINE_NOW.time : "22:30"),
-        h("span", null, TODAY.short + " · Berliner Zeit"),
+        h("b", null, berlinTime),
+        h("span", null, berlinDate + " · Berlin"),
       ),
       h("button", { type: "button", className: "mos__shieldbtn", "aria-label": "Privatsphäre & Berechtigungen" }, h(Icon, { name: "shield-check", size: 20 })),
     ),
@@ -3209,13 +3191,9 @@ function SuggestionCard(props) {
 }
 
 // ===========================================================================
-// Jarvis Voice-Launch — „🎙️ Jarvis starten“. Self-contained button + confirm
-// dialog (local state only, no root plumbing). Flow: Button → Bestätigung
-// (Budget-Wirkung explizit) → POST /jarvis/launch → window.open(_blank,
-// noopener). Popup-Blocker-Fallback: klickbarer Anchor (target=_blank,
-// rel=noopener) mit ablaufendem TTL-Countdown. NIE ein iframe (voice-web:
-// X-Frame-Options DENY). Die Launch-URL trägt das Einmal-Token im Fragment —
-// sie wird hier nur geöffnet/angezeigt, nie geloggt oder gespeichert.
+// Legacy voice-launch implementation kept temporarily for source compatibility.
+// It is not referenced and is tree-shaken from the product bundle; all visible
+// voice buttons route into the single embedded Voice Command Deck below.
 // ===========================================================================
 function voiceLaunchPost(body) {
   // Dedicated transport: parse the JSON body even on 409/5xx — the generic
@@ -3297,7 +3275,7 @@ function LernmodusLaunch() {
     hint);
 }
 
-function JarvisVoiceLaunch(props) {
+function LegacyJarvisVoiceLaunch(props) {
   const [st, setSt] = useState(null); // null | {phase: confirm|launching|open|busy|error, ...}
   const [, tick] = useState(0);
   useEffect(() => {
@@ -3417,6 +3395,21 @@ function JarvisVoiceLaunch(props) {
     dialog);
 }
 
+function JarvisVoiceLaunch(props) {
+  const openDeck = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(VOICE_OPEN_EVENT));
+    }
+  };
+  return h("button", {
+    type: "button",
+    className: "mos__vlaunch-btn" + (props.block ? " mos__vlaunch-btn--block" : ""),
+    onClick: openDeck,
+    title: "Öffnet Realtime direkt im Mikael OS Voice Command Deck.",
+    "aria-label": "Jarvis Realtime im Voice Command Deck öffnen",
+  }, h(Icon, { name: "mic", size: 15 }), "Jarvis sprechen");
+}
+
 function JarvisLive(props) {
   const j = props.jarvis;
   const load = props.load;
@@ -3458,8 +3451,7 @@ function JarvisLive(props) {
         ? h("span", { className: "mos__pip mos__pip--" + (chatOk ? "verified" : "red"), title: chat.note || "" },
             h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), chatOk ? "Chat bereit" : "Chat offline")
         : h("span", { className: "mos__jlive-load" }, h(Icon, { name: load === "loading" ? "loader" : "unplug", size: 14, className: load === "loading" ? "is-spin" : "" })),
-      // The former dead "Voice-Memo (folgt)" placeholder is now the REAL voice
-      // entry: confirm dialog → mint → new tab (JarvisVoiceLaunch, self-contained).
+      // Routes to the one embedded Voice Command Deck; no new tab or token link.
       h(JarvisVoiceLaunch, null)),
     h("div", { className: "mos__jlive-stream" },
       load === "loading" && !j
@@ -3895,7 +3887,7 @@ const M3_AREAS = [
   { id: "kommunikation", icon: "radio-tower", accent: "violet", title: "Kommunikation",
     sub: "Telegram · Hermes · FreeScout" },
   { id: "sessions",      icon: "waypoints",   accent: "cyan",   title: "Sessions / Agenten",
-    sub: "Stränge · mission.v2 · steuern gated" },
+    sub: "Stränge · mission.v2 · Steuerung via Jarvis" },
   // M4 peers (same launch mechanism, same read-only peer-scene contract).
   { id: "ziele",         icon: "target",      accent: "emerald", title: "Ziele & Systeme",
     sub: "mission.v2 + Policy · keine neue Task-DB" },
@@ -4171,7 +4163,7 @@ function StrandCard(props) {
     h("footer", { className: "mos__firma-foot mos__strand-foot" },
       h(Icon, { name: "lock", size: 12 }),
       h("span", { className: "mos__firma-foot-t" },
-        (s.source ? s.source : "read-only") + " · steuern gated"),
+        (s.source ? s.source : "read-only") + " · Steuerung via Jarvis"),
       h("span", { className: "mos__firma-foot-ro" }, "Nur lesen")));
 }
 function SessionsScene(props) {
@@ -4277,13 +4269,11 @@ function LiveTask(props) {
 
 function liveEventLabel(kind) {
   return {
-    think: "Denkt",
+    step: "Schritt",
+    status: "Status",
     tool: "Tool",
     result: "Ergebnis",
-    assistant: "Antwort",
-    start: "Start",
-    final: "Abschluss",
-    user: "Auftrag",
+    evidence: "Evidenz",
   }[kind] || "Ereignis";
 }
 
@@ -4877,19 +4867,827 @@ function BetriebScene(props) {
 }
 
 // --- Cockpit desktop assembly (3-column grid) ---------------------------------
+const VOICE_PHASE = {
+  idle: { label: "Bereit", tone: "cyan" },
+  permission: { label: "Mikrofon prüfen", tone: "amber" },
+  preparing: { label: "Mission vorbereiten", tone: "amber" },
+  connecting: { label: "Verbindung aufbauen", tone: "amber" },
+  listening: { label: "Ich höre zu", tone: "emerald" },
+  speaking: { label: "Jarvis antwortet", tone: "cyan" },
+  reconnecting: { label: "Verbindung wird wiederhergestellt", tone: "amber" },
+  ended: { label: "Gespräch beendet", tone: "muted" },
+  error: { label: "Verbindung unterbrochen", tone: "red" },
+};
+
+function RealtimeVoiceDeck(props) {
+  const [meta, setMeta] = useState(null);
+  const [phase, setPhase] = useState("idle");
+  const [confirm, setConfirm] = useState(false);
+  const [inlineId, setInlineId] = useState("");
+  const [missionId, setMissionId] = useState("");
+  const [model, setModel] = useState("");
+  const [error, setError] = useState("");
+  const [transcript, setTranscript] = useState([]);
+  const [control, setControl] = useState(null);
+  const peerRef = useRef(null);
+  const streamRef = useRef(null);
+  const audioRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
+  const confirmRef = useRef(null);
+  const inlineRef = useRef("");
+  inlineRef.current = inlineId;
+
+  const loadMeta = useCallback(() => {
+    sdkRequestJSON(VOICE_STATUS_API, "GET")
+      .then((result) => {
+        const body = result.body || {};
+        setMeta(body);
+        if (props.onStatus) props.onStatus(body);
+      })
+      .catch(() => {
+        const body = { ok: false, state: "unavailable" };
+        setMeta(body);
+        if (props.onStatus) props.onStatus(body);
+      });
+  }, [props.onStatus]);
+
+  useEffect(() => {
+    loadMeta();
+    if (typeof window === "undefined") return undefined;
+    const open = () => setConfirm(true);
+    window.addEventListener(VOICE_OPEN_EVENT, open);
+    window.addEventListener("online", loadMeta);
+    return () => {
+      window.removeEventListener(VOICE_OPEN_EVENT, open);
+      window.removeEventListener("online", loadMeta);
+    };
+  }, [loadMeta]);
+
+  useEffect(() => {
+    if (!confirm || typeof document === "undefined") return undefined;
+    const dialog = confirmRef.current;
+    const previous = document.activeElement;
+    const focusable = dialog
+      ? Array.from(dialog.querySelectorAll("button:not(:disabled)"))
+      : [];
+    if (focusable.length) focusable[0].focus();
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setConfirm(false);
+        return;
+      }
+      if (event.key !== "Tab" || focusable.length < 2) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (previous && typeof previous.focus === "function") previous.focus();
+    };
+  }, [confirm]);
+
+  const releaseMedia = useCallback(() => {
+    if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+    if (peerRef.current) {
+      try { peerRef.current.close(); } catch (_e) { /* best effort */ }
+    }
+    if (audioRef.current) {
+      try { audioRef.current.pause(); } catch (_e) { /* best effort */ }
+      audioRef.current.srcObject = null;
+    }
+    streamRef.current = null;
+    peerRef.current = null;
+    audioRef.current = null;
+  }, []);
+
+  const hangup = useCallback((silent) => {
+    const handle = inlineRef.current;
+    releaseMedia();
+    inlineRef.current = "";
+    if (!handle) {
+      setPhase("ended");
+      return Promise.resolve();
+    }
+    setPhase("ended");
+    setInlineId("");
+    return sdkRequestJSON(VOICE_CONTROL_API, "POST", {
+      inlineId: handle, action: "hangup",
+    }).then((result) => {
+      if (!silent && (!result.ok || !result.body || result.body.ok === false)) {
+        setError("Hangup konnte nicht eindeutig bestätigt werden. Keine automatische Wiederholung.");
+        setPhase("error");
+      }
+    }).catch(() => {
+      if (!silent) {
+        setError("Hangup konnte nicht eindeutig bestätigt werden. Keine automatische Wiederholung.");
+        setPhase("error");
+      }
+    });
+  }, [releaseMedia]);
+
+  useEffect(() => () => {
+    const handle = inlineRef.current;
+    releaseMedia();
+    if (handle) {
+      sdkRequestJSON(VOICE_CONTROL_API, "POST", {
+        inlineId: handle, action: "hangup",
+      }).catch(() => {});
+    }
+  }, [releaseMedia]);
+
+  useEffect(() => {
+    if (!inlineId || !["listening", "speaking", "reconnecting"].includes(phase)) return undefined;
+    const poll = () => {
+      sdkRequestJSON(VOICE_CONTROL_API, "POST", {
+        inlineId: inlineId, action: "status",
+      }).then((result) => {
+        const body = sdkResponseBody(result);
+        const visual = body && body.visual && typeof body.visual === "object"
+          ? body.visual : {};
+        const rows = Array.isArray(visual.transcript)
+          ? visual.transcript.map((item, index) => ({
+              key: "sideband_" + index,
+              role: item && item.speaker === "assistant" ? "jarvis" : "mikael",
+              text: String(item && item.text || ""),
+              done: true,
+            })).filter((item) => item.text)
+          : [];
+        const operatorDraft = String(visual.operatorTranscriptDraft || "");
+        const assistantDraft = String(visual.transcriptDraft || "");
+        if (operatorDraft) {
+          rows.push({
+            key: "sideband_operator_draft",
+            role: "mikael",
+            text: operatorDraft,
+            done: false,
+          });
+        }
+        if (assistantDraft) {
+          rows.push({
+            key: "sideband_assistant_draft",
+            role: "jarvis",
+            text: assistantDraft,
+            done: false,
+          });
+        }
+        if (rows.length) setTranscript(rows.slice(-24));
+        const lastTool = visual.lastToolResult;
+        setControl((previous) => ({
+          ...(previous || {}),
+          ...body,
+          lastTool: lastTool && (
+            lastTool.summary
+            || lastTool.read_kind
+            || lastTool.proposal_type
+            || lastTool.tool
+          ),
+        }));
+        if (body.status === "responding" || visual.phase === "spricht") {
+          setPhase("speaking");
+        } else if (
+          body.status === "listening"
+          || ["hoert_zu", "verstanden", "prueft"].includes(visual.phase)
+        ) {
+          setPhase("listening");
+        }
+        if (!result.ok || body.ok === false || body.status === "reconcile_required") {
+          setError("Hermes-Sideband meldet einen unklaren Zustand. Keine automatische Wiederholung.");
+          releaseMedia();
+          setPhase("error");
+        }
+      }).catch(() => {
+        setError("Hermes-Sideband ist nicht erreichbar.");
+        releaseMedia();
+        setPhase("error");
+      });
+    };
+    const timer = window.setInterval(poll, 4000);
+    return () => window.clearInterval(timer);
+  }, [inlineId, phase, releaseMedia]);
+
+  const begin = useCallback(async () => {
+    setConfirm(false);
+    setError("");
+    setTranscript([]);
+    setControl(null);
+    if (
+      typeof RTCPeerConnection !== "function"
+      || !navigator.mediaDevices
+      || typeof navigator.mediaDevices.getUserMedia !== "function"
+    ) {
+      setError("Dieser Browser unterstützt den sicheren WebRTC-Mikrofonpfad nicht. Es wurde nichts reserviert.");
+      setPhase("error");
+      return;
+    }
+    setPhase("permission");
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+    } catch (_e) {
+      setError("Mikrofonzugriff wurde nicht erteilt. Es wurde nichts reserviert.");
+      setPhase("error");
+      return;
+    }
+    streamRef.current = stream;
+    setPhase("preparing");
+    let prepared;
+    try {
+      const result = await sdkRequestJSON(VOICE_PREPARE_API, "POST", {
+        purpose: "Jarvis Realtime im MIKAEL OS Voice Command Deck",
+      });
+      prepared = sdkResponseBody(result);
+      if (!result.ok || prepared.ok !== true || !prepared.inlineId) {
+        throw new Error(prepared.message || "Realtime konnte nicht vorbereitet werden.");
+      }
+    } catch (err) {
+      releaseMedia();
+      setError(String(err && err.message || "Realtime konnte nicht vorbereitet werden."));
+      setPhase("error");
+      loadMeta();
+      return;
+    }
+    setInlineId(prepared.inlineId);
+    inlineRef.current = prepared.inlineId;
+    setMissionId(prepared.missionId || "");
+    setModel(prepared.model || "");
+    setPhase("connecting");
+
+    try {
+      const peer = new RTCPeerConnection();
+      peerRef.current = peer;
+      const remoteAudio = document.createElement("audio");
+      remoteAudio.autoplay = true;
+      remoteAudio.playsInline = true;
+      remoteAudio.onplaying = () => setPhase("speaking");
+      remoteAudio.onpause = () => setPhase("listening");
+      remoteAudio.onended = () => setPhase("listening");
+      audioRef.current = remoteAudio;
+      peer.ontrack = (event) => {
+        remoteAudio.srcObject = event.streams[0];
+        Promise.resolve(remoteAudio.play()).catch(() => {});
+      };
+      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+
+      // Do not create an OpenAI data channel.  The production Voice-Web
+      // contract accepts exactly one audio m-section; Hermes Sideband is the
+      // sole event/tool/control owner and its bounded status projection feeds
+      // the live transcript above.
+      peer.onconnectionstatechange = () => {
+        const state = peer.connectionState;
+        if (state === "connected") {
+          if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+          setPhase("listening");
+        } else if (state === "disconnected") {
+          setPhase("reconnecting");
+          if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = window.setTimeout(() => {
+            if (peer.connectionState !== "connected") {
+              setError("WebRTC-Verbindung blieb unterbrochen. Neu verbinden braucht eine bestätigte neue Reservierung.");
+              releaseMedia();
+              setPhase("error");
+            }
+          }, 5000);
+        } else if (state === "failed" || state === "closed") {
+          setError("WebRTC-Verbindung ist beendet. Neu verbinden braucht eine bestätigte neue Reservierung.");
+          releaseMedia();
+          setPhase("error");
+        }
+      };
+
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      const sessionResult = await sdkRequestJSON(VOICE_SESSION_API, "POST", {
+        inlineId: prepared.inlineId,
+        sdp: offer.sdp,
+      });
+      const session = sdkResponseBody(sessionResult);
+      if (!sessionResult.ok || session.ok !== true || !session.sdp) {
+        throw new Error(session.message || "WebRTC-Session wurde nicht bestätigt.");
+      }
+      await peer.setRemoteDescription({ type: "answer", sdp: session.sdp });
+      setPhase("listening");
+    } catch (err) {
+      releaseMedia();
+      setError(String(err && err.message || "Realtime-Verbindung fehlgeschlagen."));
+      setPhase("error");
+    }
+  }, [loadMeta, releaseMedia]);
+
+  const sendText = useCallback((event) => {
+    if (event && event.preventDefault) event.preventDefault();
+    const text = String(props.command || "").trim();
+    if (!text) return;
+    // Typed messages deliberately stay on the shared Jarvis text lane.  The
+    // provider data channel is absent by design; Voice-Web/Hermes Sideband owns
+    // Realtime tools and controls, while text/Telegram keep the same mission
+    // and memory identity.
+    props.onTextFallback(event);
+  }, [props.command, props.onTextFallback]);
+
+  const state = VOICE_PHASE[phase] || VOICE_PHASE.idle;
+  const policy = meta && meta.policy || {};
+  const hasReservation = typeof policy.reservationUsd === "number"
+    && Number.isFinite(policy.reservationUsd);
+  const reservation = hasReservation ? policy.reservationUsd : NaN;
+  const canStart = meta && meta.state === "ready" && hasReservation && reservation >= 0;
+  const active = ["permission", "preparing", "connecting", "listening", "speaking", "reconnecting"].includes(phase);
+  const statusText = meta == null ? "Realtime-Status wird geladen"
+    : meta.state === "ready" ? "WebRTC + Hermes-Sideband bereit"
+    : meta.state === "disabled" ? "Realtime ist noch nicht freigeschaltet"
+    : "Realtime-Lane nicht erreichbar";
+
+  return h("section", { className: "mos__vcd-voice", "aria-label": "Jarvis Realtime Gespräch" },
+    h("div", { className: "mos__vcd-hero" },
+      h("div", { className: "mos__vcd-orbwrap mos--" + state.tone },
+        h(Orb, { label: false }),
+        h("div", { className: "mos__vcd-orblabel", role: "status", "aria-live": "polite" },
+          h("strong", null, "JARVIS"),
+          h("span", null, state.label)))),
+    h("div", { className: "mos__vcd-connection" },
+      h("span", { className: "mos__pip mos__pip--" + (meta && meta.state === "ready" ? "verified" : meta == null ? "muted" : "red") },
+        h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), statusText),
+      model || policy.model ? h("span", { className: "mos__vcd-model" }, model || policy.model) : null,
+      missionId ? h("span", { className: "mos__vcd-mission", title: missionId }, "Mission " + missionId.slice(-8)) : null),
+    h("div", { className: "mos__vcd-transcript", role: "log", "aria-live": "polite", "aria-label": "Live-Transkript" },
+      transcript.length
+        ? transcript.map((row) => h("div", { key: row.key + row.role, className: "mos__vcd-turn is-" + row.role },
+            h("span", { className: "mos__vcd-turnwho" }, row.role === "jarvis" ? "Jarvis" : "Mikael"),
+            h("p", null, row.text)))
+        : h("div", { className: "mos__vcd-empty" },
+            h(Icon, { name: "audio-lines", size: 18 }),
+            h("span", null, active ? "Live-Transkript beginnt mit dem ersten Satz." : "Noch kein Realtime-Transkript."),
+            h("small", null, "Text und Telegram bleiben dieselbe Jarvis-/Memory-Lane."))),
+    error ? h("div", { className: "mos__vcd-error", role: "alert" },
+      h(Icon, { name: "triangle-alert", size: 15 }), error) : null,
+    control && control.lastTool
+      ? h("div", { className: "mos__vcd-tool" }, h(Icon, { name: "wrench", size: 13 }),
+          "Hermes-Sideband · " + control.lastTool)
+      : null,
+    h("div", { className: "mos__vcd-controls" },
+      active
+        ? h("button", { type: "button", className: "mos__vcd-mic is-active", onClick: () => hangup(false),
+            disabled: !inlineId,
+            "aria-label": "Realtime-Gespräch beenden" }, h(Icon, { name: "square", size: 22 }))
+        : h("button", { type: "button", className: "mos__vcd-mic", onClick: () => setConfirm(true),
+            disabled: !canStart, "aria-label": "Jarvis Realtime starten" }, h(Icon, { name: "mic", size: 24 })),
+      h("div", { className: "mos__vcd-controlcopy" },
+        h("strong", null, active ? state.label : "Bereit — jetzt sprechen"),
+        h("span", null, active ? "Du kannst Jarvis jederzeit unterbrechen." : "WebRTC · Live-Transkript · serverseitige Tools")),
+      phase === "error"
+        ? h("button", { type: "button", className: "mos__vcd-reconnect", onClick: () => {
+            hangup(true).finally(() => {
+              loadMeta();
+              setConfirm(true);
+            });
+          } },
+            h(Icon, { name: "refresh-cw", size: 14 }), "Neu verbinden")
+        : null),
+    h("form", { className: "mos__vcd-command", onSubmit: sendText },
+      h("input", { type: "text", value: props.command, onChange: (event) => props.onCommand(event.target.value),
+        placeholder: "Nachricht an Jarvis …", "aria-label": "Nachricht an Jarvis" }),
+      h("button", { type: "submit", "aria-label": "Nachricht senden" },
+        h(Icon, { name: "send-horizontal", size: 18 }))),
+    h("div", { className: "mos__vcd-quick" },
+      ["Status der aktiven Mission", "Was braucht meine Freigabe?", "Zeige Systemgesundheit"].map((label) =>
+        h("button", { key: label, type: "button", onClick: () => props.onCommand(label) }, label))),
+    confirm
+      ? h("div", { ref: confirmRef, className: "mos__vcd-confirm", role: "dialog", "aria-modal": "true", "aria-label": "Realtime-Nutzung bestätigen" },
+          h("div", { className: "mos__vcd-confirmbox" },
+            h("span", { className: "mos__vcd-confirmico" }, h(Icon, { name: "mic", size: 22 })),
+            h("div", null,
+              h("strong", null, "Realtime-Sitzung starten?"),
+              h("p", null, "Externe OpenAI-Nutzung. Reservierung laut Live-Policy: ",
+                h("b", null, Number.isFinite(reservation) ? reservation.toFixed(2).replace(".", ",") + " $" : "nicht verfügbar"),
+                ". Mikrofon wird vor der Reservierung geprüft."),
+              h("small", null, (policy.model || "Modell nicht verfügbar") + " · " + (policy.voice || "Voice nicht verfügbar") + " · Hermes-Sideband")),
+            h("div", { className: "mos__vcd-confirmactions" },
+              h("button", { type: "button", onClick: () => setConfirm(false) }, "Abbrechen"),
+              h("button", { type: "button", className: "is-primary", onClick: begin, disabled: !canStart },
+                "Starten · " + (Number.isFinite(reservation) ? reservation.toFixed(2).replace(".", ",") + " $" : "nicht verfügbar")))))
+      : null);
+}
+
+function MissionAgentCard(props) {
+  const strand = props.strand;
+  const sessions = Array.isArray(strand.sessions) ? strand.sessions : [];
+  const rows = Array.isArray(strand.rows) ? strand.rows : [];
+  const current = strand.currentMission || rows[0] || sessions[0] || null;
+  const state = strand.state || "unavailable";
+  const running = (current && (current.state === "running" || current.status === "running"))
+    || sessions.some((item) => item.status === "running");
+  const label = running ? "Läuft" : state === "fresh" ? "Bereit" : state === "empty" ? "Keine aktive Mission" : "Nicht geprüft";
+  const goal = current && (current.goal || current.title || current.name);
+  return h("article", { className: "mos__vcd-agent mos--" + (running ? "running" : state) },
+    h("span", { className: "mos__vcd-agentico" }, h(Icon, { name: strand.icon || "bot", size: 17 })),
+    h("div", { className: "mos__vcd-agentbody" },
+      h("strong", null, props.label || strand.title || strand.id),
+      h("span", { title: goal || "" }, goal || strand.note || "Keine Live-Daten")),
+    h("span", { className: "mos__vcd-agentstate" }, label));
+}
+
+function ActiveMissionsPanel(props) {
+  const strands = props.sessions && Array.isArray(props.sessions.strands) ? props.sessions.strands : [];
+  const byId = {};
+  strands.forEach((strand) => { byId[strand.id] = strand; });
+  const items = [
+    byId.codex || { id: "codex", title: "Codex", icon: "terminal", state: props.load === "loading" ? "loading" : "unavailable" },
+    byId.claude || { id: "claude", title: "Claude", icon: "bot", state: props.load === "loading" ? "loading" : "unavailable" },
+    byId.executor || { id: "executor", title: "Executor", icon: "rocket", state: props.load === "loading" ? "loading" : "unavailable" },
+  ];
+  return h("section", { className: "mos__vcd-panel mos__vcd-missions" },
+    h("header", null, h("span", null, "Aktive Missionen"), h(ZonePip, {
+      state: props.load === "loading" ? "loading" : props.load === "ready" ? "fresh" : "unavailable",
+      source: "mission.v2 + Session-Broker + Executor-Evidenz",
+    })),
+    h("div", { className: "mos__vcd-agentlist" },
+      items.map((strand) => h(MissionAgentCard, { key: strand.id, strand: strand,
+        label: strand.id === "executor" ? "Executor" : strand.id === "claude" ? "Claude" : "Codex" }))),
+    h("button", { type: "button", className: "mos__vcd-open", onClick: props.onOpen },
+      "Agenten-Leitstand öffnen", h(Icon, { name: "arrow-right", size: 14 })));
+}
+
+function MissionEvidencePanel(props) {
+  const missions = props.sessions && Array.isArray(props.sessions.missions)
+    ? props.sessions.missions : [];
+  const mission = missions[0] || null;
+  const fields = mission ? [
+    { id: "goal", label: "Ziel", value: mission.goal || mission.title },
+    { id: "plan", label: "Plan", value: Array.isArray(mission.plan) && mission.plan.length
+      ? mission.plan.join(" · ") : null },
+    { id: "step", label: "Schritt", value: mission.currentStep },
+    { id: "tool", label: "Tool", value: mission.tool || mission.owner },
+    { id: "result", label: "Ergebnis", value: mission.result },
+    { id: "evidence", label: "Evidenz", value: Array.isArray(mission.evidence) && mission.evidence.length
+      ? mission.evidence.join(" · ") : null },
+  ] : [];
+  return h("section", { className: "mos__vcd-panel mos__vcd-evidence" },
+    h("header", null, h("span", null, "Missions-Evidenz"),
+      h("button", { type: "button", onClick: props.onOpen, "aria-label": "Missionsleitstand öffnen" },
+        h(Icon, { name: "arrow-up-right", size: 14 }))),
+    mission
+      ? h("div", { className: "mos__vcd-evidencegrid" },
+          fields.map((field) => h("div", { key: field.id, className: "mos__vcd-evidenceitem" },
+            h("span", null, field.label),
+            h("p", { title: field.value || "" }, field.value || "Noch kein Beleg"))))
+      : h("p", { className: "mos__vcd-panel-empty" },
+          props.load === "loading" ? "Missionen werden geladen …" : "Keine Mission in der Live-Projektion."));
+}
+
+function CalendarTasksPanel(props) {
+  const calendar = props.byId.kalender;
+  const tasks = props.byId.tasks;
+  const cards = [
+    { id: "calendar", title: "Kalender", icon: "calendar-days", item: calendar },
+    { id: "tasks", title: "Aufgaben", icon: "list-todo", item: tasks },
+  ];
+  return h("section", { className: "mos__vcd-panel mos__vcd-calendar" },
+    h("header", null, h("span", null, "Kalender & Aufgaben")),
+    cards.map((card) => {
+      const item = card.item;
+      const live = item && !item._demo;
+      const first = live && Array.isArray(item._rows) ? item._rows[0] : null;
+      return h("button", { key: card.id, type: "button", className: "mos__vcd-summary", onClick: props.onOpen },
+        h("span", { className: "mos__vcd-summaryico" }, h(Icon, { name: card.icon, size: 17 })),
+        h("span", { className: "mos__vcd-summarybody" },
+          h("strong", null, card.title),
+          h("small", null, first ? (first.title + (first.value ? " · " + first.value : "")) : "Keine Live-Daten")),
+        h(ZonePip, { state: live ? item._state : "unavailable", source: live ? item._source : "Kein Live-Read-Modell" }));
+    }));
+}
+
+function ApprovalGatePanel(props) {
+  const approvals = props.approvals;
+  const cards = approvals && Array.isArray(approvals.cards) ? approvals.cards : [];
+  const available = !!approvals;
+  const gates = [
+    { id: "money", label: "Geld", icon: "banknote", match: /money|geld|zahlung|sevdesk|rechnung|invoice/i },
+    { id: "outbound", label: "Kundenversand", icon: "send", match: /customer|kunde|versand|outbound|mail/i },
+    { id: "schema", label: "Truth-Schema", icon: "database", match: /schema|migration/i },
+  ];
+  return h("section", { className: "mos__vcd-panel mos__vcd-gates" },
+    h("header", null, h("span", null, "Gezielte Freigaben"),
+      h("button", { type: "button", onClick: props.onOpen, "aria-label": "Freigaben öffnen" },
+        h(Icon, { name: "arrow-up-right", size: 14 }))),
+    gates.map((gate) => {
+      const count = cards.filter((card) => gate.match.test(
+        [card.gateClass, card.gateReason, card.text, card.action].filter(Boolean).join(" "))).length;
+      return h("button", { key: gate.id, type: "button", className: "mos__vcd-gaterow", onClick: props.onOpen },
+        h("span", { className: "mos__vcd-gateico" }, h(Icon, { name: gate.icon, size: 16 })),
+        h("strong", null, gate.label),
+        h("span", { className: "mos__vcd-gatecount" },
+          available ? (count ? count + " offen" : "0 offen") : "Nicht geprüft"));
+    }));
+}
+
+function SystemHealthPanel(props) {
+  const sources = props.betrieb && props.betrieb.reconnect && Array.isArray(props.betrieb.reconnect.sources)
+    ? props.betrieb.reconnect.sources : [];
+  const rows = [
+    { id: "mikael", label: "Mikael OS", reachable: props.loadState === "ready" },
+    { id: "voice", label: "Realtime / Voice", reachable: props.voice && props.voice.state === "ready",
+      checked: !!props.voice },
+    ...sources.slice(0, 4).map((source) => ({
+      id: source.id, label: source.label, reachable: !!source.reachable, checked: true,
+    })),
+  ];
+  return h("section", { className: "mos__vcd-panel mos__vcd-health" },
+    h("header", null, h("span", null, "System & Services"),
+      h("button", { type: "button", onClick: props.onOpen, "aria-label": "Betrieb öffnen" },
+        h(Icon, { name: "arrow-up-right", size: 14 }))),
+    h("div", { className: "mos__vcd-healthlist" },
+      rows.map((row) => h("div", { key: row.id, className: "mos__vcd-healthrow" },
+        h(Icon, { name: row.id === "voice" ? "radio-tower" : row.id === "mikael" ? "sparkles" : "server", size: 14 }),
+        h("span", null, row.label),
+        h("b", { className: row.reachable ? "is-ok" : "is-warn" },
+          row.checked === false ? "Nicht geprüft" : row.reachable ? "Live" : "Nicht erreichbar")))));
+}
+
+function surfaceState(item, fallback) {
+  if (!item) return fallback || "unavailable";
+  return item.state || item._state || fallback || "unavailable";
+}
+
+function SurfaceCatalog(props) {
+  const firmaCards = props.firma && Array.isArray(props.firma.cards) ? props.firma.cards : [];
+  const firmaById = {};
+  firmaCards.forEach((card) => { firmaById[card.id] = card; });
+  const fs = props.komm && props.komm.freescout;
+  const sourceEntries = [
+    { id: "fsm", label: "FSM", icon: "clipboard-list",
+      state: firmaCards.length ? (firmaCards.some((c) => ["error", "unavailable"].includes(c.state)) ? "partial" : "fresh") : "unavailable",
+      action: "Firma", evidence: "FSM-Cockpit + read-only Projektionen", scene: "firma" },
+    { id: "freescout", label: "FreeScout", icon: "inbox",
+      state: surfaceState(fs), action: "Kommunikation", evidence: fs && fs.source, scene: "kommunikation" },
+    { id: "paperless", label: "Paperless", icon: "folder-check",
+      state: surfaceState(firmaById.dokumente), action: "Dokumente", evidence: firmaById.dokumente && firmaById.dokumente.source, scene: "firma" },
+    { id: "calendar", label: "Kalender", icon: "calendar-days",
+      state: surfaceState(props.byId.kalender && !props.byId.kalender._demo ? props.byId.kalender : null),
+      action: "Timeline", evidence: props.byId.kalender && props.byId.kalender._source, scene: "timeline" },
+    { id: "tasks", label: "Aufgaben", icon: "list-todo",
+      state: surfaceState(props.byId.tasks && !props.byId.tasks._demo ? props.byId.tasks : null),
+      action: "Missionen", evidence: props.byId.tasks && props.byId.tasks._source, scene: "ziele" },
+    { id: "personal", label: "Personal", icon: "users", state: "unavailable",
+      action: "Computer Use", evidence: "Kein nativer Read-Adapter", fallback: true },
+    { id: "vehicles", label: "Fahrzeuge", icon: "truck", state: "unavailable",
+      action: "Computer Use", evidence: "Kein nativer Read-Adapter", fallback: true },
+    { id: "stock", label: "Lager", icon: "package", state: "unavailable",
+      action: "Computer Use", evidence: "Kein nativer Read-Adapter", fallback: true },
+    { id: "time", label: "Arbeitszeit", icon: "clock", state: "unavailable",
+      action: "Computer Use", evidence: "Kein nativer Read-Adapter", fallback: true },
+    { id: "devices", label: "Geräte", icon: "monitor", state: props.betrieb ? "partial" : "unavailable",
+      action: "Betrieb", evidence: "Typisierte Geräte-Lane", scene: "betrieb" },
+    { id: "agents", label: "Agenten", icon: "bot", state: props.sessions ? "fresh" : "unavailable",
+      action: "Leitstand", evidence: "mission.v2 + Session-Broker", scene: "sessions" },
+  ];
+  const metaFor = (state) => {
+    if (state === "fresh") return { label: "Live", tone: "verified" };
+    if (state === "partial" || state === "stale") return { label: "Teilweise", tone: "blue" };
+    if (state === "empty") return { label: "Leer", tone: "muted" };
+    return { label: "Computer Use", tone: "amber" };
+  };
+  return h("section", { className: "mos__vcd-surfaces" },
+    h("header", null,
+      h("div", null, h("span", null, "Surface-Katalog"),
+        h("small", null, "Native API zuerst · sichtbarer Computer-Use-Fallback")),
+      h("span", { className: "mos__vcd-catalogcount" }, sourceEntries.filter((entry) => entry.state === "fresh").length + " live")),
+    h("div", { className: "mos__vcd-surfacegrid" },
+      sourceEntries.map((entry) => {
+        const meta = metaFor(entry.state);
+        const progress = entry.state === "fresh" ? "Verfügbar"
+          : entry.state === "partial" || entry.state === "stale" ? "Teilweise"
+          : entry.state === "empty" ? "Keine Signale" : "Fallback";
+        return h("button", { key: entry.id, type: "button", className: "mos__vcd-surface",
+          onClick: () => entry.scene ? props.onOpen(entry.scene) : props.onComputerUse(entry),
+          title: [entry.evidence, "Aktion: " + entry.action].filter(Boolean).join(" · ") },
+          h("span", { className: "mos__vcd-surfaceico" }, h(Icon, { name: entry.icon, size: 16 })),
+          h("span", { className: "mos__vcd-surfacename" }, entry.label),
+          h("span", { className: "mos__pip mos__pip--" + meta.tone },
+            h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), meta.label),
+          h("span", { className: "mos__vcd-surfaceaction" }, "Aktion · " + entry.action),
+          h("span", { className: "mos__vcd-surfaceprogress" }, "Fortschritt · " + progress),
+          h("span", { className: "mos__vcd-surfaceevidence" },
+            "Evidenz · " + (entry.evidence || "nicht verfügbar")));
+      })));
+}
+
+function sourceStateMeta(state) {
+  if (state === "fresh") return { label: "Live", tone: "verified" };
+  if (state === "partial" || state === "stale") return { label: "Teilweise", tone: "blue" };
+  if (state === "empty") return { label: "Leer", tone: "muted" };
+  if (state === "loading") return { label: "Lädt …", tone: "muted" };
+  return { label: "Nicht verbunden", tone: "amber" };
+}
+
+function LifeAtlas(props) {
+  const areas = props.life && Array.isArray(props.life.areas) ? props.life.areas : [];
+  return h("section", { className: "mos__life-section", "aria-labelledby": "mos-life-title" },
+    h("header", { className: "mos__life-heading" },
+      h("div", null,
+        h("span", { className: "mos__life-kicker" }, "Persönliches System"),
+        h("h2", { id: "mos-life-title" }, "Alle Lebensbereiche — klar getrennt"),
+        h("p", null, "Mikael OS ordnet. Die jeweilige Quelle bleibt Wahrheit. Jarvis liest, steuert und belegt.")),
+      h("span", { className: "mos__life-count" },
+        areas.length ? areas.filter((area) => area.lifecycle === "active").length + " aktiv · " + areas.length + " gesamt"
+          : props.load === "loading" ? "Lädt …" : "Nicht erreichbar")),
+    areas.length
+      ? h("div", { className: "mos__life-grid" },
+          areas.map((area) => {
+            const state = sourceStateMeta(area.state);
+            return h("article", { key: area.id, className: "mos__life-card is-" + area.lifecycle },
+              h("div", { className: "mos__life-cardtop" },
+                h("span", { className: "mos__life-icon" }, h(Icon, { name: area.icon || "layers", size: 18 })),
+                h("div", { className: "mos__life-title" },
+                  h("strong", null, area.title),
+                  h("span", null, area.lifecycle === "active" ? "Aktiver Bereich" : "Erschließbar")),
+                h("span", { className: "mos__pip mos__pip--" + state.tone },
+                  h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), state.label)),
+              h("div", { className: "mos__life-coverage" },
+                h("span", null, area.connectedSources + "/" + area.sourceCount + " Quellen verbunden"),
+                h("span", { className: "mos__life-bar", "aria-label": area.coverage + " Prozent Quellenabdeckung" },
+                  h("span", { style: { width: Math.max(0, Math.min(100, area.coverage || 0)) + "%" } }))),
+              h("p", { className: "mos__life-sources", title: (area.sourceLabels || []).join(" · ") },
+                (area.sourceLabels || []).length ? area.sourceLabels.join(" · ") : "Noch keine Quelle"),
+              h("div", { className: "mos__life-actions" },
+                area.scene
+                  ? h("button", { type: "button", onClick: () => props.onOpen(area.scene) },
+                      h(Icon, { name: "panels-top-left", size: 13 }), "Ansehen")
+                  : null,
+                h("button", { type: "button", className: "is-jarvis",
+                  onClick: () => props.onJarvis(area.jarvisPrompt) },
+                  h(Icon, { name: "sparkles", size: 13 }), "Mit Jarvis"),
+                h("button", { type: "button", className: "is-manage",
+                  onClick: () => props.onJarvis(area.managePrompt),
+                  "aria-label": area.title + " verwalten" },
+                  h(Icon, { name: "settings", size: 13 }))));
+          }))
+      : h("div", { className: "mos__vcd-empty" },
+          h(Icon, { name: "layers", size: 18 }),
+          h("span", null, props.load === "loading" ? "Lebensbereiche werden geladen …" : "Life-Atlas nicht erreichbar."),
+          h("small", null, "Keine Ersatz- oder Beispieldaten.")));
+}
+
+function DashboardObservatory(props) {
+  const dashboards = props.life && Array.isArray(props.life.dashboards) ? props.life.dashboards : [];
+  return h("section", { className: "mos__life-section mos__dashboards", "aria-labelledby": "mos-dashboards-title" },
+    h("header", { className: "mos__life-heading" },
+      h("div", null,
+        h("span", { className: "mos__life-kicker" }, "Oberflächenatlas"),
+        h("h2", { id: "mos-dashboards-title" }, "Dashboards, Quellen und Bedienwege"),
+        h("p", null, "Live-Zustand über Rise-L-Loopback · Links ausschließlich Tailnet · dieselbe Jarvis-Lane")),
+      h("span", { className: "mos__life-count" },
+        dashboards.length ? dashboards.filter((item) => item.reachable).length + "/" + dashboards.length + " erreichbar" : "Nicht geprüft")),
+    dashboards.length
+      ? h("div", { className: "mos__dashboard-grid" },
+          dashboards.map((item) => {
+            const meta = sourceStateMeta(item.state);
+            return h("article", { key: item.id, className: "mos__dashboard-card" },
+              h("div", { className: "mos__dashboard-head" },
+                h("span", { className: "mos__dashboard-icon" }, h(Icon, { name: item.icon || "monitor", size: 17 })),
+                h("div", null, h("strong", null, item.label), h("small", null, item.purpose)),
+                h("span", { className: "mos__pip mos__pip--" + meta.tone },
+                  h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), meta.label)),
+              h("dl", { className: "mos__dashboard-meta" },
+                h("div", null, h("dt", null, "Wahrheit"), h("dd", null, item.truth)),
+                h("div", null, h("dt", null, "Bedienung"), h("dd", null, item.actionMode)),
+                h("div", null, h("dt", null, "Nutzer"), h("dd", null, (item.audiences || []).join(" · ")))),
+              h("div", { className: "mos__dashboard-actions" },
+                item.url
+                  ? h("button", { type: "button", onClick: () => props.onDashboard(item),
+                      disabled: !item.reachable },
+                      h(Icon, { name: "external-link", size: 13 }), "Öffnen")
+                  : null,
+                h("button", { type: "button", className: "is-jarvis",
+                  onClick: () => props.onJarvis(item.jarvisPrompt) },
+                  h(Icon, { name: "sparkles", size: 13 }), "Jarvis steuert")));
+          }))
+      : h("div", { className: "mos__vcd-empty" },
+          h(Icon, { name: "monitor", size: 18 }),
+          h("span", null, props.load === "loading" ? "Dashboards werden geprüft …" : "Dashboard-Katalog nicht erreichbar."),
+          h("small", null, "Keine öffentliche Route wird angelegt.")));
+}
+
+function FutureRadar(props) {
+  const radar = props.life && props.life.futureRadar;
+  const items = radar && Array.isArray(radar.items) ? radar.items : [];
+  return h("section", { className: "mos__life-section mos__future", "aria-labelledby": "mos-future-title" },
+    h("header", { className: "mos__life-heading" },
+      h("div", null,
+        h("span", { className: "mos__life-kicker" }, "Vorausschau"),
+        h("h2", { id: "mos-future-title" }, "Zukunftsradar"),
+        h("p", null, "Bestätigte Termine und mission.v2-Arbeit — keine erfundenen Prognosen")),
+      h("button", { type: "button", className: "mos__life-jarvis",
+        onClick: () => props.onJarvis(
+          "Analysiere meinen Zukunftshorizont aus Kalender, Aufgaben, Zielen und Lernquellen. Trenne Fakten, Risiken, Chancen und Vorschläge; erfinde nichts."
+        ) }, h(Icon, { name: "radar", size: 14 }), "Mit Jarvis prüfen")),
+    items.length
+      ? h("div", { className: "mos__future-strip" },
+          items.slice(0, 12).map((item, index) =>
+            h("article", { key: (item.kind || "item") + "-" + index, className: "mos__future-item" },
+              h("span", { className: "mos__future-kind" },
+                h(Icon, { name: item.kind === "calendar" ? "calendar-days" : "rocket", size: 13 }),
+                item.kind === "calendar" ? "Termin" : "Mission"),
+              h("strong", null, item.title || "Ohne Titel"),
+              h("span", null, item.when || "Kein Zeitpunkt"),
+              h("small", null, item.workspace === "company_signal" ? "Firma-Signal · nur lesen" : "Privat"))))
+      : h("div", { className: "mos__vcd-empty" },
+          h(Icon, { name: "radar", size: 18 }),
+          h("span", null, "Keine bestätigten Zukunftssignale."),
+          h("small", null, "Kalender- und Missionsquellen bleiben maßgeblich.")));
+}
+
+function FullCalendarTasks(props) {
+  const bundle = props.life && props.life.calendarAndTasks;
+  const calendar = bundle && bundle.calendar;
+  const tasks = bundle && bundle.tasks;
+  const columns = [
+    { id: "calendar", title: "Kalender", icon: "calendar-days", item: calendar },
+    { id: "tasks", title: "Aufgaben & Missionen", icon: "list-todo", item: tasks },
+  ];
+  return h("section", { className: "mos__life-section mos__full-planner", "aria-labelledby": "mos-planner-title" },
+    h("header", { className: "mos__life-heading" },
+      h("div", null,
+        h("span", { className: "mos__life-kicker" }, "Vollständiger Abschluss"),
+        h("h2", { id: "mos-planner-title" }, "Kalender & Aufgaben"),
+        h("p", null, "Private Termine, Firma-Dispo und Missionen bleiben sichtbar getrennt")),
+      h("button", { type: "button", className: "mos__life-jarvis",
+        onClick: () => props.onJarvis(
+          "Öffne meine vollständige Kalender- und Aufgabenlage. Trenne private Termine, Firma-Dispo und Missionen. Hilf mir priorisieren und ändere nur über die zuständige Quelle."
+        ) }, h(Icon, { name: "sparkles", size: 14 }), "Planen mit Jarvis")),
+    h("div", { className: "mos__planner-grid" },
+      columns.map((column) => {
+        const rows = column.item && Array.isArray(column.item.rows) ? column.item.rows : [];
+        const state = sourceStateMeta(column.item && column.item.state);
+        return h("article", { key: column.id, className: "mos__planner-column" },
+          h("div", { className: "mos__planner-head" },
+            h("span", null, h(Icon, { name: column.icon, size: 16 }), h("strong", null, column.title)),
+            h("span", { className: "mos__pip mos__pip--" + state.tone },
+              h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), state.label)),
+          rows.length
+            ? h("div", { className: "mos__planner-list" },
+                rows.slice(0, 16).map((row, index) =>
+                  h("div", { key: (row.missionId || row.startsAt || row.title || "row") + "-" + index,
+                    className: "mos__planner-row is-" + (row.workspace || "private") },
+                    h("span", { className: "mos__planner-rowicon" }, h(Icon, { name: row.icon || column.icon, size: 14 })),
+                    h("div", null,
+                      h("strong", null, row.title || "Ohne Titel"),
+                      h("small", null, row.sub || row.owner || (column.id === "calendar" ? "Privat" : "Mission"))),
+                    h("span", { className: "mos__planner-value" }, row.value || row.statusLabel || "—"))))
+            : h("div", { className: "mos__vcd-empty" },
+                h("span", null, "Keine bestätigten Einträge."),
+                h("small", null, column.item && column.item.note ? column.item.note : "Quelle nicht verfügbar.")));
+      })));
+}
+
+function VoiceCommandDeck(props) {
+  const [voiceStatus, setVoiceStatus] = useState(null);
+  return h("div", { className: "mos__vcd" },
+    h("div", { className: "mos__vcd-above" },
+      h("div", { className: "mos__vcd-main" },
+        h(RealtimeVoiceDeck, {
+          command: props.command, onCommand: props.onCommand,
+          onTextFallback: props.onTextFallback, onStatus: setVoiceStatus,
+        }),
+        h(SurfaceCatalog, {
+          byId: props.byId, firma: props.firma, komm: props.komm,
+          sessions: props.sessions, betrieb: props.betrieb,
+          onOpen: props.onOpen, onComputerUse: props.onComputerUse,
+        })),
+      h("aside", { className: "mos__vcd-side" },
+        h(ActiveMissionsPanel, { sessions: props.sessions, load: props.sessionsLoad,
+          onOpen: () => props.onOpen("sessions") }),
+        h(MissionEvidencePanel, { sessions: props.sessions, load: props.sessionsLoad,
+          onOpen: () => props.onOpen("sessions") }),
+        h(CalendarTasksPanel, { byId: props.byId, onOpen: () => props.onOpen("timeline") }),
+        h(ApprovalGatePanel, { approvals: props.cockpit.approvals,
+          onOpen: () => props.onOpen("approvals") }),
+        h(SystemHealthPanel, { betrieb: props.betrieb, voice: voiceStatus,
+          loadState: props.load, onOpen: () => props.onOpen("betrieb") }))),
+    h(LifeAtlas, { life: props.life, load: props.lifeLoad,
+      onOpen: props.onOpen, onJarvis: props.onJarvis }),
+    h(DashboardObservatory, { life: props.life, load: props.lifeLoad,
+      onDashboard: props.onDashboard, onJarvis: props.onJarvis }),
+    h(FutureRadar, { life: props.life, onJarvis: props.onJarvis }),
+    h(FullCalendarTasks, { life: props.life, onJarvis: props.onJarvis }));
+}
+
 function CockpitScene(props) {
-  return h("div", { className: "mos__ckpt" },
-    h("aside", { className: "mos__ckpt-col mos__ckpt-left" },
-      h(WorkspaceSwitcher, { active: props.workspace, onChange: props.onWorkspace }),
-      h(AgendaRail, { workspace: props.workspace, todayModule: props.byId.today,
-        engineeringModule: props.byId.engineering, load: props.load, onMore: props.onAgendaMore })),
-    h("section", { className: "mos__ckpt-col mos__ckpt-center" },
-      h(JarvisLive, { jarvis: props.cockpit.jarvis, load: props.cockpitLoad, workspace: props.workspace,
-        stateIndex: props.stateIndex, greeting: props.greeting, onPropose: props.onPropose, onChip: props.onChip })),
-    h("aside", { className: "mos__ckpt-col mos__ckpt-right" },
-      h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load, onOpen: props.onFirma }),
-      h(ApprovalCenter, { approvals: props.cockpit.approvals, load: props.cockpitLoad,
-        flash: props.approvalsFlash, innerRef: props.approvalsRef, onOpen: props.onApprovals })));
+  return h(VoiceCommandDeck, props);
 }
 
 // --- Mobile cockpit stack (inside the existing home tab) -----------------------
@@ -5013,6 +5811,10 @@ function MikaelOS() {
   // reconnect. Any fetch failure leaves the honest offline state.
   const [betrieb, setBetrieb] = useState(null);
   const [betriebLoad, setBetriebLoad] = useState("loading"); // loading | ready | offline
+  // M6 — one read-only Life Atlas projection. It describes source coverage,
+  // dashboard connections and area lifecycle; it owns no second life/task store.
+  const [life, setLife] = useState(null);
+  const [lifeLoad, setLifeLoad] = useState("loading"); // loading | ready | offline
   const [displayEnv, setDisplayEnv] = useState(() => detectDisplayEnv());
   const [pwaStatus, setPwaStatus] = useState({ manifest: false, sw: "unknown" });
   // Focus flash for the Approval-Center when the Gates-KPI is clicked (§6).
@@ -5027,6 +5829,24 @@ function MikaelOS() {
   // L-3 — the Lern-Coach overlay (null = closed). Shape:
   // { tab, planState, plan, fey: { phase, setup, explanation, result } }.
   const [coach, setCoach] = useState(null);
+
+  // Stable voice bookmark: it opens the embedded confirmation in this same PWA
+  // and removes the query marker. It never mints, spends or opens a new tab.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("voice") !== "1") return;
+    params.delete("voice");
+    const query = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      window.location.pathname + (query ? "?" + query : "") + window.location.hash,
+    );
+    window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent(VOICE_OPEN_EVENT));
+    });
+  }, []);
 
   // Fetch the read-only /overview projection. Refactored into a callback so a
   // reconnect (window focus / back online) can re-run it and the UI shows the
@@ -5133,16 +5953,22 @@ function MikaelOS() {
       .then((data) => { setBetrieb(data); setBetriebLoad("ready"); })
       .catch(() => { setBetriebLoad((p) => (p === "ready" ? "ready" : "offline")); });
   }, []);
+  const loadLife = useCallback(() => {
+    setLifeLoad((p) => (p === "ready" ? "ready" : "loading"));
+    sdkGet(LIFE_OVERVIEW_API)
+      .then((data) => { setLife(data); setLifeLoad("ready"); })
+      .catch(() => { setLifeLoad((p) => (p === "ready" ? "ready" : "offline")); });
+  }, []);
   useEffect(() => { loadOverview(); loadCockpit(); loadFirma(); loadKomm(); loadSessions();
-    loadZiele(); loadReflexion(); loadGesundheit(); loadBetrieb(); },
-    [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb]);
+    loadZiele(); loadReflexion(); loadGesundheit(); loadBetrieb(); loadLife(); },
+    [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb, loadLife]);
   // Reconnect: on regained focus / online / visibility (the Kiosk case — a
   // single-app foreground window that never loses OS focus), re-read the models
   // so a returning session sees the live state at once (no stale snapshot).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const reload = () => { loadOverview(); loadCockpit(); loadFirma(); loadKomm(); loadSessions();
-      loadZiele(); loadReflexion(); loadGesundheit(); loadBetrieb(); };
+      loadZiele(); loadReflexion(); loadGesundheit(); loadBetrieb(); loadLife(); };
     const onVisible = () => { if (document.visibilityState === "visible") reload(); };
     const onEnv = () => setDisplayEnv(detectDisplayEnv());
     window.addEventListener("online", reload);
@@ -5157,7 +5983,7 @@ function MikaelOS() {
       window.removeEventListener("focus", reload);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb]);
+  }, [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb, loadLife]);
   // Hermes 0.19 live transcript refresh. Poll only while the Agenten-Leitstand
   // is actually visible; everywhere else the normal focus/reconnect refresh is
   // enough and creates no background dashboard chatter.
@@ -5189,7 +6015,7 @@ function MikaelOS() {
       setPwaStatus((s) => ({ ...s, manifest: true }));
     } catch (_e) { setPwaStatus((s) => ({ ...s, manifest: false })); }
     if (typeof navigator !== "undefined" && navigator.serviceWorker && window.isSecureContext) {
-      navigator.serviceWorker.register(PWA_SW_HREF, { scope: "/" })
+      navigator.serviceWorker.register(PWA_SW_HREF, { scope: "/mikael-os" })
         .then(() => setPwaStatus((s) => ({ ...s, sw: "registered" })))
         .catch(() => setPwaStatus((s) => ({ ...s, sw: "unavailable" })));
     } else {
@@ -5293,7 +6119,10 @@ function MikaelOS() {
   const openModule = useCallback((id) => { setFocusId(id); setStateIndex(1); setSheetDetent(1); setSheetOpen(true); }, []);
   const closeSheet = useCallback(() => { setSheetOpen(false); }, []);
   const onSpeak = useCallback(() => {
-    window.dispatchEvent(new CustomEvent(VOICE_OPEN_EVENT));
+    setScene("cockpit");
+    window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent(VOICE_OPEN_EVENT));
+    });
   }, []);
   const onQuick = useCallback((label) => { setCommand(label); runStateSequence(); }, [runStateSequence]);
 
@@ -5562,17 +6391,14 @@ function MikaelOS() {
     // already-mounted Hermes chat over this page; older hosts fall back to the
     // compatible /chat seed route. Both paths use the normal Jarvis
     // memory/tool/session chain rather than a plugin-local imitation.
-    const sdk = (typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__) || {};
-    if (typeof sdk.openChat === "function") sdk.openChat(objective);
-    else window.location.assign("/chat?prompt=" + encodeURIComponent(objective));
+    openJarvisChat(objective);
     setCommand("");
   }, [command]);
 
-  // Cockpit → Konstellation idle-morph (§0): only while the Cockpit is showing,
-  // Jarvis is at rest (stateIndex 0 / ready), and not on mobile. Disabled under
-  // reduced motion inside the hook. 90s of no interaction hands over to the orb.
-  useIdleTimer(scene === "cockpit" && stateIndex === 0 && !isMobile, 90000,
-    useCallback(() => setScene("constellation"), []));
+  // Production command centre: never replace the Cockpit merely because the
+  // pointer is idle. A Realtime session can be listening while Mikael is not
+  // touching the UI; auto-morphing would unmount the voice deck and trigger a
+  // hangup. Konstellation remains an explicit tab, never a timer side effect.
 
   // M2 navigation — the Gates-KPI, the FIRMA zone header and the Approval zone
   // header all converge on the dedicated peer scenes (no modal, never a decision).
@@ -5583,65 +6409,31 @@ function MikaelOS() {
   const onChip = useCallback((label) => { setCommand(label); if (inputRef.current) inputRef.current.focus(); }, []);
   const onAgendaMore = useCallback(() => setScene("timeline"), []);
   const onGoTimeline = useCallback(() => { if (isMobile) setMobileTab("timeline"); else setScene("timeline"); }, [isMobile]);
-  // Mobile: the FIRMA / Approval entry points push a full mobile screen.
-  const onGoApprovals = useCallback(() => { setMobileScreen("approvals"); }, []);
-  const onGoFirma = useCallback(() => { setMobileScreen("firma"); }, []);
-  const onScreenBack = useCallback(() => { setMobileScreen(null); }, []);
-  // M3 — the three area launch tiles. Desktop opens a peer scene; mobile pushes a
-  // full screen (same mechanism as Firma/Approvals).
-  const onArea = useCallback((id) => {
-    if (isMobile) setMobileScreen(id); else setScene(id);
-  }, [isMobile]);
+  // Unified responsive command deck: iPhone and Mac keep the same mission,
+  // conversation and navigation identity. Detail surfaces remain peer scenes.
+  const onGoApprovals = useCallback(() => { setScene("approvals"); }, []);
+  const onGoFirma = useCallback(() => { setScene("firma"); }, []);
+  const onScreenBack = useCallback(() => { setScene("cockpit"); }, []);
+  const onArea = useCallback((id) => { setScene(id); }, []);
   const onWissenQuery = useCallback((v) => { setWissenQuery(v); }, []);
-
-  // iOS shell — a distinct vertical scene stack (not a shrunken desktop). All
-  // state (focusId, stateIndex, command, live read-models) is shared, so opening
-  // a module here is the same choice as the desktop lens.
-  if (isMobile) {
-    return h(
-      "div",
-      { className: "mos mos--mobile" },
-      h("div", { className: "mos__atmosphere", "aria-hidden": "true" }),
-      h("div", { className: "mos__atmosphere-veil", "aria-hidden": "true" }),
-      h(MobileShell, {
-        mobileTab: mobileTab, onMobileTab: setMobileTab,
-        byId: enrichedById, modules: viewModules,
-        focusId: focusId, onOpen: openModule,
-        command: command, onCommand: setCommand, onSubmit: submit,
-        onSpeak: onSpeak, onQuick: onQuick, stateIndex: stateIndex,
-        workspace: workspace, onWorkspace: setWorkspace,
-        loadState: loadState, liveCount: liveCount,
-        greeting: greeting, onGoJarvis: goJarvis, announce: announce,
-        sheetOpen: sheetOpen, sheetDetent: sheetDetent,
-        onSheetDetent: setSheetDetent, onSheetClose: closeSheet,
-        onPropose: proposeOpen, onReview: reviewOpen, onCoach: coachOpen,
-        cockpit: cockpit, cockpitLoad: cockpitLoad,
-        onChip: onChip, onGoTimeline: onGoTimeline, onGoApprovals: onGoApprovals, onGoFirma: onGoFirma,
-        mobileScreen: mobileScreen, onScreenBack: onScreenBack,
-        firma: firma, firmaLoad: firmaLoad,
-        approvalDetails: approvalDetails, approvalDetailLoading: approvalDetailLoading, onLoadDetail: loadApprovalDetail,
-        onArea: onArea,
-        wissen: wissen, wissenLoad: wissenLoad, wissenQuery: wissenQuery, onWissenQuery: onWissenQuery, onWissenSearch: loadWissen,
-        komm: komm, kommLoad: kommLoad, sessions: sessions, sessionsLoad: sessionsLoad,
-        ziele: ziele, zieleLoad: zieleLoad, reflexion: reflexion, reflexionLoad: reflexionLoad,
-        gesundheit: gesundheit, gesundheitLoad: gesundheitLoad,
-        betrieb: betrieb, betriebLoad: betriebLoad, displayEnv: displayEnv, pwaStatus: pwaStatus,
-      }),
-      h(ProposeFlow, {
-        state: propose, onObjective: proposeObjective, onPreview: proposePreview,
-        onSend: proposeSend, onPoll: proposePoll, onClose: proposeClose,
-      }),
-      h(ReviewSurface, {
-        state: review, onFlip: reviewFlip, onRate: reviewRate,
-        onRestart: reviewRestart, onClose: reviewClose,
-      }),
-      h(CoachSurface, {
-        state: coach, onTab: coachTab, onExplain: coachExplain,
-        onEvaluate: coachEvaluate, onNextConcept: coachNextConcept,
-        onPropose: coachPropose, onClose: coachClose,
-      }),
-    );
-  }
+  const onComputerUse = useCallback((entry) => {
+    const label = entry && entry.label ? entry.label : "Surface";
+    setCommand(label + " per Computer Use öffnen — Status und Evidenz sichtbar halten");
+    setScene("betrieb");
+  }, []);
+  const onJarvisAction = useCallback((objective) => {
+    openJarvisChat(objective);
+  }, []);
+  const onDashboard = useCallback((entry) => {
+    if (!entry || !entry.url || typeof window === "undefined") return;
+    try {
+      const target = new URL(entry.url);
+      if (target.protocol !== "https:" || !target.hostname.endsWith(".tailbc3df5.ts.net")) return;
+      window.location.assign(target.toString());
+    } catch (_e) {
+      // Invalid or non-Tailnet URLs are intentionally ignored.
+    }
+  }, []);
 
   // The command bar + chips and the constellation footer are shared across
   // scenes (Cockpit reuses the command bar under a StateRail; Konstellation/
@@ -5709,24 +6501,23 @@ function MikaelOS() {
     h(
       "main",
       { className: "mos__shell", role: "main" },
-      h("h1", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
+      h("h2", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
       h(TopBar, { loadState: loadState, liveCount: liveCount, total: viewModules.length, scene: scene, onScene: setScene,
         onBack: isBackScene ? onSceneBack : undefined }),
       scene === "cockpit"
-        ? h(
-            React.Fragment,
-            null,
-            h(KpiBar, { cockpit: cockpit, load: cockpitLoad, onGates: onGates }),
-            h(AreaLauncher, { onOpen: onArea }),
-            h("div", { className: "mos__stagewrap mos__stagewrap--ckpt" },
-              h(CockpitScene, {
-                byId: enrichedById, workspace: workspace, onWorkspace: setWorkspace,
-                cockpit: cockpit, cockpitLoad: cockpitLoad, load: loadState,
-                stateIndex: stateIndex, greeting: greeting,
-                onPropose: proposeOpen, onChip: onChip, onAgendaMore: onAgendaMore,
-                approvalsFlash: approvalsFlash, approvalsRef: approvalsRef,
-                onFirma: onFirma, onApprovals: onApprovals,
-              })))
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--ckpt" },
+            h(CockpitScene, {
+              byId: enrichedById,
+              cockpit: cockpit, cockpitLoad: cockpitLoad, load: loadState,
+              command: command, onCommand: setCommand, onTextFallback: submit,
+              firma: firma, firmaLoad: firmaLoad,
+              komm: komm, kommLoad: kommLoad,
+              sessions: sessions, sessionsLoad: sessionsLoad,
+              betrieb: betrieb, betriebLoad: betriebLoad,
+              life: life, lifeLoad: lifeLoad,
+              onOpen: setScene, onComputerUse: onComputerUse,
+              onJarvis: onJarvisAction, onDashboard: onDashboard,
+            }))
         : scene === "firma"
         ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
             h("div", { className: "mos__scenehead" },
@@ -5899,11 +6690,13 @@ function MikaelOS() {
       ),
       // Footer (UI-SPEC §1): in the Cockpit the StateRail sits directly ABOVE the
       // command bar; Konstellation/Timeline keep the command bar → footer order.
-      (scene === "cockpit" || isBackScene)
+      isBackScene
         ? h("footer", { className: "mos__ckpt-foot" },
             h(StateRail, { activeIndex: stateIndex }),
             commandForm)
-        : h(React.Fragment, null, commandForm, constFooter),
+        : scene === "cockpit"
+          ? null
+          : h(React.Fragment, null, commandForm, constFooter),
     ),
     h(ProposeFlow, {
       state: propose, onObjective: proposeObjective, onPreview: proposePreview,
