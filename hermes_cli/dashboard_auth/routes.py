@@ -626,7 +626,19 @@ async def api_auth_ws_ticket(request: Request):
     expected pattern.
     """
     sess = getattr(request.state, "session", None)
-    if sess is None and getattr(request.state, "token_authenticated", False):
+    _token_ok = getattr(request.state, "token_authenticated", False)
+    if sess is None and not _token_ok:
+        # Legacy (non-gated) mode: the gated middleware never runs, so the
+        # token_authenticated flag is never attached even though the request
+        # carried a valid session token past ``auth_middleware``. Re-check the
+        # token directly so header-token clients can mint in both modes.
+        try:
+            from hermes_cli.web_server import _has_valid_session_token
+
+            _token_ok = _has_valid_session_token(request)
+        except Exception:
+            _token_ok = False
+    if sess is None and _token_ok:
         # Header-token clients (Hermes Desktop remote gateway, curl smoke
         # tests) authenticate with X-Hermes-Session-Token and carry no cookie
         # session. The auth middleware has already validated the token, so
