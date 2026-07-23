@@ -147,6 +147,37 @@ class TestHostHeaderMiddleware:
         # Should get through to the status endpoint, not a 400
         assert resp.status_code != 400
 
+    def test_explicit_public_url_host_is_accepted_for_loopback_proxy(
+        self, monkeypatch
+    ):
+        """A loopback backend may trust exactly its configured public URL."""
+        from fastapi.testclient import TestClient
+
+        import hermes_cli.web_server as ws
+
+        monkeypatch.setattr(
+            ws.app.state, "bound_host", "127.0.0.1", raising=False
+        )
+        monkeypatch.setattr(
+            ws.app.state,
+            "public_host",
+            "delta-ai-01.example.ts.net",
+            raising=False,
+        )
+
+        client = TestClient(ws.app)
+        accepted = client.get(
+            "/api/status",
+            headers={"Host": "delta-ai-01.example.ts.net:9119"},
+        )
+        rejected = client.get(
+            "/api/status",
+            headers={"Host": "evil.example"},
+        )
+
+        assert accepted.status_code != 400
+        assert rejected.status_code == 400
+
 
 class TestWebSocketHostOriginGuard:
     """WebSocket upgrades must enforce the same dashboard boundary as HTTP."""
@@ -212,6 +243,35 @@ class TestWebSocketHostOriginGuard:
             headers={
                 "Host": "localhost:9119",
                 "Origin": "http://localhost:9119",
+            },
+        ):
+            pass
+
+    def test_configured_public_origin_is_accepted_through_loopback_proxy(
+        self, monkeypatch
+    ):
+        from fastapi.testclient import TestClient
+
+        import hermes_cli.web_server as ws
+
+        monkeypatch.setattr(
+            ws.app.state, "bound_host", "127.0.0.1", raising=False
+        )
+        monkeypatch.setattr(
+            ws.app.state,
+            "public_host",
+            "delta-ai-01.example.ts.net",
+            raising=False,
+        )
+        monkeypatch.setattr(ws, "_DASHBOARD_EMBEDDED_CHAT_ENABLED", True)
+
+        client = TestClient(ws.app)
+        url = f"/api/events?token={ws._SESSION_TOKEN}&channel=proxy-test"
+        with client.websocket_connect(
+            url,
+            headers={
+                "Host": "delta-ai-01.example.ts.net:9119",
+                "Origin": "https://delta-ai-01.example.ts.net:9119",
             },
         ):
             pass
