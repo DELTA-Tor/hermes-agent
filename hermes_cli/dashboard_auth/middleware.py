@@ -294,6 +294,25 @@ async def gated_auth_middleware(
     if getattr(request.state, "token_authenticated", False):
         return await call_next(request)
 
+    # Header-token clients (Hermes Desktop remote-gateway mode) present the
+    # server's pinned session token via X-Hermes-Session-Token on every REST
+    # call. In gated mode this header was previously ignored entirely, which
+    # made the desktop app unusable against an OAuth-gated dashboard. Honour
+    # it here: a constant-time match against the process session token grants
+    # the same non-interactive trust level as a registered token route.
+    _hdr_tok = request.headers.get("x-hermes-session-token", "")
+    if _hdr_tok:
+        import hmac as _hmac
+        import os as _os
+
+        # Strictly opt-in: only a token explicitly pinned by the operator via
+        # HERMES_DASHBOARD_SESSION_TOKEN is honoured. Without the env var the
+        # header is ignored and the gate stays cookie-only (fail closed).
+        _pinned = _os.environ.get("HERMES_DASHBOARD_SESSION_TOKEN", "")
+        if _pinned and _hmac.compare_digest(_hdr_tok.encode(), _pinned.encode()):
+            request.state.token_authenticated = True
+            return await call_next(request)
+
     path = request.url.path
     if _path_is_public(path):
         return await call_next(request)
