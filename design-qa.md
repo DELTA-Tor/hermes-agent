@@ -1,16 +1,16 @@
 # Design QA — Mikael OS Voice Command Deck
 
-final result: blocked
+final result: passed
 
 ## Selected reference
 
 - Direction: `1 — Voice Command Deck`
 - Reference:
-  `/home/ubuntu/.codex/visualizations/2026/07/23/019f9002-15ba-7d60-9339-666ddad5f7d1/mikael-os-phase-a/01-voice-command-deck.png`
+  `/srv/delta/data/reports/mikael-os-qa-20260723/reference-01-voice-command-deck.png`
 - Target desktop viewport: `1440 × 1024`
 - Target iPhone viewport: `390 × 844`
 
-## Completed preflight
+## Verified implementation
 
 1. The selected direction is implemented in the existing `mikael-os` plugin,
    not in a parallel app.
@@ -29,11 +29,74 @@ final result: blocked
 7. Constellation and Timeline no longer expose concept fixture events or values;
    missing travel, nutrition and journal sources remain explicit connection gaps.
 
-## Blocking comparison
+## Browser matrix
 
-Product Design requires the user-selected browser for new captures. Mikael's
-browser choice was requested and is still pending, so desktop/iPhone screenshots,
-overlay comparison and visual accessibility inspection have not been claimed.
+- Google Chrome, desktop `1440 × 1024`: passed.
+- Google Chrome, iPhone layout `390 × 844`: passed.
+- WebKit 26.5, desktop `1440 × 1024`: passed.
+- WebKit 26.5, iPhone layout `390 × 844`: passed.
 
-This file must be replaced with a passed report containing the actual capture
-paths before merge/deploy.
+The physical Safari application could not be automated on the connected Mac
+without granting Screen Recording/WebDriver control. WebKit is the engine-level
+Safari compatibility check; production Safari remains a post-deploy manual
+smoke-test boundary rather than a claimed physical-device run.
+
+## Reference comparison
+
+The selected reference and implementation were compared together at the same
+desktop viewport:
+
+- Reference:
+  `/srv/delta/data/reports/mikael-os-qa-20260723/reference-01-voice-command-deck.png`
+- Chrome implementation:
+  `/srv/delta/data/reports/mikael-os-qa-20260723/01-chrome-desktop-1440x1024.png`
+- Side-by-side comparison:
+  `/srv/delta/data/reports/mikael-os-qa-20260723/03-reference-vs-chrome.png`
+
+The same implementation was then inspected in the content-heavy and responsive
+states:
+
+- `/srv/delta/data/reports/mikael-os-qa-20260723/05-chrome-life-atlas-wrapped.png`
+- `/srv/delta/data/reports/mikael-os-qa-20260723/06-chrome-dashboard-observatory.png`
+- `/srv/delta/data/reports/mikael-os-qa-20260723/07-chrome-calendar-tasks.png`
+- `/srv/delta/data/reports/mikael-os-qa-20260723/08-chrome-mobile-390x844.png`
+- `/srv/delta/data/reports/mikael-os-qa-20260723/09-webkit-desktop-1440x1024.png`
+- `/srv/delta/data/reports/mikael-os-qa-20260723/10-webkit-mobile-390x844.png`
+- `/srv/delta/data/reports/mikael-os-qa-20260723/11-chrome-realtime-live.png`
+- `/srv/delta/data/reports/mikael-os-qa-20260723/12-chrome-reconnect-confirmation.png`
+
+## QA procedure and fixes
+
+1. Captured the selected reference and Chrome implementation at `1440 × 1024`,
+   combined both images, and inspected hierarchy, density, spacing, wrapping,
+   navigation and the Jarvis focal point.
+2. Opened Life Atlas, Dashboard Observatory and Calendar/Tasks and verified the
+   complete long-screen reading order rather than only the hero viewport.
+3. Repeated responsive inspection at `390 × 844` in Chrome and WebKit and
+   verified that voice, missions, surfaces and life areas remain usable without
+   horizontal clipping.
+4. Fixed Life Atlas title truncation by allowing a bounded two-line wrap.
+5. Removed the automatic Cockpit-to-Constellation idle transition because it
+   could unmount and end a live Realtime conversation.
+6. Removed the browser-to-provider data channel. WebRTC is audio-only and the
+   bounded Hermes Sideband projection is the sole transcript/tool/control
+   source, matching the production SDP and authority contract.
+7. Verified the Realtime confirmation dialog, keyboard focus handling, live
+   transcript region, hangup, error state and explicit reconnect reservation.
+8. Reduced the document outline to one host-level `h1`; the plugin title is a
+   nested `h2`. Both browser sizes have zero unnamed buttons/links, zero
+   duplicate ids and no horizontal overflow.
+
+## Known harness-only signals
+
+The local preview produces `401` responses for `/api/auth/me` and the service
+worker script because its synthetic request header is not inherited by the
+service worker. These are local authentication-harness artifacts; the UI data
+routes and voice controls were authenticated directly. They are not counted as
+product defects, and the Tailnet production shell is rechecked after deploy.
+
+## Remaining visual severity
+
+- P0: none.
+- P1: none.
+- P2: none.

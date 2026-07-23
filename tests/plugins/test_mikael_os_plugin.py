@@ -397,6 +397,48 @@ def test_personal_telegram_and_company_office_signals_never_blend_workspaces(
     assert result["readOnly"] is True
 
 
+def test_dashboard_telegram_and_voice_project_one_shared_mission(
+    plugin_api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(plugin_api, "_read_missions", lambda: [{
+        "contract_version": "mission.v2",
+        "mission_id": "mis-shared",
+        "goal": "Geteilte Jarvis-Mission",
+        "state": "running",
+        "owner_agent": "jarvis",
+        "channel_correlations": [
+            "telegram:operator-test",
+            "realtime:voice-test",
+        ],
+    }])
+    monkeypatch.setattr(plugin_api, "_read_approval_cards", lambda: ([], True))
+    monkeypatch.setattr(
+        plugin_api,
+        "control_plane_status",
+        lambda: {"reachable": True},
+    )
+    monkeypatch.setattr(
+        plugin_api,
+        "_http_get_json",
+        lambda *_args, **_kwargs: (200, {}),
+    )
+
+    result = plugin_api.betrieb_overview()
+    frontdoors = result["frontdoors"]
+    channels = {row["id"]: row for row in frontdoors["channels"]}
+
+    assert frontdoors["shared"]["missions"] == 1
+    assert frontdoors["shared"]["missionsWithCorrelation"] == 1
+    assert frontdoors["missionsSample"][0]["channelCorrelations"] == [
+        "telegram:operator-test",
+        "realtime:voice-test",
+    ]
+    assert channels["dashboard"]["role"] == "reader"
+    assert channels["telegram"]["role"] == "writer"
+    assert frontdoors["_prov"]["source"].startswith("mission.v2")
+    assert frontdoors["_prov"]["readOnly"] is True
+
+
 def test_study_plan_default_is_dry_run_and_business_scope_is_refused(
     plugin_api, monkeypatch: pytest.MonkeyPatch
 ) -> None:

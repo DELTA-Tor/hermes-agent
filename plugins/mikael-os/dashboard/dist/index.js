@@ -4532,19 +4532,6 @@ var MikaelOSPlugin = function() {
     ended: { label: "Gespräch beendet", tone: "muted" },
     error: { label: "Verbindung unterbrochen", tone: "red" }
   };
-  function transcriptUpsert(setRows, role, key, text, done) {
-    if (!text) return;
-    setRows((prev) => {
-      const rows = prev.slice();
-      const idx = rows.findIndex((row) => row.key === key && row.role === role);
-      if (idx >= 0) {
-        rows[idx] = { ...rows[idx], text: done ? text : rows[idx].text + text, done: !!done };
-      } else {
-        rows.push({ key, role, text, done: !!done, at: (/* @__PURE__ */ new Date()).toISOString() });
-      }
-      return rows.slice(-24);
-    });
-  }
   function RealtimeVoiceDeck(props) {
     const [meta, setMeta] = useState(null);
     const [phase, setPhase] = useState("idle");
@@ -4558,7 +4545,6 @@ var MikaelOSPlugin = function() {
     const peerRef = useRef(null);
     const streamRef = useRef(null);
     const audioRef = useRef(null);
-    const channelRef = useRef(null);
     const reconnectTimerRef = useRef(null);
     const confirmRef = useRef(null);
     const inlineRef = useRef("");
@@ -4635,7 +4621,6 @@ var MikaelOSPlugin = function() {
       }
       streamRef.current = null;
       peerRef.current = null;
-      channelRef.current = null;
       audioRef.current = null;
     }, []);
     const hangup = useCallback((silent) => {
@@ -4682,7 +4667,43 @@ var MikaelOSPlugin = function() {
           action: "status"
         }).then((result) => {
           const body = sdkResponseBody(result);
-          setControl((previous) => ({ ...previous || {}, ...body }));
+          const visual = body && body.visual && typeof body.visual === "object" ? body.visual : {};
+          const rows = Array.isArray(visual.transcript) ? visual.transcript.map((item, index) => ({
+            key: "sideband_" + index,
+            role: item && item.speaker === "assistant" ? "jarvis" : "mikael",
+            text: String(item && item.text || ""),
+            done: true
+          })).filter((item) => item.text) : [];
+          const operatorDraft = String(visual.operatorTranscriptDraft || "");
+          const assistantDraft = String(visual.transcriptDraft || "");
+          if (operatorDraft) {
+            rows.push({
+              key: "sideband_operator_draft",
+              role: "mikael",
+              text: operatorDraft,
+              done: false
+            });
+          }
+          if (assistantDraft) {
+            rows.push({
+              key: "sideband_assistant_draft",
+              role: "jarvis",
+              text: assistantDraft,
+              done: false
+            });
+          }
+          if (rows.length) setTranscript(rows.slice(-24));
+          const lastTool = visual.lastToolResult;
+          setControl((previous) => ({
+            ...previous || {},
+            ...body,
+            lastTool: lastTool && (lastTool.summary || lastTool.read_kind || lastTool.proposal_type || lastTool.tool)
+          }));
+          if (body.status === "responding" || visual.phase === "spricht") {
+            setPhase("speaking");
+          } else if (body.status === "listening" || ["hoert_zu", "verstanden", "prueft"].includes(visual.phase)) {
+            setPhase("listening");
+          }
           if (!result.ok || body.ok === false || body.status === "reconcile_required") {
             setError("Hermes-Sideband meldet einen unklaren Zustand. Keine automatische Wiederholung.");
             releaseMedia();
@@ -4697,47 +4718,6 @@ var MikaelOSPlugin = function() {
       const timer = window.setInterval(poll, 4e3);
       return () => window.clearInterval(timer);
     }, [inlineId, phase, releaseMedia]);
-    const handleRealtimeEvent = useCallback((event) => {
-      const type = String(event && event.type || "");
-      if (type === "input_audio_buffer.speech_started") {
-        setPhase("listening");
-        return;
-      }
-      if (type === "input_audio_buffer.speech_stopped") {
-        setPhase("connecting");
-        return;
-      }
-      if (type.includes("input_audio_transcription.delta")) {
-        transcriptUpsert(setTranscript, "mikael", event.item_id || "input", String(event.delta || ""), false);
-        return;
-      }
-      if (type.includes("input_audio_transcription.completed")) {
-        transcriptUpsert(setTranscript, "mikael", event.item_id || "input", String(event.transcript || ""), true);
-        return;
-      }
-      if (type === "response.output_audio_transcript.delta") {
-        setPhase("speaking");
-        transcriptUpsert(setTranscript, "jarvis", event.item_id || event.response_id || "response", String(event.delta || ""), false);
-        return;
-      }
-      if (type === "response.output_audio_transcript.done") {
-        transcriptUpsert(setTranscript, "jarvis", event.item_id || event.response_id || "response", String(event.transcript || ""), true);
-        return;
-      }
-      if (type === "response.function_call_arguments.done") {
-        setControl((prev) => ({ ...prev || {}, lastTool: event.name || "Hermes-Tool" }));
-        return;
-      }
-      if (type === "response.done") {
-        setPhase("listening");
-        return;
-      }
-      if (type === "error") {
-        const err = event.error || {};
-        setError(String(err.code || err.message || "Realtime-Fehler"));
-        setPhase("error");
-      }
-    }, []);
     const begin = useCallback(async () => {
       setConfirm(false);
       setError("");
@@ -4798,18 +4778,6 @@ var MikaelOSPlugin = function() {
           });
         };
         stream.getTracks().forEach((track) => peer.addTrack(track, stream));
-        const channel = peer.createDataChannel("oai-events");
-        channelRef.current = channel;
-        channel.addEventListener("message", (message) => {
-          try {
-            handleRealtimeEvent(JSON.parse(message.data));
-          } catch (_e) {
-          }
-        });
-        channel.addEventListener("open", () => setPhase("listening"));
-        channel.addEventListener("close", () => {
-          if (inlineRef.current) setPhase("reconnecting");
-        });
         peer.onconnectionstatechange = () => {
           const state2 = peer.connectionState;
           if (state2 === "connected") {
@@ -4849,26 +4817,13 @@ var MikaelOSPlugin = function() {
         setError(String(err && err.message || "Realtime-Verbindung fehlgeschlagen."));
         setPhase("error");
       }
-    }, [handleRealtimeEvent, loadMeta, releaseMedia]);
+    }, [loadMeta, releaseMedia]);
     const sendText = useCallback((event) => {
       if (event && event.preventDefault) event.preventDefault();
       const text = String(props.command || "").trim();
       if (!text) return;
-      const channel = channelRef.current;
-      if (inlineId && channel && channel.readyState === "open") {
-        const itemKey = "typed_" + Date.now();
-        transcriptUpsert(setTranscript, "mikael", itemKey, text, true);
-        channel.send(JSON.stringify({
-          type: "conversation.item.create",
-          item: { type: "message", role: "user", content: [{ type: "input_text", text }] }
-        }));
-        channel.send(JSON.stringify({ type: "response.create", response: { output_modalities: ["audio"] } }));
-        props.onCommand("");
-        setPhase("connecting");
-        return;
-      }
       props.onTextFallback(event);
-    }, [inlineId, props.command, props.onCommand, props.onTextFallback]);
+    }, [props.command, props.onTextFallback]);
     const state = VOICE_PHASE[phase] || VOICE_PHASE.idle;
     const policy = meta && meta.policy || {};
     const hasReservation = typeof policy.reservationUsd === "number" && Number.isFinite(policy.reservationUsd);
@@ -5795,27 +5750,6 @@ var MikaelOSPlugin = function() {
   function CockpitScene(props) {
     return h(VoiceCommandDeck, props);
   }
-  function useIdleTimer(active, ms, onIdle) {
-    const cb = useRef(onIdle);
-    cb.current = onIdle;
-    useEffect(() => {
-      if (!active || prefersReducedMotion() || typeof window === "undefined") return;
-      let t = null;
-      const reset = () => {
-        if (t) window.clearTimeout(t);
-        t = window.setTimeout(() => {
-          if (cb.current) cb.current();
-        }, ms);
-      };
-      const evs = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"];
-      evs.forEach((e) => window.addEventListener(e, reset, { passive: true }));
-      reset();
-      return () => {
-        if (t) window.clearTimeout(t);
-        evs.forEach((e) => window.removeEventListener(e, reset));
-      };
-    }, [active, ms]);
-  }
   function MikaelOS() {
     const [workspace, setWorkspace] = useState("private");
     const [modules, setModules] = useState(MODULES);
@@ -6460,11 +6394,6 @@ var MikaelOSPlugin = function() {
       openJarvisChat(objective);
       setCommand("");
     }, [command]);
-    useIdleTimer(
-      scene === "cockpit" && stateIndex === 0 && !isMobile,
-      9e4,
-      useCallback(() => setScene("constellation"), [])
-    );
     useCallback(() => setScene("approvals"), []);
     useCallback(() => setScene("firma"), []);
     useCallback(() => setScene("approvals"), []);
@@ -6583,7 +6512,7 @@ var MikaelOSPlugin = function() {
       h(
         "main",
         { className: "mos__shell", role: "main" },
-        h("h1", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
+        h("h2", { className: "mos__sr-only" }, "MIKAEL OS — Persönliches System"),
         h(TopBar, {
           loadState,
           liveCount,

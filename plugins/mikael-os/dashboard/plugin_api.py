@@ -6027,11 +6027,70 @@ def jarvis_voice_inline_control(inline_id: str, action: str) -> Dict[str, Any]:
         safe = {
             key: body.get(key)
             for key in (
-                "status", "turns", "tool_calls", "cost_enforcement",
-                "mission_state", "reconcile_reason",
+                "status", "reason", "turns", "max_turns", "tool_calls",
+                "cost_enforcement", "cost_usd", "cost_usd_scope",
+                "reservation_usd", "mission_state", "reconcile_reason",
             )
             if key in body
         }
+        # Voice-Web's Sideband owns the provider event channel.  The browser
+        # intentionally has no OpenAI data channel, so its authenticated status
+        # poll receives only the bounded visual projection that Voice-Web
+        # already produced for Mikael: phase, transcript and the last typed
+        # tool result.  Provider ids, credentials, control tokens and raw
+        # receipts remain server-side.
+        visual = body.get("visual")
+        if isinstance(visual, dict):
+            transcript = []
+            for item in list(visual.get("transcript") or [])[-24:]:
+                if not isinstance(item, dict):
+                    continue
+                speaker = str(item.get("speaker") or "")
+                text = str(item.get("text") or "")
+                if speaker not in {"operator", "assistant"} or not text:
+                    continue
+                transcript.append({
+                    "speaker": speaker,
+                    "text": text[:4000],
+                })
+            last_tool_raw = visual.get("last_tool_result")
+            last_tool = None
+            if isinstance(last_tool_raw, dict):
+                last_tool = {
+                    key: last_tool_raw.get(key)
+                    for key in (
+                        "tool", "status", "read_kind", "query",
+                        "proposal_type", "summary", "receipt_ref",
+                    )
+                    if key in last_tool_raw
+                }
+            events = []
+            for item in list(visual.get("events") or [])[-24:]:
+                if not isinstance(item, dict):
+                    continue
+                kind = str(item.get("kind") or "")
+                if not kind:
+                    continue
+                events.append({
+                    "sequence": item.get("sequence"),
+                    "kind": kind[:80],
+                    "atMs": item.get("at_ms"),
+                    "latencyMs": item.get("latency_ms"),
+                    "source": str(item.get("source") or "")[:120] or None,
+                })
+            safe["visual"] = {
+                "phase": str(visual.get("phase") or "")[:40],
+                "events": events,
+                "transcript": transcript,
+                "transcriptDraft": str(
+                    visual.get("transcript_draft") or "")[-4000:],
+                "operatorTranscriptDraft": str(
+                    visual.get("operator_transcript_draft") or "")[-4000:],
+                "lastToolResult": last_tool,
+                "ackLatencyMs": visual.get("ack_latency_ms"),
+                "ackObservation": str(
+                    visual.get("ack_observation") or "")[:120] or None,
+            }
         if requested == "hangup":
             _voice_inline_reset_locked(
                 phase="ended" if status == 200 else "reconcile_required")

@@ -286,6 +286,32 @@ def test_inline_voice_keeps_capabilities_and_control_tokens_server_side(
                 "turns": 2,
                 "tool_calls": 1,
                 "mission_state": "running",
+                "visual": {
+                    "phase": "prueft",
+                    "events": [
+                        {
+                            "sequence": 1,
+                            "kind": "operator_speaking",
+                            "at_ms": 100,
+                            "sensitive": TOKEN,
+                        },
+                    ],
+                    "transcript": [
+                        {"speaker": "operator", "text": "Zeige den Status."},
+                        {"speaker": "assistant", "text": "Ich prüfe das."},
+                    ],
+                    "transcript_draft": "Live",
+                    "operator_transcript_draft": "",
+                    "last_tool_result": {
+                        "tool": "read",
+                        "read_kind": "session_inventory",
+                        "status": "read",
+                        "summary": "Agentenstatus gelesen",
+                        "result": {"provider_secret": TOKEN},
+                    },
+                    "ack_latency_ms": 420,
+                    "ack_observation": "output_audio_transcript_delta",
+                },
                 "provider_secret": TOKEN,
             }).encode(), {}
         raise AssertionError(path)
@@ -302,13 +328,35 @@ def test_inline_voice_keeps_capabilities_and_control_tokens_server_side(
     assert prepared["missionId"] == "mis-shared-voice"
     assert prepared["reservationUsd"] == 0.56
     assert answer["sdp"] == "v=0\\r\\ntest-answer"
-    assert status == {
-        "ok": True,
-        "action": "status",
-        "status": "active",
-        "turns": 2,
-        "tool_calls": 1,
-        "mission_state": "running",
+    assert status["ok"] is True
+    assert status["action"] == "status"
+    assert status["status"] == "active"
+    assert status["turns"] == 2
+    assert status["tool_calls"] == 1
+    assert status["mission_state"] == "running"
+    assert status["visual"] == {
+        "phase": "prueft",
+        "events": [{
+            "sequence": 1,
+            "kind": "operator_speaking",
+            "atMs": 100,
+            "latencyMs": None,
+            "source": None,
+        }],
+        "transcript": [
+            {"speaker": "operator", "text": "Zeige den Status."},
+            {"speaker": "assistant", "text": "Ich prüfe das."},
+        ],
+        "transcriptDraft": "Live",
+        "operatorTranscriptDraft": "",
+        "lastToolResult": {
+            "tool": "read",
+            "read_kind": "session_inventory",
+            "status": "read",
+            "summary": "Agentenstatus gelesen",
+        },
+        "ackLatencyMs": 420,
+        "ackObservation": "output_audio_transcript_delta",
     }
     assert ended["ok"] is True
     for secret in (TOKEN, bootstrap_token, control_token):
@@ -349,3 +397,13 @@ def test_legacy_voice_bookmark_opens_stable_deck_without_minting(
     response = api.jarvis_voice_launch_go()
     assert response.status_code == 307
     assert response.headers["location"] == "/mikael-os?voice=1"
+
+
+def test_frontend_webrtc_is_audio_only_and_sideband_owned() -> None:
+    source = (PLUGIN_ROOT / "frontend" / "src" / "index.jsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert ".createDataChannel(" not in source
+    assert "Hermes Sideband is the" in source
+    assert 'setScene("constellation")' not in source

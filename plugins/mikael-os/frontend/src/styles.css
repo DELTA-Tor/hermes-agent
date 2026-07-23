@@ -3979,7 +3979,14 @@ button.mos__deeplink.is-gated .mos__icon:last-child { color: #a8bce0; opacity: 0
   flex-direction: column;
   gap: 2px;
 }
-.mos__life-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+.mos__life-title strong {
+  overflow: hidden;
+  font-size: 11.5px;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 .mos__life-title span { color: var(--mos-text-faint); font-size: 8.5px; text-transform: uppercase; letter-spacing: .35px; }
 .mos__life-card .mos__pip { font-size: 8px; padding: 2px 5px; }
 .mos__life-coverage { margin-top: 10px; }
