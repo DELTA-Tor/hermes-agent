@@ -3697,6 +3697,30 @@ button.mos__deeplink.is-gated .mos__icon:last-child { color: #a8bce0; opacity: 0
   background: rgba(56,189,248,.1);
   cursor: pointer;
 }
+.mos__vcd-command button.mos__vcd-dictation {
+  width: auto;
+  display: inline-flex;
+  gap: 5px;
+  padding: 0 9px;
+  color: var(--mos-text-faint);
+  background: rgba(94,138,188,.06);
+  border: 1px solid rgba(104,166,224,.14);
+  font-size: 10px;
+}
+.mos__vcd-command button.mos__vcd-dictation.is-active {
+  color: #d9f7ff;
+  background: rgba(56,189,248,.18);
+  border-color: rgba(56,189,248,.48);
+  box-shadow: inset 0 0 0 1px rgba(56,189,248,.08);
+}
+.mos__vcd-dictation-state {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 16px 0;
+  color: #a5f3fc;
+  font-size: 10px;
+}
 .mos__vcd-quick {
   display: flex;
   gap: 6px;

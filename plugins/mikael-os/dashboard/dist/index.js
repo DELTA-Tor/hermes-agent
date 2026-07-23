@@ -4532,6 +4532,19 @@ var MikaelOSPlugin = function() {
     ended: { label: "Gespräch beendet", tone: "muted" },
     error: { label: "Verbindung unterbrochen", tone: "red" }
   };
+  function transcriptTailDelta(previous, current) {
+    const before = Array.isArray(previous) ? previous : [];
+    const after = Array.isArray(current) ? current : [];
+    const limit = Math.min(before.length, after.length);
+    for (let overlap = limit; overlap >= 0; overlap -= 1) {
+      const tail = before.slice(before.length - overlap);
+      const head = after.slice(0, overlap);
+      if (tail.every((text, index) => text === head[index])) {
+        return after.slice(overlap);
+      }
+    }
+    return after;
+  }
   function RealtimeVoiceDeck(props) {
     const [meta, setMeta] = useState(null);
     const [phase, setPhase] = useState("idle");
@@ -4548,7 +4561,13 @@ var MikaelOSPlugin = function() {
     const reconnectTimerRef = useRef(null);
     const confirmRef = useRef(null);
     const inlineRef = useRef("");
+    const beginRef = useRef(null);
+    const rolloverStartedRef = useRef(false);
+    const dictationSnapshotRef = useRef([]);
+    const commandRef = useRef("");
+    const [dictation, setDictation] = useState(false);
     inlineRef.current = inlineId;
+    commandRef.current = String(props.command || "");
     const loadMeta = useCallback(() => {
       sdkRequestJSON(VOICE_STATUS_API, "GET").then((result) => {
         const body = result.body || {};
@@ -4608,6 +4627,8 @@ var MikaelOSPlugin = function() {
       }
       if (peerRef.current) {
         try {
+          peerRef.current.onconnectionstatechange = null;
+          peerRef.current.ontrack = null;
           peerRef.current.close();
         } catch (_e) {
         }
@@ -4674,6 +4695,17 @@ var MikaelOSPlugin = function() {
             text: String(item && item.text || ""),
             done: true
           })).filter((item) => item.text) : [];
+          const operatorTexts = Array.isArray(visual.transcript) ? visual.transcript.filter((item) => item && item.speaker === "operator").map((item) => String(item.text || "")).filter(Boolean) : [];
+          const dictated = transcriptTailDelta(
+            dictationSnapshotRef.current,
+            operatorTexts
+          );
+          dictationSnapshotRef.current = operatorTexts;
+          if (dictation && dictated.length) {
+            const currentCommand = String(commandRef.current || "").trim();
+            const addition = dictated.join("\n");
+            props.onCommand(currentCommand ? currentCommand + "\n" + addition : addition);
+          }
           const operatorDraft = String(visual.operatorTranscriptDraft || "");
           const assistantDraft = String(visual.transcriptDraft || "");
           if (operatorDraft) {
@@ -4699,6 +4731,34 @@ var MikaelOSPlugin = function() {
             ...body,
             lastTool: lastTool && (lastTool.summary || lastTool.read_kind || lastTool.proposal_type || lastTool.tool)
           }));
+          if (body.status === "verified") {
+            releaseMedia();
+            inlineRef.current = "";
+            setInlineId("");
+            if (body.reason === "session_rollover") {
+              if (rolloverStartedRef.current) return;
+              rolloverStartedRef.current = true;
+              if (!missionId) {
+                setError("Realtime wurde rotiert, aber die gemeinsame Mission fehlt. Keine automatische neue Reservierung.");
+                setPhase("error");
+                return;
+              }
+              setPhase("reconnecting");
+              const restart = beginRef.current;
+              if (typeof restart === "function") {
+                Promise.resolve().then(() => restart({
+                  missionId,
+                  preserveTranscript: true
+                }));
+              } else {
+                setError("Die automatische Fortsetzung ist nicht verfügbar.");
+                setPhase("error");
+              }
+            } else {
+              setPhase("ended");
+            }
+            return;
+          }
           if (body.status === "responding" || visual.phase === "spricht") {
             setPhase("speaking");
           } else if (body.status === "listening" || ["hoert_zu", "verstanden", "prueft"].includes(visual.phase)) {
@@ -4707,6 +4767,8 @@ var MikaelOSPlugin = function() {
           if (!result.ok || body.ok === false || body.status === "reconcile_required") {
             setError("Hermes-Sideband meldet einen unklaren Zustand. Keine automatische Wiederholung.");
             releaseMedia();
+            inlineRef.current = "";
+            setInlineId("");
             setPhase("error");
           }
         }).catch(() => {
@@ -4717,12 +4779,20 @@ var MikaelOSPlugin = function() {
       };
       const timer = window.setInterval(poll, 4e3);
       return () => window.clearInterval(timer);
-    }, [inlineId, phase, releaseMedia]);
-    const begin = useCallback(async () => {
+    }, [dictation, inlineId, missionId, phase, props.onCommand, releaseMedia]);
+    const begin = useCallback(async (options = {}) => {
+      const config = options && typeof options === "object" && typeof options.preventDefault !== "function" ? options : {};
+      const continuationMissionId = String(config.missionId || "");
+      const preserveTranscript = config.preserveTranscript === true;
       setConfirm(false);
       setError("");
-      setTranscript([]);
-      setControl(null);
+      rolloverStartedRef.current = false;
+      dictationSnapshotRef.current = [];
+      if (!preserveTranscript) {
+        setTranscript([]);
+        setControl(null);
+        setMissionId("");
+      }
       if (typeof RTCPeerConnection !== "function" || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
         setError("Dieser Browser unterstützt den sicheren WebRTC-Mikrofonpfad nicht. Es wurde nichts reserviert.");
         setPhase("error");
@@ -4744,7 +4814,8 @@ var MikaelOSPlugin = function() {
       let prepared;
       try {
         const result = await sdkRequestJSON(VOICE_PREPARE_API, "POST", {
-          purpose: "Jarvis Realtime im MIKAEL OS Voice Command Deck"
+          purpose: "Jarvis Realtime im MIKAEL OS Voice Command Deck",
+          missionId: continuationMissionId || void 0
         });
         prepared = sdkResponseBody(result);
         if (!result.ok || prepared.ok !== true || !prepared.inlineId) {
@@ -4813,11 +4884,52 @@ var MikaelOSPlugin = function() {
         await peer.setRemoteDescription({ type: "answer", sdp: session.sdp });
         setPhase("listening");
       } catch (err) {
+        const failedHandle = prepared && prepared.inlineId;
         releaseMedia();
+        inlineRef.current = "";
+        setInlineId("");
+        if (failedHandle) {
+          sdkRequestJSON(VOICE_CONTROL_API, "POST", {
+            inlineId: failedHandle,
+            action: "hangup"
+          }).catch(() => {
+          });
+        }
         setError(String(err && err.message || "Realtime-Verbindung fehlgeschlagen."));
         setPhase("error");
       }
     }, [loadMeta, releaseMedia]);
+    beginRef.current = begin;
+    const reconnect = useCallback(() => {
+      const handle = inlineRef.current;
+      const continuationMissionId = missionId;
+      setError("");
+      if (!handle || !continuationMissionId) {
+        loadMeta();
+        setConfirm(true);
+        return;
+      }
+      setPhase("reconnecting");
+      releaseMedia();
+      sdkRequestJSON(VOICE_CONTROL_API, "POST", {
+        inlineId: handle,
+        action: "rollover"
+      }).then((result) => {
+        const body = sdkResponseBody(result);
+        if (!result.ok || body.ok === false || body.status !== "verified" || body.reason !== "session_rollover") {
+          throw new Error("Rollover nicht eindeutig bestätigt.");
+        }
+        inlineRef.current = "";
+        setInlineId("");
+        return begin({
+          missionId: continuationMissionId,
+          preserveTranscript: true
+        });
+      }).catch(() => {
+        setError("Neu verbinden wurde nicht eindeutig bestätigt. Keine automatische zweite Reservierung.");
+        setPhase("error");
+      });
+    }, [begin, loadMeta, missionId, releaseMedia]);
     const sendText = useCallback((event) => {
       if (event && event.preventDefault) event.preventDefault();
       const text = String(props.command || "").trim();
@@ -4913,12 +5025,7 @@ var MikaelOSPlugin = function() {
         ),
         phase === "error" ? h(
           "button",
-          { type: "button", className: "mos__vcd-reconnect", onClick: () => {
-            hangup(true).finally(() => {
-              loadMeta();
-              setConfirm(true);
-            });
-          } },
+          { type: "button", className: "mos__vcd-reconnect", onClick: reconnect },
           h(Icon, { name: "refresh-cw", size: 14 }),
           "Neu verbinden"
         ) : null
@@ -4933,12 +5040,29 @@ var MikaelOSPlugin = function() {
           placeholder: "Nachricht an Jarvis …",
           "aria-label": "Nachricht an Jarvis"
         }),
+        h("button", {
+          type: "button",
+          className: "mos__vcd-dictation" + (dictation ? " is-active" : ""),
+          "aria-label": "Diktat: Sprache in Textfeld",
+          "aria-pressed": dictation,
+          onClick: () => {
+            const next = !dictation;
+            setDictation(next);
+            if (next && !active) setConfirm(true);
+          }
+        }, h(Icon, { name: "audio-lines", size: 15 }), h("span", null, "Diktat")),
         h(
           "button",
           { type: "submit", "aria-label": "Nachricht senden" },
           h(Icon, { name: "send-horizontal", size: 18 })
         )
       ),
+      dictation ? h(
+        "div",
+        { className: "mos__vcd-dictation-state", role: "status" },
+        h(Icon, { name: "mic", size: 12 }),
+        "Diktat schreibt neue Mikael-Sätze ins Textfeld."
+      ) : null,
       h(
         "div",
         { className: "mos__vcd-quick" },
@@ -4962,6 +5086,7 @@ var MikaelOSPlugin = function() {
               h("b", null, Number.isFinite(reservation) ? reservation.toFixed(2).replace(".", ",") + " $" : "nicht verfügbar"),
               ". Mikrofon wird vor der Reservierung geprüft."
             ),
+            h("p", null, "Für lange Gespräche wird die Provider-Sitzung vor dem 60-Minuten-Limit automatisch unter derselben Mission rotiert; jede Rotation reserviert erneut."),
             h("small", null, (policy.model || "Modell nicht verfügbar") + " · " + (policy.voice || "Voice nicht verfügbar") + " · Hermes-Sideband")
           ),
           h(
@@ -4970,7 +5095,7 @@ var MikaelOSPlugin = function() {
             h("button", { type: "button", onClick: () => setConfirm(false) }, "Abbrechen"),
             h(
               "button",
-              { type: "button", className: "is-primary", onClick: begin, disabled: !canStart },
+              { type: "button", className: "is-primary", onClick: () => begin({}), disabled: !canStart },
               "Starten · " + (Number.isFinite(reservation) ? reservation.toFixed(2).replace(".", ",") + " $" : "nicht verfügbar")
             )
           )
