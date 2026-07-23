@@ -131,6 +131,22 @@ if (constMissing.length) {
   process.exit(1);
 }
 
+// Hermes 0.19 agent command view ships as a peer scene. It is not part of the
+// static Cockpit render, so assert its product-language and polling contract in
+// the built source.
+const liveWorkMust = [
+  "Live-Arbeit der Agenten",
+  "Hermes-0.19-Live-Transkripte",
+  "Denkt",
+  "Änderungen per Text oder Sprache an Jarvis geben",
+  "setInterval",
+];
+const liveWorkMissing = liveWorkMust.filter((s) => !code.includes(s));
+if (liveWorkMissing.length) {
+  console.error("FAIL: Agenten-Leitstand markers missing from bundle:", liveWorkMissing);
+  process.exit(1);
+}
+
 // icons rendered as inline <svg>
 const svgCount = (html.match(/<svg /g) || []).length;
 if (svgCount < 20) {
@@ -165,4 +181,4 @@ if (l3Leak.length) {
   process.exit(1);
 }
 
-console.log(`PASS: registered 'mikael-os', rendered ${html.length} chars, ${svgCount} lucide icons, all ${mustContain.length} Cockpit strings + ${constellationMust.length} Konstellation-source strings + ${l3Must.length} L-3 markers present, no forbidden endpoint literals.`);
+console.log(`PASS: registered 'mikael-os', rendered ${html.length} chars, ${svgCount} lucide icons, all ${mustContain.length} Cockpit strings + ${constellationMust.length} Konstellation-source strings + ${liveWorkMust.length} Agenten-Leitstand markers + ${l3Must.length} L-3 markers present, no forbidden endpoint literals.`);

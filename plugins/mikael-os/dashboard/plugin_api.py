@@ -3827,6 +3827,13 @@ AGENT_TOKEN_PATH = Path(os.environ.get(
     "MIKAELOS_AGENT_TOKEN_PATH", "/run/user/1000/hermes-agent-sessions/jarvis-ui.token"))
 AGENT_ACTOR = os.environ.get("MIKAELOS_AGENT_ACTOR", "jarvis-ui")
 _BROKER_CWD_ROOTS = ["/srv/delta", "/srv/hermes", "/home/ubuntu/Dev"]
+DELEGATION_LIVE_ROOT = Path(os.environ.get(
+    "MIKAELOS_DELEGATION_LIVE_ROOT",
+    "/srv/delta/data/nous-hermes/cache/delegation/live",
+))
+_DELEGATION_VIEW_LIMIT = 6
+_DELEGATION_TAIL_LINES = 18
+_DELEGATION_TAIL_BYTES = 64 * 1024
 
 
 def _agent_session_token() -> str:
@@ -3912,14 +3919,135 @@ def _broker_strand(backend: str, token: str) -> Dict[str, Any]:
                      "Keine aktiven Sessions für diesen Strang.")}
 
 
+def _delegation_log_tail(path: Path) -> List[Dict[str, str]]:
+    """Read a bounded tail from one upstream-redacted Hermes live transcript."""
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - _DELEGATION_TAIL_BYTES))
+            raw = handle.read(_DELEGATION_TAIL_BYTES)
+    except OSError:
+        return []
+    text = raw.decode("utf-8", errors="replace")
+    if size > _DELEGATION_TAIL_BYTES:
+        text = text.split("\n", 1)[-1]
+    rows: List[Dict[str, str]] = []
+    for line in text.splitlines():
+        # Canonical Hermes 0.19 shape: ``HH:MM:SS role     | redacted text``.
+        if len(line) < 11 or line[2:3] != ":" or line[5:6] != ":" or "|" not in line:
+            continue
+        left, body = line.split("|", 1)
+        bits = left.strip().split(None, 1)
+        if len(bits) != 2:
+            continue
+        rows.append({
+            "time": bits[0][:8],
+            "kind": bits[1][:16],
+            "text": body.strip()[:800],
+        })
+    return rows[-_DELEGATION_TAIL_LINES:]
+
+
+def _delegation_live_overview() -> Dict[str, Any]:
+    """Project recent Hermes 0.19 live subagent logs without exposing paths."""
+    now = _now()
+    if not DELEGATION_LIVE_ROOT.is_dir():
+        return {
+            "state": "empty",
+            "rows": [],
+            "observedAt": _iso(now),
+            "source": "Hermes 0.19 · redigierte Live-Transkripte",
+            "note": "Noch keine Delegation seit dem Hermes-0.19-Cutover.",
+        }
+    try:
+        dirs = sorted(
+            (p for p in DELEGATION_LIVE_ROOT.iterdir() if p.is_dir()),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )[:_DELEGATION_VIEW_LIMIT]
+    except OSError:
+        return {
+            "state": "unavailable",
+            "rows": [],
+            "observedAt": _iso(now),
+            "source": "Hermes 0.19 · redigierte Live-Transkripte",
+            "note": "Live-Transkript-Verzeichnis ist nicht lesbar.",
+        }
+
+    rows: List[Dict[str, Any]] = []
+    newest_mtime = 0.0
+    for directory in dirs:
+        manifest_path = directory / "manifest.json"
+        try:
+            if manifest_path.stat().st_size > 256 * 1024:
+                continue
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(manifest, dict):
+                continue
+        except (OSError, ValueError, TypeError):
+            continue
+        tasks: List[Dict[str, Any]] = []
+        for task in manifest.get("tasks") or []:
+            if not isinstance(task, dict):
+                continue
+            index = task.get("index")
+            if not isinstance(index, int) or index < 0 or index > 100:
+                continue
+            # Deliberately derive the path locally; never trust manifest["log"].
+            log_path = directory / f"task-{index}.log"
+            log_rows = _delegation_log_tail(log_path)
+            try:
+                log_mtime = log_path.stat().st_mtime
+                newest_mtime = max(newest_mtime, log_mtime)
+            except OSError:
+                log_mtime = 0.0
+            tasks.append({
+                "index": index,
+                "goal": str(task.get("goal") or "Delegierte Aufgabe")[:500],
+                "status": str(task.get("status") or "unknown")[:32],
+                "exitReason": (
+                    str(task.get("exit_reason"))[:80]
+                    if task.get("exit_reason") is not None else None
+                ),
+                "events": log_rows,
+                "observedAt": _iso(_epoch_dt(log_mtime)) if log_mtime else None,
+            })
+        if not tasks:
+            continue
+        statuses = {str(task.get("status") or "unknown") for task in tasks}
+        state = "running" if "running" in statuses else (
+            "error" if statuses & {"error", "failed"} else "completed"
+        )
+        rows.append({
+            "delegationId": str(manifest.get("delegation_id") or directory.name)[:80],
+            "started": str(manifest.get("started") or "")[:32] or None,
+            "completed": str(manifest.get("completed") or "")[:32] or None,
+            "state": state,
+            "tasks": tasks,
+        })
+    observed = _epoch_dt(newest_mtime) if newest_mtime else now
+    return {
+        "state": ("fresh" if rows else "empty"),
+        "rows": rows,
+        "observedAt": _iso(observed),
+        "source": "Hermes 0.19 · redigierte Live-Transkripte",
+        "pollAfterSeconds": 4,
+        "note": (
+            "Zeigt gekürzte, upstream-redigierte Denk-, Tool- und Ergebnisereignisse."
+            if rows else "Noch keine lesbaren Live-Transkripte vorhanden."
+        ),
+    }
+
+
 def agent_sessions_overview() -> Dict[str, Any]:
-    """READ-ONLY 3-strand session overview + mission.v2 job list.
+    """READ-ONLY agent command view: strands, missions and live delegation logs.
       Jarvis  = mission.v2 (engineering workspace) — the honest Jarvis strand.
       Codex   = broker inventory (backend=codex).
       Claude  = broker inventory (backend=claude).
-    Steuern/Continue/Steer/Bind bleiben gated (propose-only) und sind hier nicht
-    ausführbar. Per-strand honest empty/partial/unavailable; a dead broker never
-    breaks the bundle."""
+    Direct buttons stay absent from this read surface. Jarvis can orchestrate
+    internal work through the existing command path; only money, customer
+    outbound and truth-schema changes require an operator gate."""
     missions = _read_missions()
     eng = [m for m in missions if str(m.get("workspace_type") or "") == "engineering"]
     eng_sorted = sorted(eng, key=lambda m: str(m.get("updated_at") or ""), reverse=True)
@@ -3964,13 +4092,20 @@ def agent_sessions_overview() -> Dict[str, Any]:
         "workspace": "engineering", "readOnly": True,
         "strands": [jarvis, codex, claude],
         "missions": missions_rows,
+        "delegations": _delegation_live_overview(),
         "observedAt": _iso(now),
-        "controls": {"steer": "gated", "continue": "gated", "bind": "gated",
-                     "note": "Nur über den propose-Weg (/actions, dry-run default) — "
-                             "hier nicht ausführbar."},
+        "controls": {
+            "surface": "read_only",
+            "commandPath": "jarvis",
+            "operatorGates": ["money", "customer_outbound", "truth_schema"],
+            "note": (
+                "Hier beobachten; Änderungen per Text oder Sprache an Jarvis geben. "
+                "Interne Build-/Deploy-/Computer-Aktionen laufen autonom, Operator-Gate "
+                "nur bei Geld, Außenwirkung oder Truth-Schema."
+            ),
+        },
         "note": ("Read-only Projektion: mission.v2 (Job-Wahrheit) + Session-Broker :18087 "
-                 "(jarvis-ui, nur inventory). Steuern/Continue/Steer/Bind bleiben gated und "
-                 "sind hier nicht verfügbar."),
+                 "(jarvis-ui, inventory) + Hermes-0.19-Live-Transkripte."),
     }
 
 
@@ -5534,7 +5669,7 @@ def health() -> Dict[str, Any]:
     return {
         "status": "ok",
         "plugin": "mikael-os",
-        "version": "0.6.0",
+        "version": "0.7.0",
         "phase": 5,
         "readPaths": {
             "missions_dir": str(MISSIONS_DIR),

@@ -3118,6 +3118,42 @@ button.mos__deeplink.is-gated .mos__icon:last-child { color: #a8bce0; opacity: 0
 .mos__slist { min-height: 0; }
 .mos__slist-body { display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; }
 .mos__slist-body .mos__mission { padding: 8px 9px; }
+.mos__livework { min-height: 0; }
+.mos__livework-body { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 12px; }
+.mos__delegation { overflow: hidden; border: 1px solid rgba(120,150,200,0.18); border-radius: 12px; background: rgba(5,12,28,0.42); }
+.mos__delegation.is-running { border-color: rgba(52,211,153,0.34); box-shadow: inset 0 1px 0 rgba(52,211,153,0.08); }
+.mos__delegation-head { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 8px 10px; border-bottom: 1px solid rgba(120,150,200,0.14); background: rgba(120,150,200,0.045); }
+.mos__delegation-state { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--mos-text-dim); font-size: 10px; font-weight: 750; letter-spacing: 0.35px; text-transform: uppercase; }
+.mos__delegation.is-running .mos__delegation-state { color: var(--mos-emerald); }
+.mos__delegation.is-running .mos__delegation-state .mos__icon { animation: mos-live-pulse 1.8s ease-in-out infinite; }
+.mos__delegation-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mos-text-faint); font: 10.5px ui-monospace, "SFMono-Regular", Menlo, monospace; }
+.mos__delegation-time { margin-left: auto; flex: none; color: var(--mos-text-faint); font-size: 10px; }
+.mos__delegation-tasks { display: flex; flex-direction: column; gap: 0; }
+.mos__livetask { padding: 10px; }
+.mos__livetask + .mos__livetask { border-top: 1px solid rgba(120,150,200,0.14); }
+.mos__livetask-head { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-bottom: 8px; }
+.mos__livetask-index { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; color: var(--mos-cyan); background: rgba(56,189,248,0.1); font-size: 10px; font-weight: 800; }
+.mos__livetask-goal { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mos-text); font-size: 12px; font-weight: 680; }
+.mos__livetask-status { padding: 2px 7px; border-radius: var(--mos-pill); color: var(--mos-text-dim); background: rgba(120,150,200,0.1); font-size: 9.5px; font-weight: 750; text-transform: uppercase; }
+.mos__livetask-status.is-running { color: var(--mos-emerald); background: rgba(52,211,153,0.1); }
+.mos__liveevents { display: flex; flex-direction: column; gap: 4px; max-height: 250px; margin: 0; padding: 0 2px; overflow: auto; list-style: none; scrollbar-width: thin; }
+.mos__liveevent { display: grid; grid-template-columns: 54px 58px minmax(0, 1fr); gap: 7px; align-items: start; padding: 5px 7px; border-radius: 7px; background: rgba(120,150,200,0.035); }
+.mos__liveevent time { color: var(--mos-text-faint); font: 9.5px ui-monospace, "SFMono-Regular", Menlo, monospace; }
+.mos__liveevent-kind { color: var(--mos-text-dim); font-size: 9.5px; font-weight: 750; text-transform: uppercase; }
+.mos__liveevent.is-think .mos__liveevent-kind { color: var(--mos-violet); }
+.mos__liveevent.is-tool .mos__liveevent-kind { color: var(--mos-cyan); }
+.mos__liveevent.is-result .mos__liveevent-kind,
+.mos__liveevent.is-final .mos__liveevent-kind { color: var(--mos-emerald); }
+.mos__liveevent-text { min-width: 0; overflow-wrap: anywhere; color: var(--mos-text-dim); font: 10.5px/1.45 ui-monospace, "SFMono-Regular", Menlo, monospace; }
+.mos__liveevent-empty { display: flex; align-items: center; gap: 6px; padding: 7px; color: var(--mos-text-faint); font-size: 10.5px; }
+@keyframes mos-live-pulse { 0%, 100% { opacity: .52; transform: scale(.92); } 50% { opacity: 1; transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) {
+  .mos__delegation.is-running .mos__delegation-state .mos__icon { animation: none; }
+}
+@media (max-width: 720px) {
+  .mos__delegation-time { display: none; }
+  .mos__liveevent { grid-template-columns: 48px 50px minmax(0, 1fr); }
+}
 
 /* --- Mobile M3 area launcher (home) --- */
 .mos__marealaunch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }

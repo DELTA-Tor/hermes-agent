@@ -38,6 +38,7 @@ def plugin_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("MIKAELOS_EXAMS", str(exams_path))
     monkeypatch.setenv("MIKAELOS_ANKI_DIR", str(tmp_path / "missing-anki"))
     monkeypatch.setenv("MIKAELOS_BRAIN_GATEWAY", "http://127.0.0.1:6")
+    monkeypatch.setenv("MIKAELOS_DELEGATION_LIVE_ROOT", str(tmp_path / "delegation-live"))
     for key in (
         "MIKAELOS_BRAIN_TOKEN",
         "MIKAELOS_PAPERLESS_TOKEN",
@@ -64,7 +65,7 @@ def test_manifest_health_and_router_contract_are_aligned(plugin_api) -> None:
     health = plugin_api.health()
     route_paths = {route.path for route in plugin_api.router.routes}
 
-    assert manifest["version"] == health["version"] == "0.6.0"
+    assert manifest["version"] == health["version"] == "0.7.0"
     assert health["phase"] == 5
     assert {
         "/cockpit/kpi",
@@ -174,6 +175,53 @@ def test_runtime_secrets_are_purpose_scoped_typed_injections(
     assert plugin_api._paperless_token() == "paperless-runtime"
     assert plugin_api._freescout_password() == "freescout-runtime"
     assert plugin_api._whoop_token() == "whoop-runtime"
+
+
+def test_agent_sessions_projects_bounded_redacted_live_delegation_tail(
+    plugin_api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = plugin_api.DELEGATION_LIVE_ROOT
+    task_dir = root / "deleg_abc12345"
+    task_dir.mkdir(parents=True)
+    outside = root.parent / "must-not-read.log"
+    outside.write_text("12:00:00 assistant | forbidden\n", encoding="utf-8")
+    (task_dir / "manifest.json").write_text(
+        json.dumps({
+            "delegation_id": "deleg_abc12345",
+            "started": "2026-07-23 13:00:00",
+            "task_count": 1,
+            "tasks": [{
+                "index": 0,
+                "goal": "Hermes Update live prüfen",
+                "log": str(outside),
+                "status": "running",
+            }],
+        }),
+        encoding="utf-8",
+    )
+    (task_dir / "task-0.log").write_text(
+        "=== Hermes subagent live transcript ===\n"
+        "13:00:01 think     | Prüfe den aktuellen Zustand.\n"
+        "13:00:02 tool      | -> terminal({redacted})\n"
+        "13:00:03 result    | terminal ok 0.2s: live\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(plugin_api, "_read_missions", lambda: [])
+    monkeypatch.setattr(plugin_api, "_agent_session_token", lambda: "")
+
+    result = plugin_api.agent_sessions_overview()
+    live = result["delegations"]
+
+    assert live["state"] == "fresh"
+    assert live["pollAfterSeconds"] == 4
+    assert result["controls"]["operatorGates"] == [
+        "money", "customer_outbound", "truth_schema",
+    ]
+    assert live["rows"][0]["state"] == "running"
+    task = live["rows"][0]["tasks"][0]
+    assert task["goal"] == "Hermes Update live prüfen"
+    assert [event["kind"] for event in task["events"]] == ["think", "tool", "result"]
+    assert all("forbidden" not in event["text"] for event in task["events"])
 
 
 def test_study_plan_default_is_dry_run_and_business_scope_is_refused(
