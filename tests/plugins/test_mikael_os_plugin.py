@@ -65,8 +65,8 @@ def test_manifest_health_and_router_contract_are_aligned(plugin_api) -> None:
     health = plugin_api.health()
     route_paths = {route.path for route in plugin_api.router.routes}
 
-    assert manifest["version"] == health["version"] == "0.9.0"
-    assert health["phase"] == 5
+    assert manifest["version"] == health["version"] == "1.0.0"
+    assert health["phase"] == 6
     assert {
         "/cockpit/kpi",
         "/cockpit/jarvis-state",
@@ -83,8 +83,25 @@ def test_manifest_health_and_router_contract_are_aligned(plugin_api) -> None:
         "/study/plan",
         "/study/plan/propose",
         "/learning/intake/analyze",
+        "/jarvis/voice/status",
+        "/jarvis/voice/healthz",
+        "/jarvis/voice/prepare",
+        "/jarvis/voice/session",
+        "/jarvis/voice/control",
         "/health",
     } <= route_paths
+
+
+def test_pwa_scope_is_private_to_mikael_os_and_never_caches_api_truth(
+    plugin_api,
+) -> None:
+    assert plugin_api._PWA_MANIFEST["start_url"] == "/mikael-os"
+    assert plugin_api._PWA_MANIFEST["scope"] == "/mikael-os"
+    assert 'url.pathname === "/mikael-os"' in plugin_api._PWA_SW_JS
+    assert "req.destination === \"script\"" in plugin_api._PWA_SW_JS
+    assert "plugin API JSON" in plugin_api._PWA_SW_JS
+    assert "c.put(req, copy)" in plugin_api._PWA_SW_JS
+    assert 'k.startsWith("mikael-os-shell-")' in plugin_api._PWA_SW_JS
 
 
 def test_dashboard_multi_pdf_upload_is_ephemeral_and_uses_shared_adapter(
@@ -220,8 +237,71 @@ def test_agent_sessions_projects_bounded_redacted_live_delegation_tail(
     assert live["rows"][0]["state"] == "running"
     task = live["rows"][0]["tasks"][0]
     assert task["goal"] == "Hermes Update live prüfen"
-    assert [event["kind"] for event in task["events"]] == ["think", "tool", "result"]
+    assert [event["kind"] for event in task["events"]] == ["tool", "result"]
     assert all("forbidden" not in event["text"] for event in task["events"])
+
+
+def test_mission_projection_exposes_only_product_safe_work_and_evidence(
+    plugin_api,
+) -> None:
+    row = plugin_api._mission_row({
+        "mission_id": "mis-test",
+        "state": "running",
+        "goal": "Mikael OS als Jarvis-Frontdoor abschließen",
+        "owner_agent": "jarvis",
+        "job_type": "computer-use",
+        "plan": ["Implementieren", "Testen", "Live verifizieren"],
+        "next_action": "Responsive QA durchführen",
+        "expected_result": "Eine stabile PWA",
+        "evidence_refs": ["test:smoke-pass"],
+        "receipts": ["receipt:deploy-sha"],
+        "updated_at": "2026-07-23T18:00:00+00:00",
+        "private_reasoning": "must never be projected",
+    })
+
+    assert row["missionId"] == "mis-test"
+    assert row["goal"] == "Mikael OS als Jarvis-Frontdoor abschließen"
+    assert row["plan"] == ["Implementieren", "Testen", "Live verifizieren"]
+    assert row["currentStep"] == "Responsive QA durchführen"
+    assert row["tool"] == "computer-use"
+    assert row["expectedResult"] == "Eine stabile PWA"
+    assert row["evidence"] == ["test:smoke-pass", "receipt:deploy-sha"]
+    assert "private_reasoning" not in row
+    assert "reasoning" not in json.dumps(row).lower()
+
+
+def test_personal_telegram_and_company_office_signals_never_blend_workspaces(
+    plugin_api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(plugin_api, "_komm_telegram", lambda: {
+        "state": "fresh",
+        "workspace": "private",
+        "source": "operator-bot",
+        "rows": [{"title": "Privater Jarvis-Turn"}],
+    })
+    monkeypatch.setattr(plugin_api, "module_company", lambda: {
+        "state": "fresh",
+        "workspace": "company_signal",
+        "source": "approvals",
+        "rows": [{"title": "Firmenvorschlag"}],
+        "pending": 1,
+    })
+    monkeypatch.setattr(plugin_api, "_freescout_signals", lambda: {
+        "state": "fresh",
+        "workspace": "company_signal",
+        "source": "freescout",
+        "rows": [{"title": "Büroticket"}],
+        "open": 1,
+    })
+
+    result = plugin_api.module_kommunikation()
+    by_group = {row["group"]: row for row in result["rows"]}
+
+    assert result["workspaces"] == ["private", "company_signal"]
+    assert by_group["telegram"]["workspace"] == "private"
+    assert by_group["vorschlaege"]["workspace"] == "company_signal"
+    assert by_group["freescout"]["workspace"] == "company_signal"
+    assert result["readOnly"] is True
 
 
 def test_study_plan_default_is_dry_run_and_business_scope_is_refused(

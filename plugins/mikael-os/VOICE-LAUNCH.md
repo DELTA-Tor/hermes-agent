@@ -1,65 +1,72 @@
-# Jarvis Voice-Launch (MIKAEL OS)
+# Jarvis Realtime im MIKAEL OS
 
-## Zweck
+## Zielbild
 
-Ein-Klick-Einstieg in eine Jarvis-Realtime-Sprachsession direkt aus dem
-MIKAEL-OS-Dashboard (Desktop-Cockpit: Jarvis-Panel · Mobile: Jarvis-Tab).
-Es wird **nichts neu gebaut** — das Plugin ruft nur den bestehenden,
-getesteten Mint-Pfad auf:
+MIKAEL OS ist die eine persönliche Jarvis-Frontdoor. Realtime läuft direkt im
+Voice Command Deck derselben PWA; es gibt weder einen ablaufenden Link im
+Browser noch einen zweiten Voice-Tab.
 
-```
-/srv/delta/bin/jarvis-voice-launch "<Zweck>"
-  → RealtimeMissionControl → POST 127.0.0.1:18086/internal/launch
-```
+Text, Telegram und Voice referenzieren dieselbe `mission.v2`-Mission und die
+gemeinsamen Outcome-/Memory-Projektionen. Hermes bleibt Gate- und Tool-Spine.
 
 ## Ablauf
 
-1. Button „🎙️ Jarvis starten“ → Bestätigungsdialog mit expliziter
-   Budget-Wirkung („reserviert 5,50 $ vom Monatsbudget, Link 120 s gültig“).
-2. `POST /api/plugins/mikael-os/jarvis/launch` startet den Launcher als
-   Subprozess (Timeout 15 s), parst dessen JSON und antwortet mit
-   `{launch_url, expires_at, reserved_usd, mission_id, session_id, ttl_seconds}`.
-3. Frontend öffnet die Launch-URL per `window.open(_blank, noopener)`.
-   Popup-Blocker-Fallback: klickbarer Anchor (`target=_blank rel=noopener`)
-   mit ablaufendem TTL-Countdown im Dialog. **Kein iframe** — voice-web
-   sendet `X-Frame-Options: DENY` + `frame-ancestors 'none'`.
+1. Das Dashboard liest `GET /jarvis/voice/status`. Die Antwort enthält nur
+   sanitisierte Readiness- und Policy-Felder.
+2. Mikael klickt bewusst auf Start. Erst wird die Mikrofon-Berechtigung
+   geprüft; anschließend zeigt das UI den exakten Reservierungsbetrag der
+   aktiven Policy.
+3. `POST /jarvis/voice/prepare` nutzt den bestehenden
+   `/srv/delta/bin/jarvis-voice-launch`-Pfad und tauscht die einmalige
+   Capability sofort serverseitig an voice-web `/bootstrap`.
+4. Der Browser erhält nur einen opaken lokalen Handle. Capability,
+   Bootstrap-Token, Nonce und Control-Token bleiben im Dashboard-Prozess.
+5. Der Browser erzeugt WebRTC-SDP. `POST /jarvis/voice/session` leitet genau
+   diesen SDP-Austausch über Loopback weiter und gibt nur SDP-Antwort sowie
+   sanitisierte Sitzungsdaten zurück.
+6. Audio und Realtime-Ereignisse laufen über WebRTC. Tool- und
+   Business-Logik laufen im Hermes-Sideband. Im UI erscheinen nur Ziel, Plan,
+   Schritt, Tool, Ergebnis und Evidenz — keine Modellgedanken.
+7. `POST /jarvis/voice/control` serialisiert Status und Hangup. Ein
+   unterbrochener Zustand wird sichtbar; ein neuer kostenwirksamer Versuch
+   braucht erneut den bewussten Start.
 
-## Budget-Wirkung und Leitplanken
+Der alte Bookmark `/jarvis/launch/go` mintet nicht mehr. Er leitet stabil auf
+`/mikael-os?voice=1` und öffnet dort den eingebetteten Bestätigungsdialog.
 
-- Jeder erfolgreiche Mint reserviert **5,50 $** gegen die
-  **25-$-Monatskappe** — vier offene Reservierungen blockieren den fünften
-  Start. Deshalb: **In-Memory-Debounce** — solange ein gemintetes Token nicht
-  abgelaufen ist, antwortet ein zweiter Aufruf `409` mit Rest-TTL statt neu
-  zu minten. Ein Subprozess-Timeout sperrt konservativ die volle TTL (der
-  interne POST kann kurz vor dem Kill durchgegangen sein).
-- Das Capability-Token (HMAC, TTL ~120 s, Einmal-Bootstrap, als
-  `#capability=`-Fragment in der URL) existiert **nur in der einen
-  HTTP-Antwort**: nie geloggt, nie persistiert; der Debounce-Zustand hält nur
-  Ablaufzeitpunkt + Mission-Referenz.
-- Launcher-Fehler (z. B. `realtime_prerequisite_missing`, wenn die
-  Egress-Attestation abgelaufen ist) kommen als verständlicher
-  `ok:false`-Status ans UI — nie als blindes 500. In diesen Fällen wurde
-  nichts reserviert, der Debounce bleibt zu.
+## Sicherheits- und Authority-Grenzen
 
-## Betriebshinweis (Deploy-Voraussetzung, NICHT Teil dieses PR)
+- Kein Provider-Secret und kein voice-web-Control-Token erreicht den Browser.
+- Kein Token wird geloggt, persistiert oder in eine URL geschrieben.
+- Provider-/Budgetnutzung beginnt nur nach dem expliziten Start.
+- Tool-Aufrufe laufen ausschließlich über Hermes-Sideband und dessen Gates.
+- Mikaels private Lane darf interne Authority nutzen; Firmenoberflächen bleiben
+  mandantengebunden. Geld, externer Kundenversand/bindende Zusagen und
+  Truth-Schemaänderungen bleiben gegatet.
+- Es gibt keine direkten `fsm.db`-Writes und keine öffentliche Exposition.
 
-Die Dashboard-Unit läuft mit `ProtectSystem=strict`. Der Launcher legt über
-`MissionStore.create` Missionen unter `/srv/hermes/missions` an — ohne
-Schreibrecht scheitert jeder Start. Deploy-Voraussetzung ist daher ein
-systemd-**Drop-in** für `nous-hermes-dashboard.service`:
+## Fehler und Reconnect
 
-```ini
-[Service]
-ReadWritePaths=/srv/hermes/missions
-```
-
-Das Drop-in legt der Operator beim (gated) Deploy an; es gehört bewusst
-nicht in diesen PR.
+- Mikrofon verweigert: keine Reservierung.
+- Bootstrap-/Session-Fehler: keine automatische Provider-Wiederholung.
+- WebRTC kurz getrennt: fünf Sekunden Grace-Window.
+- Danach: sichtbarer Fehler, bestmöglicher Hangup/Reconcile und erneute
+  Bestätigung vor einem neuen Versuch.
+- Text in derselben PWA sowie Telegram bleiben als Fallback verfügbar.
 
 ## Tests
 
-`tests/plugins/test_mikael_os_voice_launch.py` — Subprozess strikt gemockt
-(jeder echte Launcher-Aufruf reserviert 5,50 $!): Erfolg + Purpose-Durchleitung,
-Debounce-409 mit Rest-TTL, Prerequisite-Status ohne Sperr-Fenster,
-Timeout-Sperre, Launcher-Gibberish ohne stdout-Echo, Token nie in Log/State.
-Frontend: `plugins/mikael-os/frontend/test/smoke.mjs` gegen das gebaute Bundle.
+`tests/plugins/test_mikael_os_voice_launch.py` mockt Launcher, Bootstrap,
+SDP und Sideband vollständig. Die Tests prüfen Debounce, Fehlerzustände,
+serverseitige Tokenhaltung, sanitisierte Antworten, ungültige Handles und
+sequenzielles Control. Ein Test ruft niemals den echten Provider auf.
+
+`plugins/mikael-os/frontend/test/smoke.mjs` lädt das gebaute Plugin gegen den
+Host-SDK-Vertrag und verifiziert den Voice Command Deck als Default-Screen.
+
+## Offizielle OpenAI-Grundlagen
+
+- <https://developers.openai.com/api/docs/guides/realtime-webrtc>
+- <https://developers.openai.com/api/docs/guides/realtime-server-controls>
+- <https://developers.openai.com/api/docs/guides/realtime-conversations>
+- <https://developers.openai.com/api/docs/models/gpt-realtime-2.1>

@@ -370,6 +370,10 @@ const JARVIS_STATE_API = PLUGIN_API + "/cockpit/jarvis-state";
 // still open (debounce; orphan reservations eat the monthly cap).
 const VOICE_LAUNCH_API = PLUGIN_API + "/jarvis/launch";
 const VOICE_OPEN_EVENT = "mikael-os:voice-open";
+const VOICE_STATUS_API = PLUGIN_API + "/jarvis/voice/status";
+const VOICE_PREPARE_API = PLUGIN_API + "/jarvis/voice/prepare";
+const VOICE_SESSION_API = PLUGIN_API + "/jarvis/voice/session";
+const VOICE_CONTROL_API = PLUGIN_API + "/jarvis/voice/control";
 const LEARNING_LAUNCH_API = PLUGIN_API + "/learning/konstruktionslehre/launch";
 const APPROVALS_API = PLUGIN_API + "/cockpit/approvals";
 // M2 — FIRMA/Rise-L read-only projection bundle + one approval card's full
@@ -445,6 +449,34 @@ function sdkGet(url) {
   if (typeof sdk.fetchJSON === "function") return Promise.resolve(sdk.fetchJSON(url));
   if (typeof fetch === "function") return fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
   return Promise.reject(new Error("no transport"));
+}
+
+function sdkRequestJSON(url, method, body) {
+  const sdk = (typeof window !== "undefined" && window.__HERMES_PLUGIN_SDK__) || {};
+  const opts = {
+    method: method || "GET",
+    headers: { "Content-Type": "application/json" },
+    body: body == null ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  };
+  const call = typeof sdk.authedFetch === "function"
+    ? Promise.resolve(sdk.authedFetch(url, opts))
+    : (typeof fetch === "function"
+      ? fetch(url, opts)
+      : Promise.reject(new Error("no transport")));
+  return call.then((r) => {
+    if (!r || typeof r.json !== "function") return { ok: true, body: r, status: 200 };
+    return r.json().catch(() => ({})).then((payload) => ({
+      ok: r.ok !== false && (r.status == null || r.status < 400),
+      body: payload,
+      status: r.status || 200,
+    }));
+  });
+}
+
+function sdkResponseBody(result) {
+  const body = result && result.body && typeof result.body === "object" ? result.body : {};
+  return body.detail && typeof body.detail === "object" ? body.detail : body;
 }
 
 // Lifecycle vocabulary for the ONE propose action. Every state carries text +
@@ -2103,6 +2135,17 @@ function SceneSwitcher(props) {
 }
 
 function TopBar(props) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const berlinTime = new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit",
+  }).format(now);
+  const berlinDate = new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin", weekday: "short", day: "2-digit", month: "2-digit",
+  }).format(now);
   return h(
     "header",
     { className: "mos__topbar" },
@@ -2114,7 +2157,7 @@ function TopBar(props) {
         "span",
         null,
         h("span", { className: "mos__identity-name" }, "Mikael"),
-        h("span", { className: "mos__identity-sub" }, "Privates System"),
+        h("span", { className: "mos__identity-sub" }, "Persönliches Command Center"),
       ),
     ),
     h("div", { className: "mos__wordmark" }, "MIKAEL OS"),
@@ -2136,35 +2179,22 @@ function TopBar(props) {
         if (liveN > 0) {
           return h("span",
             { className: "mos__concept mos__concept--live",
-              title: liveN + " Module projizieren echte Read-Modelle mit Herkunft und Freshness; übrige bleiben sichtbar Konzept." },
+              title: liveN + " Module projizieren echte Read-Modelle mit Herkunft und Freshness." },
             h(Icon, { name: "activity", size: 14 }),
-            liveN + " Live · " + Math.max(0, (props.total || 0) - liveN) + " Konzept");
+            liveN + " Quellen live");
         }
         return h("span",
           { className: "mos__concept", title: ls === "offline"
-              ? "Read-Modelle nicht erreichbar — Konzeptdaten angezeigt."
-              : "Konzeptdaten. Keine Live-Wahrheit." },
-          h(Icon, { name: "flask-conical", size: 14 }),
-          ls === "offline" ? "Quellen offline · Konzept" : "Konzeptdaten");
+              ? "Read-Modelle nicht erreichbar."
+              : "Noch keine Live-Quelle bestätigt." },
+          h(Icon, { name: "unplug", size: 14 }),
+          ls === "offline" ? "Quellen offline" : "Keine Live-Quelle");
       })(),
-      // Weather is DROPPED on the M2 drill-down scenes: there is no weather data
-      // source in the stack, so a "22° Klar" reading would be a fabricated value —
-      // the honesty doctrine forbids it. The clock (real, static) stays.
-      props.onBack ? null : h(
-        "span",
-        { className: "mos__topchip" },
-        h(Icon, { name: "cloud-moon", size: 16 }),
-        h("strong", null, "22°"),
-        " Klar",
-      ),
       h(
         "span",
         { className: "mos__topchip mos__topchip-time" },
-        // Scene-consistent clock: on the Timeline the bar shows the same "now"
-        // the Jarvis marker sits at (16:42), so a single screen never shows two
-        // contradicting times; the Konstellation keeps its night reference time.
-        h("b", null, props.scene === "timeline" ? TIMELINE_NOW.time : "22:30"),
-        h("span", null, TODAY.short + " · Berliner Zeit"),
+        h("b", null, berlinTime),
+        h("span", null, berlinDate + " · Berlin"),
       ),
       h("button", { type: "button", className: "mos__shieldbtn", "aria-label": "Privatsphäre & Berechtigungen" }, h(Icon, { name: "shield-check", size: 20 })),
     ),
@@ -3209,13 +3239,9 @@ function SuggestionCard(props) {
 }
 
 // ===========================================================================
-// Jarvis Voice-Launch — „🎙️ Jarvis starten“. Self-contained button + confirm
-// dialog (local state only, no root plumbing). Flow: Button → Bestätigung
-// (Budget-Wirkung explizit) → POST /jarvis/launch → window.open(_blank,
-// noopener). Popup-Blocker-Fallback: klickbarer Anchor (target=_blank,
-// rel=noopener) mit ablaufendem TTL-Countdown. NIE ein iframe (voice-web:
-// X-Frame-Options DENY). Die Launch-URL trägt das Einmal-Token im Fragment —
-// sie wird hier nur geöffnet/angezeigt, nie geloggt oder gespeichert.
+// Legacy voice-launch implementation kept temporarily for source compatibility.
+// It is not referenced and is tree-shaken from the product bundle; all visible
+// voice buttons route into the single embedded Voice Command Deck below.
 // ===========================================================================
 function voiceLaunchPost(body) {
   // Dedicated transport: parse the JSON body even on 409/5xx — the generic
@@ -3297,7 +3323,7 @@ function LernmodusLaunch() {
     hint);
 }
 
-function JarvisVoiceLaunch(props) {
+function LegacyJarvisVoiceLaunch(props) {
   const [st, setSt] = useState(null); // null | {phase: confirm|launching|open|busy|error, ...}
   const [, tick] = useState(0);
   useEffect(() => {
@@ -3417,6 +3443,21 @@ function JarvisVoiceLaunch(props) {
     dialog);
 }
 
+function JarvisVoiceLaunch(props) {
+  const openDeck = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(VOICE_OPEN_EVENT));
+    }
+  };
+  return h("button", {
+    type: "button",
+    className: "mos__vlaunch-btn" + (props.block ? " mos__vlaunch-btn--block" : ""),
+    onClick: openDeck,
+    title: "Öffnet Realtime direkt im Mikael OS Voice Command Deck.",
+    "aria-label": "Jarvis Realtime im Voice Command Deck öffnen",
+  }, h(Icon, { name: "mic", size: 15 }), "Jarvis sprechen");
+}
+
 function JarvisLive(props) {
   const j = props.jarvis;
   const load = props.load;
@@ -3458,8 +3499,7 @@ function JarvisLive(props) {
         ? h("span", { className: "mos__pip mos__pip--" + (chatOk ? "verified" : "red"), title: chat.note || "" },
             h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), chatOk ? "Chat bereit" : "Chat offline")
         : h("span", { className: "mos__jlive-load" }, h(Icon, { name: load === "loading" ? "loader" : "unplug", size: 14, className: load === "loading" ? "is-spin" : "" })),
-      // The former dead "Voice-Memo (folgt)" placeholder is now the REAL voice
-      // entry: confirm dialog → mint → new tab (JarvisVoiceLaunch, self-contained).
+      // Routes to the one embedded Voice Command Deck; no new tab or token link.
       h(JarvisVoiceLaunch, null)),
     h("div", { className: "mos__jlive-stream" },
       load === "loading" && !j
@@ -3895,7 +3935,7 @@ const M3_AREAS = [
   { id: "kommunikation", icon: "radio-tower", accent: "violet", title: "Kommunikation",
     sub: "Telegram · Hermes · FreeScout" },
   { id: "sessions",      icon: "waypoints",   accent: "cyan",   title: "Sessions / Agenten",
-    sub: "Stränge · mission.v2 · steuern gated" },
+    sub: "Stränge · mission.v2 · Steuerung via Jarvis" },
   // M4 peers (same launch mechanism, same read-only peer-scene contract).
   { id: "ziele",         icon: "target",      accent: "emerald", title: "Ziele & Systeme",
     sub: "mission.v2 + Policy · keine neue Task-DB" },
@@ -4171,7 +4211,7 @@ function StrandCard(props) {
     h("footer", { className: "mos__firma-foot mos__strand-foot" },
       h(Icon, { name: "lock", size: 12 }),
       h("span", { className: "mos__firma-foot-t" },
-        (s.source ? s.source : "read-only") + " · steuern gated"),
+        (s.source ? s.source : "read-only") + " · Steuerung via Jarvis"),
       h("span", { className: "mos__firma-foot-ro" }, "Nur lesen")));
 }
 function SessionsScene(props) {
@@ -4277,13 +4317,11 @@ function LiveTask(props) {
 
 function liveEventLabel(kind) {
   return {
-    think: "Denkt",
+    step: "Schritt",
+    status: "Status",
     tool: "Tool",
     result: "Ergebnis",
-    assistant: "Antwort",
-    start: "Start",
-    final: "Abschluss",
-    user: "Auftrag",
+    evidence: "Evidenz",
   }[kind] || "Ereignis";
 }
 
@@ -4877,19 +4915,677 @@ function BetriebScene(props) {
 }
 
 // --- Cockpit desktop assembly (3-column grid) ---------------------------------
+const VOICE_PHASE = {
+  idle: { label: "Bereit", tone: "cyan" },
+  permission: { label: "Mikrofon prüfen", tone: "amber" },
+  preparing: { label: "Mission vorbereiten", tone: "amber" },
+  connecting: { label: "Verbindung aufbauen", tone: "amber" },
+  listening: { label: "Ich höre zu", tone: "emerald" },
+  speaking: { label: "Jarvis antwortet", tone: "cyan" },
+  reconnecting: { label: "Verbindung wird wiederhergestellt", tone: "amber" },
+  ended: { label: "Gespräch beendet", tone: "muted" },
+  error: { label: "Verbindung unterbrochen", tone: "red" },
+};
+
+function transcriptUpsert(setRows, role, key, text, done) {
+  if (!text) return;
+  setRows((prev) => {
+    const rows = prev.slice();
+    const idx = rows.findIndex((row) => row.key === key && row.role === role);
+    if (idx >= 0) {
+      rows[idx] = { ...rows[idx], text: done ? text : rows[idx].text + text, done: !!done };
+    } else {
+      rows.push({ key, role, text, done: !!done, at: new Date().toISOString() });
+    }
+    return rows.slice(-24);
+  });
+}
+
+function RealtimeVoiceDeck(props) {
+  const [meta, setMeta] = useState(null);
+  const [phase, setPhase] = useState("idle");
+  const [confirm, setConfirm] = useState(false);
+  const [inlineId, setInlineId] = useState("");
+  const [missionId, setMissionId] = useState("");
+  const [model, setModel] = useState("");
+  const [error, setError] = useState("");
+  const [transcript, setTranscript] = useState([]);
+  const [control, setControl] = useState(null);
+  const peerRef = useRef(null);
+  const streamRef = useRef(null);
+  const audioRef = useRef(null);
+  const channelRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
+  const confirmRef = useRef(null);
+  const inlineRef = useRef("");
+  inlineRef.current = inlineId;
+
+  const loadMeta = useCallback(() => {
+    sdkRequestJSON(VOICE_STATUS_API, "GET")
+      .then((result) => {
+        const body = result.body || {};
+        setMeta(body);
+        if (props.onStatus) props.onStatus(body);
+      })
+      .catch(() => {
+        const body = { ok: false, state: "unavailable" };
+        setMeta(body);
+        if (props.onStatus) props.onStatus(body);
+      });
+  }, [props.onStatus]);
+
+  useEffect(() => {
+    loadMeta();
+    if (typeof window === "undefined") return undefined;
+    const open = () => setConfirm(true);
+    window.addEventListener(VOICE_OPEN_EVENT, open);
+    window.addEventListener("online", loadMeta);
+    return () => {
+      window.removeEventListener(VOICE_OPEN_EVENT, open);
+      window.removeEventListener("online", loadMeta);
+    };
+  }, [loadMeta]);
+
+  useEffect(() => {
+    if (!confirm || typeof document === "undefined") return undefined;
+    const dialog = confirmRef.current;
+    const previous = document.activeElement;
+    const focusable = dialog
+      ? Array.from(dialog.querySelectorAll("button:not(:disabled)"))
+      : [];
+    if (focusable.length) focusable[0].focus();
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setConfirm(false);
+        return;
+      }
+      if (event.key !== "Tab" || focusable.length < 2) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (previous && typeof previous.focus === "function") previous.focus();
+    };
+  }, [confirm]);
+
+  const releaseMedia = useCallback(() => {
+    if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+    if (peerRef.current) {
+      try { peerRef.current.close(); } catch (_e) { /* best effort */ }
+    }
+    if (audioRef.current) {
+      try { audioRef.current.pause(); } catch (_e) { /* best effort */ }
+      audioRef.current.srcObject = null;
+    }
+    streamRef.current = null;
+    peerRef.current = null;
+    channelRef.current = null;
+    audioRef.current = null;
+  }, []);
+
+  const hangup = useCallback((silent) => {
+    const handle = inlineRef.current;
+    releaseMedia();
+    inlineRef.current = "";
+    if (!handle) {
+      setPhase("ended");
+      return Promise.resolve();
+    }
+    setPhase("ended");
+    setInlineId("");
+    return sdkRequestJSON(VOICE_CONTROL_API, "POST", {
+      inlineId: handle, action: "hangup",
+    }).then((result) => {
+      if (!silent && (!result.ok || !result.body || result.body.ok === false)) {
+        setError("Hangup konnte nicht eindeutig bestätigt werden. Keine automatische Wiederholung.");
+        setPhase("error");
+      }
+    }).catch(() => {
+      if (!silent) {
+        setError("Hangup konnte nicht eindeutig bestätigt werden. Keine automatische Wiederholung.");
+        setPhase("error");
+      }
+    });
+  }, [releaseMedia]);
+
+  useEffect(() => () => {
+    const handle = inlineRef.current;
+    releaseMedia();
+    if (handle) {
+      sdkRequestJSON(VOICE_CONTROL_API, "POST", {
+        inlineId: handle, action: "hangup",
+      }).catch(() => {});
+    }
+  }, [releaseMedia]);
+
+  useEffect(() => {
+    if (!inlineId || !["listening", "speaking", "reconnecting"].includes(phase)) return undefined;
+    const poll = () => {
+      sdkRequestJSON(VOICE_CONTROL_API, "POST", {
+        inlineId: inlineId, action: "status",
+      }).then((result) => {
+        const body = sdkResponseBody(result);
+        setControl((previous) => ({ ...(previous || {}), ...body }));
+        if (!result.ok || body.ok === false || body.status === "reconcile_required") {
+          setError("Hermes-Sideband meldet einen unklaren Zustand. Keine automatische Wiederholung.");
+          releaseMedia();
+          setPhase("error");
+        }
+      }).catch(() => {
+        setError("Hermes-Sideband ist nicht erreichbar.");
+        releaseMedia();
+        setPhase("error");
+      });
+    };
+    const timer = window.setInterval(poll, 4000);
+    return () => window.clearInterval(timer);
+  }, [inlineId, phase, releaseMedia]);
+
+  const handleRealtimeEvent = useCallback((event) => {
+    const type = String(event && event.type || "");
+    if (type === "input_audio_buffer.speech_started") {
+      setPhase("listening");
+      return;
+    }
+    if (type === "input_audio_buffer.speech_stopped") {
+      setPhase("connecting");
+      return;
+    }
+    if (type.includes("input_audio_transcription.delta")) {
+      transcriptUpsert(setTranscript, "mikael", event.item_id || "input", String(event.delta || ""), false);
+      return;
+    }
+    if (type.includes("input_audio_transcription.completed")) {
+      transcriptUpsert(setTranscript, "mikael", event.item_id || "input", String(event.transcript || ""), true);
+      return;
+    }
+    if (type === "response.output_audio_transcript.delta") {
+      setPhase("speaking");
+      transcriptUpsert(setTranscript, "jarvis", event.item_id || event.response_id || "response", String(event.delta || ""), false);
+      return;
+    }
+    if (type === "response.output_audio_transcript.done") {
+      transcriptUpsert(setTranscript, "jarvis", event.item_id || event.response_id || "response", String(event.transcript || ""), true);
+      return;
+    }
+    if (type === "response.function_call_arguments.done") {
+      setControl((prev) => ({ ...(prev || {}), lastTool: event.name || "Hermes-Tool" }));
+      return;
+    }
+    if (type === "response.done") {
+      setPhase("listening");
+      return;
+    }
+    if (type === "error") {
+      const err = event.error || {};
+      setError(String(err.code || err.message || "Realtime-Fehler"));
+      setPhase("error");
+    }
+  }, []);
+
+  const begin = useCallback(async () => {
+    setConfirm(false);
+    setError("");
+    setTranscript([]);
+    setControl(null);
+    if (
+      typeof RTCPeerConnection !== "function"
+      || !navigator.mediaDevices
+      || typeof navigator.mediaDevices.getUserMedia !== "function"
+    ) {
+      setError("Dieser Browser unterstützt den sicheren WebRTC-Mikrofonpfad nicht. Es wurde nichts reserviert.");
+      setPhase("error");
+      return;
+    }
+    setPhase("permission");
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+    } catch (_e) {
+      setError("Mikrofonzugriff wurde nicht erteilt. Es wurde nichts reserviert.");
+      setPhase("error");
+      return;
+    }
+    streamRef.current = stream;
+    setPhase("preparing");
+    let prepared;
+    try {
+      const result = await sdkRequestJSON(VOICE_PREPARE_API, "POST", {
+        purpose: "Jarvis Realtime im MIKAEL OS Voice Command Deck",
+      });
+      prepared = sdkResponseBody(result);
+      if (!result.ok || prepared.ok !== true || !prepared.inlineId) {
+        throw new Error(prepared.message || "Realtime konnte nicht vorbereitet werden.");
+      }
+    } catch (err) {
+      releaseMedia();
+      setError(String(err && err.message || "Realtime konnte nicht vorbereitet werden."));
+      setPhase("error");
+      loadMeta();
+      return;
+    }
+    setInlineId(prepared.inlineId);
+    inlineRef.current = prepared.inlineId;
+    setMissionId(prepared.missionId || "");
+    setModel(prepared.model || "");
+    setPhase("connecting");
+
+    try {
+      const peer = new RTCPeerConnection();
+      peerRef.current = peer;
+      const remoteAudio = document.createElement("audio");
+      remoteAudio.autoplay = true;
+      remoteAudio.playsInline = true;
+      remoteAudio.onplaying = () => setPhase("speaking");
+      remoteAudio.onpause = () => setPhase("listening");
+      remoteAudio.onended = () => setPhase("listening");
+      audioRef.current = remoteAudio;
+      peer.ontrack = (event) => {
+        remoteAudio.srcObject = event.streams[0];
+        Promise.resolve(remoteAudio.play()).catch(() => {});
+      };
+      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+
+      const channel = peer.createDataChannel("oai-events");
+      channelRef.current = channel;
+      channel.addEventListener("message", (message) => {
+        try { handleRealtimeEvent(JSON.parse(message.data)); } catch (_e) { /* ignore malformed event */ }
+      });
+      channel.addEventListener("open", () => setPhase("listening"));
+      channel.addEventListener("close", () => {
+        if (inlineRef.current) setPhase("reconnecting");
+      });
+      peer.onconnectionstatechange = () => {
+        const state = peer.connectionState;
+        if (state === "connected") {
+          if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+          setPhase("listening");
+        } else if (state === "disconnected") {
+          setPhase("reconnecting");
+          if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = window.setTimeout(() => {
+            if (peer.connectionState !== "connected") {
+              setError("WebRTC-Verbindung blieb unterbrochen. Neu verbinden braucht eine bestätigte neue Reservierung.");
+              releaseMedia();
+              setPhase("error");
+            }
+          }, 5000);
+        } else if (state === "failed" || state === "closed") {
+          setError("WebRTC-Verbindung ist beendet. Neu verbinden braucht eine bestätigte neue Reservierung.");
+          releaseMedia();
+          setPhase("error");
+        }
+      };
+
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      const sessionResult = await sdkRequestJSON(VOICE_SESSION_API, "POST", {
+        inlineId: prepared.inlineId,
+        sdp: offer.sdp,
+      });
+      const session = sdkResponseBody(sessionResult);
+      if (!sessionResult.ok || session.ok !== true || !session.sdp) {
+        throw new Error(session.message || "WebRTC-Session wurde nicht bestätigt.");
+      }
+      await peer.setRemoteDescription({ type: "answer", sdp: session.sdp });
+      setPhase("listening");
+    } catch (err) {
+      releaseMedia();
+      setError(String(err && err.message || "Realtime-Verbindung fehlgeschlagen."));
+      setPhase("error");
+    }
+  }, [handleRealtimeEvent, loadMeta, releaseMedia]);
+
+  const sendText = useCallback((event) => {
+    if (event && event.preventDefault) event.preventDefault();
+    const text = String(props.command || "").trim();
+    if (!text) return;
+    const channel = channelRef.current;
+    if (inlineId && channel && channel.readyState === "open") {
+      const itemKey = "typed_" + Date.now();
+      transcriptUpsert(setTranscript, "mikael", itemKey, text, true);
+      channel.send(JSON.stringify({
+        type: "conversation.item.create",
+        item: { type: "message", role: "user", content: [{ type: "input_text", text: text }] },
+      }));
+      channel.send(JSON.stringify({ type: "response.create", response: { output_modalities: ["audio"] } }));
+      props.onCommand("");
+      setPhase("connecting");
+      return;
+    }
+    props.onTextFallback(event);
+  }, [inlineId, props.command, props.onCommand, props.onTextFallback]);
+
+  const state = VOICE_PHASE[phase] || VOICE_PHASE.idle;
+  const policy = meta && meta.policy || {};
+  const hasReservation = typeof policy.reservationUsd === "number"
+    && Number.isFinite(policy.reservationUsd);
+  const reservation = hasReservation ? policy.reservationUsd : NaN;
+  const canStart = meta && meta.state === "ready" && hasReservation && reservation >= 0;
+  const active = ["permission", "preparing", "connecting", "listening", "speaking", "reconnecting"].includes(phase);
+  const statusText = meta == null ? "Realtime-Status wird geladen"
+    : meta.state === "ready" ? "WebRTC + Hermes-Sideband bereit"
+    : meta.state === "disabled" ? "Realtime ist noch nicht freigeschaltet"
+    : "Realtime-Lane nicht erreichbar";
+
+  return h("section", { className: "mos__vcd-voice", "aria-label": "Jarvis Realtime Gespräch" },
+    h("div", { className: "mos__vcd-hero" },
+      h("div", { className: "mos__vcd-orbwrap mos--" + state.tone },
+        h(Orb, { label: false }),
+        h("div", { className: "mos__vcd-orblabel", role: "status", "aria-live": "polite" },
+          h("strong", null, "JARVIS"),
+          h("span", null, state.label)))),
+    h("div", { className: "mos__vcd-connection" },
+      h("span", { className: "mos__pip mos__pip--" + (meta && meta.state === "ready" ? "verified" : meta == null ? "muted" : "red") },
+        h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), statusText),
+      model || policy.model ? h("span", { className: "mos__vcd-model" }, model || policy.model) : null,
+      missionId ? h("span", { className: "mos__vcd-mission", title: missionId }, "Mission " + missionId.slice(-8)) : null),
+    h("div", { className: "mos__vcd-transcript", role: "log", "aria-live": "polite", "aria-label": "Live-Transkript" },
+      transcript.length
+        ? transcript.map((row) => h("div", { key: row.key + row.role, className: "mos__vcd-turn is-" + row.role },
+            h("span", { className: "mos__vcd-turnwho" }, row.role === "jarvis" ? "Jarvis" : "Mikael"),
+            h("p", null, row.text)))
+        : h("div", { className: "mos__vcd-empty" },
+            h(Icon, { name: "audio-lines", size: 18 }),
+            h("span", null, active ? "Live-Transkript beginnt mit dem ersten Satz." : "Noch kein Realtime-Transkript."),
+            h("small", null, "Text und Telegram bleiben dieselbe Jarvis-/Memory-Lane."))),
+    error ? h("div", { className: "mos__vcd-error", role: "alert" },
+      h(Icon, { name: "triangle-alert", size: 15 }), error) : null,
+    control && control.lastTool
+      ? h("div", { className: "mos__vcd-tool" }, h(Icon, { name: "wrench", size: 13 }),
+          "Hermes-Sideband · " + control.lastTool)
+      : null,
+    h("div", { className: "mos__vcd-controls" },
+      active
+        ? h("button", { type: "button", className: "mos__vcd-mic is-active", onClick: () => hangup(false),
+            disabled: !inlineId,
+            "aria-label": "Realtime-Gespräch beenden" }, h(Icon, { name: "square", size: 22 }))
+        : h("button", { type: "button", className: "mos__vcd-mic", onClick: () => setConfirm(true),
+            disabled: !canStart, "aria-label": "Jarvis Realtime starten" }, h(Icon, { name: "mic", size: 24 })),
+      h("div", { className: "mos__vcd-controlcopy" },
+        h("strong", null, active ? state.label : "Bereit — jetzt sprechen"),
+        h("span", null, active ? "Du kannst Jarvis jederzeit unterbrechen." : "WebRTC · Live-Transkript · serverseitige Tools")),
+      phase === "error"
+        ? h("button", { type: "button", className: "mos__vcd-reconnect", onClick: () => {
+            hangup(true).finally(() => {
+              loadMeta();
+              setConfirm(true);
+            });
+          } },
+            h(Icon, { name: "refresh-cw", size: 14 }), "Neu verbinden")
+        : null),
+    h("form", { className: "mos__vcd-command", onSubmit: sendText },
+      h("input", { type: "text", value: props.command, onChange: (event) => props.onCommand(event.target.value),
+        placeholder: "Nachricht an Jarvis …", "aria-label": "Nachricht an Jarvis" }),
+      h("button", { type: "submit", "aria-label": "Nachricht senden" },
+        h(Icon, { name: "send-horizontal", size: 18 }))),
+    h("div", { className: "mos__vcd-quick" },
+      ["Status der aktiven Mission", "Was braucht meine Freigabe?", "Zeige Systemgesundheit"].map((label) =>
+        h("button", { key: label, type: "button", onClick: () => props.onCommand(label) }, label))),
+    confirm
+      ? h("div", { ref: confirmRef, className: "mos__vcd-confirm", role: "dialog", "aria-modal": "true", "aria-label": "Realtime-Nutzung bestätigen" },
+          h("div", { className: "mos__vcd-confirmbox" },
+            h("span", { className: "mos__vcd-confirmico" }, h(Icon, { name: "mic", size: 22 })),
+            h("div", null,
+              h("strong", null, "Realtime-Sitzung starten?"),
+              h("p", null, "Externe OpenAI-Nutzung. Reservierung laut Live-Policy: ",
+                h("b", null, Number.isFinite(reservation) ? reservation.toFixed(2).replace(".", ",") + " $" : "nicht verfügbar"),
+                ". Mikrofon wird vor der Reservierung geprüft."),
+              h("small", null, (policy.model || "Modell nicht verfügbar") + " · " + (policy.voice || "Voice nicht verfügbar") + " · Hermes-Sideband")),
+            h("div", { className: "mos__vcd-confirmactions" },
+              h("button", { type: "button", onClick: () => setConfirm(false) }, "Abbrechen"),
+              h("button", { type: "button", className: "is-primary", onClick: begin, disabled: !canStart },
+                "Starten · " + (Number.isFinite(reservation) ? reservation.toFixed(2).replace(".", ",") + " $" : "nicht verfügbar")))))
+      : null);
+}
+
+function MissionAgentCard(props) {
+  const strand = props.strand;
+  const sessions = Array.isArray(strand.sessions) ? strand.sessions : [];
+  const rows = Array.isArray(strand.rows) ? strand.rows : [];
+  const current = strand.currentMission || rows[0] || sessions[0] || null;
+  const state = strand.state || "unavailable";
+  const running = (current && (current.state === "running" || current.status === "running"))
+    || sessions.some((item) => item.status === "running");
+  const label = running ? "Läuft" : state === "fresh" ? "Bereit" : state === "empty" ? "Keine aktive Mission" : "Nicht geprüft";
+  const goal = current && (current.goal || current.title || current.name);
+  return h("article", { className: "mos__vcd-agent mos--" + (running ? "running" : state) },
+    h("span", { className: "mos__vcd-agentico" }, h(Icon, { name: strand.icon || "bot", size: 17 })),
+    h("div", { className: "mos__vcd-agentbody" },
+      h("strong", null, props.label || strand.title || strand.id),
+      h("span", { title: goal || "" }, goal || strand.note || "Keine Live-Daten")),
+    h("span", { className: "mos__vcd-agentstate" }, label));
+}
+
+function ActiveMissionsPanel(props) {
+  const strands = props.sessions && Array.isArray(props.sessions.strands) ? props.sessions.strands : [];
+  const byId = {};
+  strands.forEach((strand) => { byId[strand.id] = strand; });
+  const items = [
+    byId.codex || { id: "codex", title: "Codex", icon: "terminal", state: props.load === "loading" ? "loading" : "unavailable" },
+    byId.claude || { id: "claude", title: "Claude", icon: "bot", state: props.load === "loading" ? "loading" : "unavailable" },
+    byId.executor || { id: "executor", title: "Executor", icon: "rocket", state: props.load === "loading" ? "loading" : "unavailable" },
+  ];
+  return h("section", { className: "mos__vcd-panel mos__vcd-missions" },
+    h("header", null, h("span", null, "Aktive Missionen"), h(ZonePip, {
+      state: props.load === "loading" ? "loading" : props.load === "ready" ? "fresh" : "unavailable",
+      source: "mission.v2 + Session-Broker + Executor-Evidenz",
+    })),
+    h("div", { className: "mos__vcd-agentlist" },
+      items.map((strand) => h(MissionAgentCard, { key: strand.id, strand: strand,
+        label: strand.id === "executor" ? "Executor" : strand.id === "claude" ? "Claude" : "Codex" }))),
+    h("button", { type: "button", className: "mos__vcd-open", onClick: props.onOpen },
+      "Agenten-Leitstand öffnen", h(Icon, { name: "arrow-right", size: 14 })));
+}
+
+function MissionEvidencePanel(props) {
+  const missions = props.sessions && Array.isArray(props.sessions.missions)
+    ? props.sessions.missions : [];
+  const mission = missions[0] || null;
+  const fields = mission ? [
+    { id: "goal", label: "Ziel", value: mission.goal || mission.title },
+    { id: "plan", label: "Plan", value: Array.isArray(mission.plan) && mission.plan.length
+      ? mission.plan.join(" · ") : null },
+    { id: "step", label: "Schritt", value: mission.currentStep },
+    { id: "tool", label: "Tool", value: mission.tool || mission.owner },
+    { id: "result", label: "Ergebnis", value: mission.result },
+    { id: "evidence", label: "Evidenz", value: Array.isArray(mission.evidence) && mission.evidence.length
+      ? mission.evidence.join(" · ") : null },
+  ] : [];
+  return h("section", { className: "mos__vcd-panel mos__vcd-evidence" },
+    h("header", null, h("span", null, "Missions-Evidenz"),
+      h("button", { type: "button", onClick: props.onOpen, "aria-label": "Missionsleitstand öffnen" },
+        h(Icon, { name: "arrow-up-right", size: 14 }))),
+    mission
+      ? h("div", { className: "mos__vcd-evidencegrid" },
+          fields.map((field) => h("div", { key: field.id, className: "mos__vcd-evidenceitem" },
+            h("span", null, field.label),
+            h("p", { title: field.value || "" }, field.value || "Noch kein Beleg"))))
+      : h("p", { className: "mos__vcd-panel-empty" },
+          props.load === "loading" ? "Missionen werden geladen …" : "Keine Mission in der Live-Projektion."));
+}
+
+function CalendarTasksPanel(props) {
+  const calendar = props.byId.kalender;
+  const tasks = props.byId.tasks;
+  const cards = [
+    { id: "calendar", title: "Kalender", icon: "calendar-days", item: calendar },
+    { id: "tasks", title: "Aufgaben", icon: "list-todo", item: tasks },
+  ];
+  return h("section", { className: "mos__vcd-panel mos__vcd-calendar" },
+    h("header", null, h("span", null, "Kalender & Aufgaben")),
+    cards.map((card) => {
+      const item = card.item;
+      const live = item && !item._demo;
+      const first = live && Array.isArray(item._rows) ? item._rows[0] : null;
+      return h("button", { key: card.id, type: "button", className: "mos__vcd-summary", onClick: props.onOpen },
+        h("span", { className: "mos__vcd-summaryico" }, h(Icon, { name: card.icon, size: 17 })),
+        h("span", { className: "mos__vcd-summarybody" },
+          h("strong", null, card.title),
+          h("small", null, first ? (first.title + (first.value ? " · " + first.value : "")) : "Keine Live-Daten")),
+        h(ZonePip, { state: live ? item._state : "unavailable", source: live ? item._source : "Kein Live-Read-Modell" }));
+    }));
+}
+
+function ApprovalGatePanel(props) {
+  const approvals = props.approvals;
+  const cards = approvals && Array.isArray(approvals.cards) ? approvals.cards : [];
+  const available = !!approvals;
+  const gates = [
+    { id: "money", label: "Geld", icon: "banknote", match: /money|geld|zahlung|sevdesk|rechnung|invoice/i },
+    { id: "outbound", label: "Kundenversand", icon: "send", match: /customer|kunde|versand|outbound|mail/i },
+    { id: "schema", label: "Truth-Schema", icon: "database", match: /schema|migration/i },
+  ];
+  return h("section", { className: "mos__vcd-panel mos__vcd-gates" },
+    h("header", null, h("span", null, "Gezielte Freigaben"),
+      h("button", { type: "button", onClick: props.onOpen, "aria-label": "Freigaben öffnen" },
+        h(Icon, { name: "arrow-up-right", size: 14 }))),
+    gates.map((gate) => {
+      const count = cards.filter((card) => gate.match.test(
+        [card.gateClass, card.gateReason, card.text, card.action].filter(Boolean).join(" "))).length;
+      return h("button", { key: gate.id, type: "button", className: "mos__vcd-gaterow", onClick: props.onOpen },
+        h("span", { className: "mos__vcd-gateico" }, h(Icon, { name: gate.icon, size: 16 })),
+        h("strong", null, gate.label),
+        h("span", { className: "mos__vcd-gatecount" },
+          available ? (count ? count + " offen" : "0 offen") : "Nicht geprüft"));
+    }));
+}
+
+function SystemHealthPanel(props) {
+  const sources = props.betrieb && props.betrieb.reconnect && Array.isArray(props.betrieb.reconnect.sources)
+    ? props.betrieb.reconnect.sources : [];
+  const rows = [
+    { id: "mikael", label: "Mikael OS", reachable: props.loadState === "ready" },
+    { id: "voice", label: "Realtime / Voice", reachable: props.voice && props.voice.state === "ready",
+      checked: !!props.voice },
+    ...sources.slice(0, 4).map((source) => ({
+      id: source.id, label: source.label, reachable: !!source.reachable, checked: true,
+    })),
+  ];
+  return h("section", { className: "mos__vcd-panel mos__vcd-health" },
+    h("header", null, h("span", null, "System & Services"),
+      h("button", { type: "button", onClick: props.onOpen, "aria-label": "Betrieb öffnen" },
+        h(Icon, { name: "arrow-up-right", size: 14 }))),
+    h("div", { className: "mos__vcd-healthlist" },
+      rows.map((row) => h("div", { key: row.id, className: "mos__vcd-healthrow" },
+        h(Icon, { name: row.id === "voice" ? "radio-tower" : row.id === "mikael" ? "sparkles" : "server", size: 14 }),
+        h("span", null, row.label),
+        h("b", { className: row.reachable ? "is-ok" : "is-warn" },
+          row.checked === false ? "Nicht geprüft" : row.reachable ? "Live" : "Nicht erreichbar")))));
+}
+
+function surfaceState(item, fallback) {
+  if (!item) return fallback || "unavailable";
+  return item.state || item._state || fallback || "unavailable";
+}
+
+function SurfaceCatalog(props) {
+  const firmaCards = props.firma && Array.isArray(props.firma.cards) ? props.firma.cards : [];
+  const firmaById = {};
+  firmaCards.forEach((card) => { firmaById[card.id] = card; });
+  const fs = props.komm && props.komm.freescout;
+  const sourceEntries = [
+    { id: "fsm", label: "FSM", icon: "clipboard-list",
+      state: firmaCards.length ? (firmaCards.some((c) => ["error", "unavailable"].includes(c.state)) ? "partial" : "fresh") : "unavailable",
+      action: "Firma", evidence: "FSM-Cockpit + read-only Projektionen", scene: "firma" },
+    { id: "freescout", label: "FreeScout", icon: "inbox",
+      state: surfaceState(fs), action: "Kommunikation", evidence: fs && fs.source, scene: "kommunikation" },
+    { id: "paperless", label: "Paperless", icon: "folder-check",
+      state: surfaceState(firmaById.dokumente), action: "Dokumente", evidence: firmaById.dokumente && firmaById.dokumente.source, scene: "firma" },
+    { id: "calendar", label: "Kalender", icon: "calendar-days",
+      state: surfaceState(props.byId.kalender && !props.byId.kalender._demo ? props.byId.kalender : null),
+      action: "Timeline", evidence: props.byId.kalender && props.byId.kalender._source, scene: "timeline" },
+    { id: "tasks", label: "Aufgaben", icon: "list-todo",
+      state: surfaceState(props.byId.tasks && !props.byId.tasks._demo ? props.byId.tasks : null),
+      action: "Missionen", evidence: props.byId.tasks && props.byId.tasks._source, scene: "ziele" },
+    { id: "personal", label: "Personal", icon: "users", state: "unavailable",
+      action: "Computer Use", evidence: "Kein nativer Read-Adapter", fallback: true },
+    { id: "vehicles", label: "Fahrzeuge", icon: "truck", state: "unavailable",
+      action: "Computer Use", evidence: "Kein nativer Read-Adapter", fallback: true },
+    { id: "stock", label: "Lager", icon: "package", state: "unavailable",
+      action: "Computer Use", evidence: "Kein nativer Read-Adapter", fallback: true },
+    { id: "time", label: "Arbeitszeit", icon: "clock", state: "unavailable",
+      action: "Computer Use", evidence: "Kein nativer Read-Adapter", fallback: true },
+    { id: "devices", label: "Geräte", icon: "monitor", state: props.betrieb ? "partial" : "unavailable",
+      action: "Betrieb", evidence: "Typisierte Geräte-Lane", scene: "betrieb" },
+    { id: "agents", label: "Agenten", icon: "bot", state: props.sessions ? "fresh" : "unavailable",
+      action: "Leitstand", evidence: "mission.v2 + Session-Broker", scene: "sessions" },
+  ];
+  const metaFor = (state) => {
+    if (state === "fresh") return { label: "Live", tone: "verified" };
+    if (state === "partial" || state === "stale") return { label: "Teilweise", tone: "blue" };
+    if (state === "empty") return { label: "Leer", tone: "muted" };
+    return { label: "Computer Use", tone: "amber" };
+  };
+  return h("section", { className: "mos__vcd-surfaces" },
+    h("header", null,
+      h("div", null, h("span", null, "Surface-Katalog"),
+        h("small", null, "Native API zuerst · sichtbarer Computer-Use-Fallback")),
+      h("span", { className: "mos__vcd-catalogcount" }, sourceEntries.filter((entry) => entry.state === "fresh").length + " live")),
+    h("div", { className: "mos__vcd-surfacegrid" },
+      sourceEntries.map((entry) => {
+        const meta = metaFor(entry.state);
+        const progress = entry.state === "fresh" ? "Verfügbar"
+          : entry.state === "partial" || entry.state === "stale" ? "Teilweise"
+          : entry.state === "empty" ? "Keine Signale" : "Fallback";
+        return h("button", { key: entry.id, type: "button", className: "mos__vcd-surface",
+          onClick: () => entry.scene ? props.onOpen(entry.scene) : props.onComputerUse(entry),
+          title: [entry.evidence, "Aktion: " + entry.action].filter(Boolean).join(" · ") },
+          h("span", { className: "mos__vcd-surfaceico" }, h(Icon, { name: entry.icon, size: 16 })),
+          h("span", { className: "mos__vcd-surfacename" }, entry.label),
+          h("span", { className: "mos__pip mos__pip--" + meta.tone },
+            h("span", { className: "mos__pip-dot", "aria-hidden": "true" }), meta.label),
+          h("span", { className: "mos__vcd-surfaceaction" }, "Aktion · " + entry.action),
+          h("span", { className: "mos__vcd-surfaceprogress" }, "Fortschritt · " + progress),
+          h("span", { className: "mos__vcd-surfaceevidence" },
+            "Evidenz · " + (entry.evidence || "nicht verfügbar")));
+      })));
+}
+
+function VoiceCommandDeck(props) {
+  const [voiceStatus, setVoiceStatus] = useState(null);
+  return h("div", { className: "mos__vcd" },
+    h("div", { className: "mos__vcd-main" },
+      h(RealtimeVoiceDeck, {
+        command: props.command, onCommand: props.onCommand,
+        onTextFallback: props.onTextFallback, onStatus: setVoiceStatus,
+      }),
+      h(SurfaceCatalog, {
+        byId: props.byId, firma: props.firma, komm: props.komm,
+        sessions: props.sessions, betrieb: props.betrieb,
+        onOpen: props.onOpen, onComputerUse: props.onComputerUse,
+      })),
+    h("aside", { className: "mos__vcd-side" },
+      h(ActiveMissionsPanel, { sessions: props.sessions, load: props.sessionsLoad,
+        onOpen: () => props.onOpen("sessions") }),
+      h(MissionEvidencePanel, { sessions: props.sessions, load: props.sessionsLoad,
+        onOpen: () => props.onOpen("sessions") }),
+      h(CalendarTasksPanel, { byId: props.byId, onOpen: () => props.onOpen("timeline") }),
+      h(ApprovalGatePanel, { approvals: props.cockpit.approvals,
+        onOpen: () => props.onOpen("approvals") }),
+      h(SystemHealthPanel, { betrieb: props.betrieb, voice: voiceStatus,
+        loadState: props.load, onOpen: () => props.onOpen("betrieb") })));
+}
+
 function CockpitScene(props) {
-  return h("div", { className: "mos__ckpt" },
-    h("aside", { className: "mos__ckpt-col mos__ckpt-left" },
-      h(WorkspaceSwitcher, { active: props.workspace, onChange: props.onWorkspace }),
-      h(AgendaRail, { workspace: props.workspace, todayModule: props.byId.today,
-        engineeringModule: props.byId.engineering, load: props.load, onMore: props.onAgendaMore })),
-    h("section", { className: "mos__ckpt-col mos__ckpt-center" },
-      h(JarvisLive, { jarvis: props.cockpit.jarvis, load: props.cockpitLoad, workspace: props.workspace,
-        stateIndex: props.stateIndex, greeting: props.greeting, onPropose: props.onPropose, onChip: props.onChip })),
-    h("aside", { className: "mos__ckpt-col mos__ckpt-right" },
-      h(FirmaPanel, { risel: props.byId.risel, company: props.byId.company, load: props.load, onOpen: props.onFirma }),
-      h(ApprovalCenter, { approvals: props.cockpit.approvals, load: props.cockpitLoad,
-        flash: props.approvalsFlash, innerRef: props.approvalsRef, onOpen: props.onApprovals })));
+  return h(VoiceCommandDeck, props);
 }
 
 // --- Mobile cockpit stack (inside the existing home tab) -----------------------
@@ -5027,6 +5723,24 @@ function MikaelOS() {
   // L-3 — the Lern-Coach overlay (null = closed). Shape:
   // { tab, planState, plan, fey: { phase, setup, explanation, result } }.
   const [coach, setCoach] = useState(null);
+
+  // Stable voice bookmark: it opens the embedded confirmation in this same PWA
+  // and removes the query marker. It never mints, spends or opens a new tab.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("voice") !== "1") return;
+    params.delete("voice");
+    const query = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      window.location.pathname + (query ? "?" + query : "") + window.location.hash,
+    );
+    window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent(VOICE_OPEN_EVENT));
+    });
+  }, []);
 
   // Fetch the read-only /overview projection. Refactored into a callback so a
   // reconnect (window focus / back online) can re-run it and the UI shows the
@@ -5189,7 +5903,7 @@ function MikaelOS() {
       setPwaStatus((s) => ({ ...s, manifest: true }));
     } catch (_e) { setPwaStatus((s) => ({ ...s, manifest: false })); }
     if (typeof navigator !== "undefined" && navigator.serviceWorker && window.isSecureContext) {
-      navigator.serviceWorker.register(PWA_SW_HREF, { scope: "/" })
+      navigator.serviceWorker.register(PWA_SW_HREF, { scope: "/mikael-os" })
         .then(() => setPwaStatus((s) => ({ ...s, sw: "registered" })))
         .catch(() => setPwaStatus((s) => ({ ...s, sw: "unavailable" })));
     } else {
@@ -5293,7 +6007,10 @@ function MikaelOS() {
   const openModule = useCallback((id) => { setFocusId(id); setStateIndex(1); setSheetDetent(1); setSheetOpen(true); }, []);
   const closeSheet = useCallback(() => { setSheetOpen(false); }, []);
   const onSpeak = useCallback(() => {
-    window.dispatchEvent(new CustomEvent(VOICE_OPEN_EVENT));
+    setScene("cockpit");
+    window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent(VOICE_OPEN_EVENT));
+    });
   }, []);
   const onQuick = useCallback((label) => { setCommand(label); runStateSequence(); }, [runStateSequence]);
 
@@ -5583,65 +6300,18 @@ function MikaelOS() {
   const onChip = useCallback((label) => { setCommand(label); if (inputRef.current) inputRef.current.focus(); }, []);
   const onAgendaMore = useCallback(() => setScene("timeline"), []);
   const onGoTimeline = useCallback(() => { if (isMobile) setMobileTab("timeline"); else setScene("timeline"); }, [isMobile]);
-  // Mobile: the FIRMA / Approval entry points push a full mobile screen.
-  const onGoApprovals = useCallback(() => { setMobileScreen("approvals"); }, []);
-  const onGoFirma = useCallback(() => { setMobileScreen("firma"); }, []);
-  const onScreenBack = useCallback(() => { setMobileScreen(null); }, []);
-  // M3 — the three area launch tiles. Desktop opens a peer scene; mobile pushes a
-  // full screen (same mechanism as Firma/Approvals).
-  const onArea = useCallback((id) => {
-    if (isMobile) setMobileScreen(id); else setScene(id);
-  }, [isMobile]);
+  // Unified responsive command deck: iPhone and Mac keep the same mission,
+  // conversation and navigation identity. Detail surfaces remain peer scenes.
+  const onGoApprovals = useCallback(() => { setScene("approvals"); }, []);
+  const onGoFirma = useCallback(() => { setScene("firma"); }, []);
+  const onScreenBack = useCallback(() => { setScene("cockpit"); }, []);
+  const onArea = useCallback((id) => { setScene(id); }, []);
   const onWissenQuery = useCallback((v) => { setWissenQuery(v); }, []);
-
-  // iOS shell — a distinct vertical scene stack (not a shrunken desktop). All
-  // state (focusId, stateIndex, command, live read-models) is shared, so opening
-  // a module here is the same choice as the desktop lens.
-  if (isMobile) {
-    return h(
-      "div",
-      { className: "mos mos--mobile" },
-      h("div", { className: "mos__atmosphere", "aria-hidden": "true" }),
-      h("div", { className: "mos__atmosphere-veil", "aria-hidden": "true" }),
-      h(MobileShell, {
-        mobileTab: mobileTab, onMobileTab: setMobileTab,
-        byId: enrichedById, modules: viewModules,
-        focusId: focusId, onOpen: openModule,
-        command: command, onCommand: setCommand, onSubmit: submit,
-        onSpeak: onSpeak, onQuick: onQuick, stateIndex: stateIndex,
-        workspace: workspace, onWorkspace: setWorkspace,
-        loadState: loadState, liveCount: liveCount,
-        greeting: greeting, onGoJarvis: goJarvis, announce: announce,
-        sheetOpen: sheetOpen, sheetDetent: sheetDetent,
-        onSheetDetent: setSheetDetent, onSheetClose: closeSheet,
-        onPropose: proposeOpen, onReview: reviewOpen, onCoach: coachOpen,
-        cockpit: cockpit, cockpitLoad: cockpitLoad,
-        onChip: onChip, onGoTimeline: onGoTimeline, onGoApprovals: onGoApprovals, onGoFirma: onGoFirma,
-        mobileScreen: mobileScreen, onScreenBack: onScreenBack,
-        firma: firma, firmaLoad: firmaLoad,
-        approvalDetails: approvalDetails, approvalDetailLoading: approvalDetailLoading, onLoadDetail: loadApprovalDetail,
-        onArea: onArea,
-        wissen: wissen, wissenLoad: wissenLoad, wissenQuery: wissenQuery, onWissenQuery: onWissenQuery, onWissenSearch: loadWissen,
-        komm: komm, kommLoad: kommLoad, sessions: sessions, sessionsLoad: sessionsLoad,
-        ziele: ziele, zieleLoad: zieleLoad, reflexion: reflexion, reflexionLoad: reflexionLoad,
-        gesundheit: gesundheit, gesundheitLoad: gesundheitLoad,
-        betrieb: betrieb, betriebLoad: betriebLoad, displayEnv: displayEnv, pwaStatus: pwaStatus,
-      }),
-      h(ProposeFlow, {
-        state: propose, onObjective: proposeObjective, onPreview: proposePreview,
-        onSend: proposeSend, onPoll: proposePoll, onClose: proposeClose,
-      }),
-      h(ReviewSurface, {
-        state: review, onFlip: reviewFlip, onRate: reviewRate,
-        onRestart: reviewRestart, onClose: reviewClose,
-      }),
-      h(CoachSurface, {
-        state: coach, onTab: coachTab, onExplain: coachExplain,
-        onEvaluate: coachEvaluate, onNextConcept: coachNextConcept,
-        onPropose: coachPropose, onClose: coachClose,
-      }),
-    );
-  }
+  const onComputerUse = useCallback((entry) => {
+    const label = entry && entry.label ? entry.label : "Surface";
+    setCommand(label + " per Computer Use öffnen — Status und Evidenz sichtbar halten");
+    setScene("betrieb");
+  }, []);
 
   // The command bar + chips and the constellation footer are shared across
   // scenes (Cockpit reuses the command bar under a StateRail; Konstellation/
@@ -5713,20 +6383,17 @@ function MikaelOS() {
       h(TopBar, { loadState: loadState, liveCount: liveCount, total: viewModules.length, scene: scene, onScene: setScene,
         onBack: isBackScene ? onSceneBack : undefined }),
       scene === "cockpit"
-        ? h(
-            React.Fragment,
-            null,
-            h(KpiBar, { cockpit: cockpit, load: cockpitLoad, onGates: onGates }),
-            h(AreaLauncher, { onOpen: onArea }),
-            h("div", { className: "mos__stagewrap mos__stagewrap--ckpt" },
-              h(CockpitScene, {
-                byId: enrichedById, workspace: workspace, onWorkspace: setWorkspace,
-                cockpit: cockpit, cockpitLoad: cockpitLoad, load: loadState,
-                stateIndex: stateIndex, greeting: greeting,
-                onPropose: proposeOpen, onChip: onChip, onAgendaMore: onAgendaMore,
-                approvalsFlash: approvalsFlash, approvalsRef: approvalsRef,
-                onFirma: onFirma, onApprovals: onApprovals,
-              })))
+        ? h("div", { className: "mos__stagewrap mos__stagewrap--ckpt" },
+            h(CockpitScene, {
+              byId: enrichedById,
+              cockpit: cockpit, cockpitLoad: cockpitLoad, load: loadState,
+              command: command, onCommand: setCommand, onTextFallback: submit,
+              firma: firma, firmaLoad: firmaLoad,
+              komm: komm, kommLoad: kommLoad,
+              sessions: sessions, sessionsLoad: sessionsLoad,
+              betrieb: betrieb, betriebLoad: betriebLoad,
+              onOpen: setScene, onComputerUse: onComputerUse,
+            }))
         : scene === "firma"
         ? h("div", { className: "mos__stagewrap mos__stagewrap--scene" },
             h("div", { className: "mos__scenehead" },
@@ -5899,11 +6566,13 @@ function MikaelOS() {
       ),
       // Footer (UI-SPEC §1): in the Cockpit the StateRail sits directly ABOVE the
       // command bar; Konstellation/Timeline keep the command bar → footer order.
-      (scene === "cockpit" || isBackScene)
+      isBackScene
         ? h("footer", { className: "mos__ckpt-foot" },
             h(StateRail, { activeIndex: stateIndex }),
             commandForm)
-        : h(React.Fragment, null, commandForm, constFooter),
+        : scene === "cockpit"
+          ? null
+          : h(React.Fragment, null, commandForm, constFooter),
     ),
     h(ProposeFlow, {
       state: propose, onObjective: proposeObjective, onPreview: proposePreview,

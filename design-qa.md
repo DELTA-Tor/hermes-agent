@@ -1,32 +1,34 @@
-# Design QA — Mikael OS Front Door
+# Design QA — Mikael OS Voice Command Deck
 
-final result: passed
+final result: blocked
 
-## Compared states
+## Selected reference
 
-- Reference state: Mikael OS Cockpit at 1440 × 1000.
-- Implemented state: the same Cockpit after submitting a Jarvis command, with
-  the persistent Hermes chat opened in place at 1440 × 1000 and 390 × 844.
-- Combined comparison:
-  `/srv/delta/output/playwright/mikael-frontdoor-implementation-20260723/.playwright-cli/page-2026-07-23T13-57-53-569Z.png`
+- Direction: `1 — Voice Command Deck`
+- Reference:
+  `/home/ubuntu/.codex/visualizations/2026/07/23/019f9002-15ba-7d60-9339-666ddad5f7d1/mikael-os-phase-a/01-voice-command-deck.png`
+- Target desktop viewport: `1440 × 1024`
+- Target iPhone viewport: `390 × 844`
 
-## Checks
+## Completed preflight
 
-1. The browser remains on `/mikael-os`; no new tab, new window, or `/chat`
-   navigation occurs.
-2. The chat layer uses the existing dark Mikael OS / Hermes palette and keeps a
-   single clear exit labelled `Zurück`.
-3. Desktop keeps the terminal and model/session rail readable without
-   horizontal clipping.
-4. At 390 × 844 the chat layer covers the old dashboard chrome, the header and
-   exit stay visible, and the terminal remains within the viewport.
-5. Keyboard focus moves into the chat after opening; the return control remains
-   a labelled button.
+1. The selected direction is implemented in the existing `mikael-os` plugin,
+   not in a parallel app.
+2. The default responsive tree contains Jarvis Voice, Codex/Claude/Executor
+   missions, mission evidence, calendar/tasks, the three current approval gates,
+   system health and the complete surface catalogue.
+3. Empty or unavailable sources render honestly; the new default screen contains
+   no fixture metrics.
+4. The embedded Realtime route stays in the same PWA, uses WebRTC and
+   Hermes-Sideband, and ships no expiring voice-launch link.
+5. Keyboard focus styling, dialog focus trap/Escape, live transcript semantics
+   and reduced-motion behavior are present in source.
 
-## Remaining polish
+## Blocking comparison
 
-- P3: The underlying Hermes chat is intentionally terminal-dense. A later
-  conversational renderer can make messages calmer without changing the
-  persistent-session bridge proven here.
-- Live Realtime voice still uses the existing separately gated launcher and was
-  not visually claimed as consolidated by this change.
+Product Design requires the user-selected browser for new captures. Mikael's
+browser choice was requested and is still pending, so desktop/iPhone screenshots,
+overlay comparison and visual accessibility inspection have not been claimed.
+
+This file must be replaced with a passed report containing the actual capture
+paths before merge/deploy.

@@ -20,7 +20,8 @@ it never becomes a second store.
 Data authority = the **hermes-control-plane** (``/srv/hermes``). We deliberately
 avoid any hard cross-repo Python import (that would break in the Nous runtime).
 Each module resolves the *cleanest available read path*, in this priority order,
-and always degrades gracefully to concept fixtures so the shell can never break:
+and degrades to an explicit empty/partial/unavailable state instead of inventing
+data, so the shell can never break:
 
   (a) HTTP read API  — **Körper / WHOOP** via the private connector
       ``http://127.0.0.1:18090`` (``/healthz`` unauthenticated for connection +
@@ -76,17 +77,19 @@ import glob
 import hashlib
 import json
 import os
+import secrets
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.error import URLError, HTTPError
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 from urllib.request import Request, urlopen
 
 try:
@@ -97,7 +100,7 @@ try:
     from fastapi import HTTPException
     from fastapi import UploadFile
     from fastapi.responses import Response  # PWA static files (manifest/sw/shell)
-    from fastapi.responses import HTMLResponse, RedirectResponse  # Ein-Tap-Voice
+    from fastapi.responses import RedirectResponse
 except Exception:  # pragma: no cover - allow import/unit use without FastAPI
     class HTTPException(Exception):  # type: ignore
         def __init__(self, status_code: int = 404, detail: str = "") -> None:
@@ -288,8 +291,8 @@ except Exception:  # pragma: no cover - zoneinfo is stdlib on 3.9+
 def _whoop_token() -> str:
     """WHOOP internal token, read from THIS process' environment at call time.
 
-    The dashboard service does not carry it yet — wiring it in is an operator
-    step (EnvironmentFile drop-in + service restart = Prod-Restart-Gate), see
+    The dashboard service does not carry it yet — wiring it in is an internal
+    typed-launcher step (EnvironmentFile drop-in + service restart), see
     ``docs/RUNBOOK-whoop-token.md``. As soon as the env var is present the
     detail path below activates automatically; until then the module stays an
     honest ``partial``. The value is never logged or written anywhere.
@@ -476,16 +479,47 @@ def _mission_row(proj: Dict[str, Any]) -> Dict[str, Any]:
     job_type = str(proj.get("job_type") or "").strip()
     receipts = proj.get("receipts")
     n_receipts = len(receipts) if isinstance(receipts, list) else 0
+    evidence_refs = proj.get("evidence_refs")
+    plan = proj.get("plan")
+    result_refs = proj.get("result_refs")
+    safe_plan = [
+        str(item)[:240] for item in (plan if isinstance(plan, list) else [])
+        if isinstance(item, (str, int, float))
+    ][:6]
+    safe_evidence = [
+        str(item)[:240] for item in (
+            evidence_refs if isinstance(evidence_refs, list) else [])
+        if isinstance(item, (str, int, float))
+    ][:6]
+    safe_receipts = [
+        str(item)[:240] for item in (
+            receipts if isinstance(receipts, list) else [])
+        if isinstance(item, (str, int, float))
+    ][:6]
+    safe_results = [
+        str(item)[:240] for item in (
+            result_refs if isinstance(result_refs, list) else [])
+        if isinstance(item, (str, int, float))
+    ][:6]
     sub_bits = [b for b in (owner, job_type) if b]
     value = f"{n_receipts} Beleg" if n_receipts else "—"
     return {
         "icon": "rocket" if bucket == "running" else ("circle-check-big" if bucket == "verified" else "lock"),
         "accent": _MISSION_ACCENT.get(bucket, "cyan"),
         "title": goal[:80],
+        "goal": goal[:500],
         "sub": " · ".join(sub_bits) or "Mission",
+        "owner": owner[:120] or None,
+        "missionId": str(proj.get("mission_id") or "")[:160] or None,
         "status": bucket,
         "statusLabel": label,
         "value": value,
+        "plan": safe_plan,
+        "currentStep": str(proj.get("next_action") or "")[:500] or None,
+        "tool": job_type[:160] or None,
+        "expectedResult": str(proj.get("expected_result") or "")[:500] or None,
+        "result": safe_results[-1] if safe_results else None,
+        "evidence": (safe_evidence + safe_receipts)[-6:],
         "updatedAt": proj.get("updated_at"),
     }
 
@@ -673,8 +707,8 @@ def module_body() -> Dict[str, Any]:
             ],
             note=("Recovery/HRV/Schlaf nur über autorisierten Endpunkt "
                   "/internal/summary; der Plugin-Kontext hält kein WHOOP_INTERNAL_TOKEN. "
-                  "Anbindung = gated Operator-Schritt (EnvironmentFile-Drop-in + "
-                  "Dienst-Restart): docs/RUNBOOK-whoop-token.md."),
+                 "Anbindung = interne Betriebsaktion (EnvironmentFile-Drop-in + "
+                 "Dienst-Restart): docs/RUNBOOK-whoop-token.md."),
             extra={"scopes": health.get("scopes"), "tokenFresh": token_fresh},
         )
 
@@ -2810,14 +2844,15 @@ def _jarvis_hints(body: Dict[str, Any], company: Dict[str, Any],
                                  "(/approvals/decide); dieses Cockpit liest sie nur."),
                       "source": "/srv/hermes/approvals", "workspace": "company_signal"})
 
-    # (4) Rise-L gestörte Dienste — restart ist ein Gate; hier NUR Hinweis, kein Propose.
+    # (4) Rise-L gestörte Dienste — internal restart is autonomous; the card is
+    # still read-only and hands the follow-up to Jarvis instead of executing here.
     svc = risel.get("services") if isinstance(risel.get("services"), dict) else None
     failed = int((svc or {}).get("failed") or 0)
     if failed > 0:
         hints.append({"id": "risel_failed", "severity": "attention", "icon": "server-off",
                       "title": f"{failed} Dienst(e) gestört",
-                      "detail": ("systemd --user meldet gestörte Dienste — prüfen. "
-                                 "Neustart ist ein Prod-Restart-Gate (Operator)."),
+                      "detail": ("systemd --user meldet gestörte Dienste — Jarvis kann "
+                                 "intern prüfen und neu starten; kein Operator-Gate nötig."),
                       "source": "systemd --user", "workspace": "engineering"})
 
     # (5) Blockierte Engineering-Mission -> in-scope Propose-Vorschlag (dry-run default).
@@ -3818,10 +3853,11 @@ def module_kommunikation() -> Dict[str, Any]:
                "workspaces": ["private", "company_signal"]})
 
 
-# --- M3/sessions — 3 work-strands + mission.v2 job_projection (steer gated) --
+# --- M3/sessions — work strands + mission.v2 job projection ----------------
 # READ-ONLY projection: Jarvis strand from mission.v2, Codex/Claude strands from
 # the Hermes agent-session broker :18087 (jarvis-ui actor, ONLY inventory). All
-# mutating ops (steer/continue/interrupt/bind) are gated and structurally absent.
+# direct mutating controls are structurally absent from this projection; Mikael
+# steers internal work through the shared Jarvis text/voice command path.
 AGENT_BROKER_BASE = os.environ.get("MIKAELOS_AGENT_BROKER", "http://127.0.0.1:18087")
 AGENT_TOKEN_PATH = Path(os.environ.get(
     "MIKAELOS_AGENT_TOKEN_PATH", "/run/user/1000/hermes-agent-sessions/jarvis-ui.token"))
@@ -3920,7 +3956,12 @@ def _broker_strand(backend: str, token: str) -> Dict[str, Any]:
 
 
 def _delegation_log_tail(path: Path) -> List[Dict[str, str]]:
-    """Read a bounded tail from one upstream-redacted Hermes live transcript."""
+    """Read a bounded operational tail without exposing model reasoning.
+
+    Only product-safe step/tool/result/evidence events are projected. Upstream
+    ``think``/assistant-reasoning lines are deliberately discarded even when
+    redacted; MIKAEL OS never renders chain-of-thought.
+    """
     try:
         with path.open("rb") as handle:
             handle.seek(0, os.SEEK_END)
@@ -3941,9 +3982,12 @@ def _delegation_log_tail(path: Path) -> List[Dict[str, str]]:
         bits = left.strip().split(None, 1)
         if len(bits) != 2:
             continue
+        kind = bits[1][:16].lower()
+        if kind not in {"step", "status", "tool", "result", "evidence"}:
+            continue
         rows.append({
             "time": bits[0][:8],
-            "kind": bits[1][:16],
+            "kind": kind,
             "text": body.strip()[:800],
         })
     return rows[-_DELEGATION_TAIL_LINES:]
@@ -4034,8 +4078,9 @@ def _delegation_live_overview() -> Dict[str, Any]:
         "source": "Hermes 0.19 · redigierte Live-Transkripte",
         "pollAfterSeconds": 4,
         "note": (
-            "Zeigt gekürzte, upstream-redigierte Denk-, Tool- und Ergebnisereignisse."
-            if rows else "Noch keine lesbaren Live-Transkripte vorhanden."
+            "Zeigt nur Ziel-, Schritt-, Tool-, Ergebnis- und Evidenzereignisse; "
+            "keine Modellgedanken."
+            if rows else "Noch keine lesbaren operativen Ereignisse vorhanden."
         ),
     }
 
@@ -4077,7 +4122,7 @@ def agent_sessions_overview() -> Dict[str, Any]:
     now = _now()
     _CODEX_META = {"id": "codex", "title": "Codex (Bauer)", "icon": "terminal",
                    "workspace": "engineering",
-                   "permission": "Nur lesen (steuern gated)",
+                   "permission": "Nur lesen (Steuerung via Jarvis)",
                    "source": "session-broker :18087 (jarvis-ui, inventory)",
                    "sourceKind": "http", "observedAt": _iso(now),
                    "staleAfterSeconds": STALE["sessions"], "readOnly": True}
@@ -4086,13 +4131,50 @@ def agent_sessions_overview() -> Dict[str, Any]:
     codex = {**_CODEX_META, **_broker_strand("codex", token)}
     claude = {**_CLAUDE_META, **_broker_strand("claude", token)}
 
+    delegations = _delegation_live_overview()
+    executor_rows: List[Dict[str, Any]] = []
+    for delegation in delegations.get("rows") or []:
+        if not isinstance(delegation, dict):
+            continue
+        for task in delegation.get("tasks") or []:
+            if not isinstance(task, dict):
+                continue
+            events = task.get("events") if isinstance(task.get("events"), list) else []
+            last_event = events[-1] if events else None
+            executor_rows.append({
+                "goal": str(task.get("goal") or "Delegierte Aufgabe")[:500],
+                "state": task.get("status") or delegation.get("state"),
+                "updatedAt": task.get("observedAt"),
+                "latestEvent": last_event,
+                "evidence": [
+                    event for event in events
+                    if isinstance(event, dict) and event.get("kind") in {"result", "evidence"}
+                ][-3:],
+                "readOnly": True,
+            })
+    executor = {
+        "id": "executor",
+        "title": "Executor (Ausführung)",
+        "icon": "rocket",
+        "workspace": "engineering",
+        "permission": "Nur beobachten",
+        "source": delegations.get("source"),
+        "sourceKind": "file",
+        "observedAt": delegations.get("observedAt"),
+        "state": delegations.get("state") or "empty",
+        "readOnly": True,
+        "rows": executor_rows[:6],
+        "currentMission": executor_rows[0] if executor_rows else None,
+        "note": delegations.get("note"),
+    }
+
     missions_rows = [{k: v for k, v in _mission_row(m).items() if k != "updatedAt"}
                      for m in eng_sorted]
     return {
         "workspace": "engineering", "readOnly": True,
-        "strands": [jarvis, codex, claude],
+        "strands": [jarvis, codex, claude, executor],
         "missions": missions_rows,
-        "delegations": _delegation_live_overview(),
+        "delegations": delegations,
         "observedAt": _iso(now),
         "controls": {
             "surface": "read_only",
@@ -4909,9 +4991,9 @@ _PWA_MANIFEST = {
     "id": "/mikael-os",
     "name": "MIKAEL OS",
     "short_name": "MIKAEL OS",
-    "description": "Mikaels persönliches 24/7-Command-Center (read-only Projektionen).",
+    "description": "Mikaels persönliches Jarvis Command Center für Missionen, Voice und Evidenz.",
     "start_url": "/mikael-os",
-    "scope": "/",
+    "scope": "/mikael-os",
     "display": "standalone",
     "orientation": "any",
     "background_color": "#0b1020",
@@ -4927,14 +5009,17 @@ _PWA_SW_JS = """/* MIKAEL OS — minimal offline shell service worker (plugin-se
  * immediately after reconnect. It caches ONLY GET responses and never touches
  * any write/propose route. Honest scope: the plugin ships this as far as a
  * plugin can; a fully installable PWA still needs the host <link rel=manifest>. */
-const CACHE = "mikael-os-shell-v1";
+const CACHE = "mikael-os-shell-v2";
 const OFFLINE = "/api/plugins/mikael-os/pwa/offline.html";
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll([OFFLINE])).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    caches.keys().then((keys) => Promise.all(
+      keys.filter((k) => k.startsWith("mikael-os-shell-") && k !== CACHE)
+        .map((k) => caches.delete(k))
+    ))
       .then(() => self.clients.claim())
   );
 });
@@ -4943,7 +5028,13 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return; // never cache/replay writes or propose POSTs
   e.respondWith(
     fetch(req).then((res) => {
-      if (res && res.ok && (req.url.indexOf("/mikael-os") !== -1 || req.destination === "script" || req.destination === "style")) {
+      const url = new URL(req.url);
+      const shellNavigation = req.mode === "navigate" && url.pathname === "/mikael-os";
+      const staticAsset = url.origin === self.location.origin
+        && (req.destination === "script" || req.destination === "style");
+      // Never cache plugin API JSON: mission, approval and health truth must
+      // fail visibly offline instead of being replayed as if it were current.
+      if (res && res.ok && (shellNavigation || staticAsset)) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
       }
@@ -4990,8 +5081,8 @@ _PWA_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
 # Jarvis Voice-Launch (M1) — deliberately the ONE money-touching subprocess of
 # this surface, tightly bounded. It only *invokes* the existing, tested mint
 # path ``/srv/delta/bin/jarvis-voice-launch "<Zweck>"`` (RealtimeMissionControl
-# → POST 127.0.0.1:18086/internal/launch): mission + 5,50 $ reservation against
-# the 25 $ monthly cap + HMAC capability token (TTL ~120 s, one-shot bootstrap).
+# → POST 127.0.0.1:18086/internal/launch): mission + the currently configured
+# reservation + HMAC capability token (TTL ~120 s, one-shot bootstrap).
 # Nothing of that flow is rebuilt here.
 #
 # Guardrails (contract, enforced below + in tests/plugins/test_mikael_os_voice_launch.py):
@@ -5012,7 +5103,7 @@ _PWA_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
 _VOICE_LAUNCH_BIN = os.environ.get(
     "MIKAELOS_VOICE_LAUNCH_BIN", "/srv/delta/bin/jarvis-voice-launch")
 _VOICE_LAUNCH_TIMEOUT_S = 15
-_VOICE_RESERVED_USD = 5.5
+_VOICE_RESERVED_USD = 0.56
 _VOICE_TTL_FALLBACK_S = 120
 _VOICE_PURPOSE_DEFAULT = "Jarvis Realtime Sprachsession (MIKAEL OS Dashboard)"
 _VOICE_PURPOSE_MAX = 200
@@ -5041,7 +5132,7 @@ _VOICE_ERROR_HUMAN = {
 
 def _voice_launch_exec(purpose: str) -> "subprocess.CompletedProcess[str]":
     """Run the real mint script. Kept as its own tiny seam so tests replace it —
-    every REAL invocation reserves 5,50 $ against the monthly cap and must never
+    every REAL invocation reserves the policy-configured amount and must never
     happen from a test."""
     return subprocess.run(
         [_VOICE_LAUNCH_BIN, purpose],
@@ -5184,6 +5275,425 @@ def jarvis_voice_launch(purpose: str = "") -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Inline Realtime bridge for the Voice Command Deck.
+#
+# The browser owns only WebRTC media + the OpenAI event data channel. Every
+# mission-bound capability, bootstrap continuation and per-session control token
+# stays in this authenticated server process and is exchanged with voice-web on
+# loopback. The browser receives an opaque local handle, the SDP answer and
+# sanitized status only. No provider credential or voice-web control token ever
+# crosses the plugin API boundary.
+# ---------------------------------------------------------------------------
+_VOICE_WEB_BASE_RAW = os.environ.get(
+    "MIKAELOS_VOICE_WEB_BASE", "http://127.0.0.1:18086").rstrip("/")
+_VOICE_WEB_PARSED = urlsplit(_VOICE_WEB_BASE_RAW)
+_VOICE_WEB_BASE = (
+    _VOICE_WEB_BASE_RAW
+    if _VOICE_WEB_PARSED.scheme == "http"
+    and _VOICE_WEB_PARSED.hostname in {"127.0.0.1", "::1"}
+    else "http://127.0.0.1:18086"
+)
+_VOICE_POLICY_PATH = Path(os.environ.get(
+    "MIKAELOS_VOICE_POLICY_PATH", "/etc/jarvis-realtime/realtime_policy.json"))
+_VOICE_HTTP_TIMEOUT_S = float(os.environ.get("MIKAELOS_VOICE_HTTP_TIMEOUT", "12"))
+_VOICE_MAX_RESPONSE_BYTES = 512 * 1024
+_VOICE_MAX_SDP_BYTES = 256 * 1024
+_VOICE_INLINE_LOCK = threading.Lock()
+_VOICE_INLINE: Dict[str, Any] = {
+    "handle": None,
+    "phase": "idle",
+    "mission_id": None,
+    "session_id": None,
+    "reservation_usd": None,
+    "expires_at": None,
+    "bootstrap_id": None,
+    "bootstrap_token": None,
+    "nonce": None,
+    "control_token": None,
+    "control_sequence": 0,
+    "model": None,
+    "max_session_seconds": None,
+    "max_turns": None,
+}
+
+
+def _voice_http_request(
+    method: str,
+    path: str,
+    *,
+    body: bytes = b"",
+    headers: Optional[Dict[str, str]] = None,
+) -> Tuple[int, bytes, Dict[str, str]]:
+    """Bounded loopback request seam. Tests replace this; secrets are never logged."""
+    request = Request(
+        _VOICE_WEB_BASE + path,
+        data=body if method != "GET" else None,
+        headers=headers or {},
+        method=method,
+    )
+    try:
+        with urlopen(request, timeout=_VOICE_HTTP_TIMEOUT_S) as response:
+            data = response.read(_VOICE_MAX_RESPONSE_BYTES + 1)
+            status = int(getattr(response, "status", 200))
+            response_headers = {
+                str(key).lower(): str(value)
+                for key, value in response.headers.items()
+            }
+    except HTTPError as exc:
+        data = exc.read(_VOICE_MAX_RESPONSE_BYTES + 1)
+        status = int(exc.code)
+        response_headers = {
+            str(key).lower(): str(value)
+            for key, value in (exc.headers.items() if exc.headers else [])
+        }
+    except (OSError, URLError):
+        return 0, b"", {}
+    if len(data) > _VOICE_MAX_RESPONSE_BYTES:
+        return 502, b"", {}
+    return status, data, response_headers
+
+
+def _voice_json_response(
+    path: str,
+    payload: Dict[str, Any],
+    *,
+    scheme: str,
+    credential: str,
+) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
+    status, raw, headers = _voice_http_request(
+        "POST",
+        path,
+        body=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        headers={
+            "Authorization": f"{scheme} {credential}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        parsed = json.loads(raw.decode("utf-8")) if raw else {}
+    except (UnicodeDecodeError, ValueError):
+        parsed = {}
+    return status, parsed if isinstance(parsed, dict) else {}, headers
+
+
+def _voice_policy_summary() -> Dict[str, Any]:
+    try:
+        raw = json.loads(_VOICE_POLICY_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {
+            "state": "unavailable",
+            "rolloutStatus": None,
+            "model": None,
+            "voice": None,
+            "reasoningEffort": None,
+            "costEnforcement": None,
+            "reservationUsd": None,
+            "maxSessionSeconds": None,
+        }
+    if not isinstance(raw, dict):
+        return {"state": "unavailable"}
+    approved = raw.get("rollout_status") == "approved"
+    return {
+        "state": "ready" if approved else "disabled",
+        "rolloutStatus": raw.get("rollout_status"),
+        "model": raw.get("model"),
+        "voice": raw.get("voice"),
+        "reasoningEffort": raw.get("reasoning_effort"),
+        "costEnforcement": raw.get("cost_enforcement"),
+        "reservationUsd": raw.get("session_reservation_usd"),
+        "maxSessionSeconds": raw.get("max_session_seconds"),
+        "maxTurns": raw.get("max_turns"),
+        "maxToolCalls": raw.get("max_tool_calls"),
+    }
+
+
+def jarvis_voice_inline_status() -> Dict[str, Any]:
+    """Sanitized readiness for the embedded WebRTC lane; no provider call."""
+    root_status, _root, _headers = _voice_http_request("GET", "/")
+    native_health_status, _health, _health_headers = _voice_http_request(
+        "GET", "/healthz")
+    policy = _voice_policy_summary()
+    reachable = root_status == 200
+    state = (
+        "unavailable" if not reachable
+        else "disabled" if policy.get("rolloutStatus") != "approved"
+        else "ready"
+    )
+    return {
+        "ok": state == "ready",
+        "state": state,
+        "transport": "webrtc",
+        "control": "hermes-sideband",
+        "continuity": "mission.v2 + shared outcomes",
+        "voiceWeb": {
+            "reachable": reachable,
+            "rootStatus": root_status or None,
+            "nativeHealthzStatus": native_health_status or None,
+            "base": "loopback",
+        },
+        "policy": policy,
+        "observedAt": _iso(_now()),
+    }
+
+
+def _voice_inline_reset_locked(*, phase: str = "idle") -> None:
+    _VOICE_INLINE.update({
+        "handle": None,
+        "phase": phase,
+        "mission_id": None,
+        "session_id": None,
+        "reservation_usd": None,
+        "expires_at": None,
+        "bootstrap_id": None,
+        "bootstrap_token": None,
+        "nonce": None,
+        "control_token": None,
+        "control_sequence": 0,
+        "model": None,
+        "max_session_seconds": None,
+        "max_turns": None,
+    })
+
+
+def _voice_inline_public() -> Dict[str, Any]:
+    return {
+        "phase": _VOICE_INLINE.get("phase"),
+        "missionId": _VOICE_INLINE.get("mission_id"),
+        "sessionId": _VOICE_INLINE.get("session_id"),
+        "reservationUsd": _VOICE_INLINE.get("reservation_usd"),
+        "expiresAt": _VOICE_INLINE.get("expires_at"),
+        "model": _VOICE_INLINE.get("model"),
+        "maxSessionSeconds": _VOICE_INLINE.get("max_session_seconds"),
+        "maxTurns": _VOICE_INLINE.get("max_turns"),
+    }
+
+
+def jarvis_voice_inline_prepare(purpose: str = "") -> Dict[str, Any]:
+    """Mint and immediately exchange the one-shot capability on loopback."""
+    with _VOICE_INLINE_LOCK:
+        if _VOICE_INLINE.get("phase") in {
+            "preparing", "bootstrapped", "connecting", "active", "stopping",
+        }:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "status": "active",
+                    "message": "Eine eingebettete Realtime-Session ist bereits vorbereitet oder aktiv.",
+                    **_voice_inline_public(),
+                },
+            )
+        _voice_inline_reset_locked(phase="preparing")
+
+    try:
+        launch = jarvis_voice_launch(purpose)
+    except HTTPException:
+        with _VOICE_INLINE_LOCK:
+            _voice_inline_reset_locked(phase="error")
+        raise
+    if not launch.get("ok"):
+        with _VOICE_INLINE_LOCK:
+            _voice_inline_reset_locked(phase="error")
+        return launch
+
+    launch_url = str(launch.pop("launch_url", "") or "")
+    fragment = parse_qs(urlsplit(launch_url).fragment, keep_blank_values=False)
+    capability_values = fragment.get("capability") or fragment.get("cap") or []
+    capability = str(capability_values[0]) if capability_values else ""
+    if not capability:
+        with _VOICE_INLINE_LOCK:
+            _voice_inline_reset_locked(phase="error")
+        return {
+            "ok": False,
+            "status": "capability_missing",
+            "message": "Realtime wurde vorbereitet, aber die sichere Einmal-Berechtigung fehlt.",
+        }
+
+    status, bootstrap, _headers = _voice_json_response(
+        "/bootstrap", {}, scheme="Jarvis-Capability", credential=capability)
+    capability = ""
+    bootstrap_id = str(bootstrap.get("bootstrap_id") or "")
+    bootstrap_token = str(bootstrap.get("bootstrap_token") or "")
+    nonce = str(bootstrap.get("nonce") or "")
+    if status != 200 or not bootstrap_id or not bootstrap_token or not nonce:
+        with _VOICE_INLINE_LOCK:
+            _voice_inline_reset_locked(phase="error")
+        return {
+            "ok": False,
+            "status": str(bootstrap.get("error") or "bootstrap_unavailable"),
+            "message": (
+                "Realtime-Berechtigung konnte nicht sicher übernommen werden. "
+                "Es wird nicht automatisch erneut reserviert."
+            ),
+        }
+
+    handle = secrets.token_urlsafe(24)
+    with _VOICE_INLINE_LOCK:
+        _VOICE_INLINE.update({
+            "handle": handle,
+            "phase": "bootstrapped",
+            "mission_id": launch.get("mission_id"),
+            "session_id": launch.get("session_id"),
+            "reservation_usd": launch.get("reserved_usd"),
+            "expires_at": launch.get("expires_at"),
+            "bootstrap_id": bootstrap_id,
+            "bootstrap_token": bootstrap_token,
+            "nonce": nonce,
+            "control_token": None,
+            "control_sequence": 0,
+            "model": bootstrap.get("model"),
+            "max_session_seconds": bootstrap.get("max_session_seconds"),
+            "max_turns": bootstrap.get("max_turns"),
+        })
+        public = _voice_inline_public()
+    return {"ok": True, "inlineId": handle, **public}
+
+
+def jarvis_voice_inline_session(inline_id: str, sdp_offer: str) -> Dict[str, Any]:
+    """Exchange browser SDP through voice-web while retaining all controls here."""
+    offer = str(sdp_offer or "")
+    if not offer or len(offer.encode("utf-8")) > _VOICE_MAX_SDP_BYTES:
+        raise HTTPException(status_code=400, detail={
+            "status": "sdp_invalid",
+            "message": "WebRTC-Angebot fehlt oder ist zu groß.",
+        })
+    with _VOICE_INLINE_LOCK:
+        if (
+            not inline_id
+            or not secrets.compare_digest(
+                str(_VOICE_INLINE.get("handle") or ""), str(inline_id))
+            or _VOICE_INLINE.get("phase") != "bootstrapped"
+        ):
+            raise HTTPException(status_code=409, detail={
+                "status": "inline_session_invalid",
+                "message": "Realtime-Vorbereitung fehlt oder wurde bereits verbraucht.",
+            })
+        bootstrap_id = str(_VOICE_INLINE.get("bootstrap_id") or "")
+        bootstrap_token = str(_VOICE_INLINE.get("bootstrap_token") or "")
+        nonce = str(_VOICE_INLINE.get("nonce") or "")
+        _VOICE_INLINE["phase"] = "connecting"
+
+    request_id = "req_" + secrets.token_hex(12)
+    status, answer, headers = _voice_http_request(
+        "POST",
+        "/session",
+        body=offer.encode("utf-8"),
+        headers={
+            "Authorization": f"Jarvis-Bootstrap {bootstrap_token}",
+            "Content-Type": "application/sdp",
+            "X-Jarvis-Bootstrap-Id": bootstrap_id,
+            "X-Jarvis-Nonce": nonce,
+            "X-Jarvis-Request-Id": request_id,
+            "X-Jarvis-Timestamp": str(int(time.time())),
+        },
+    )
+    session_id = headers.get("x-jarvis-session-id", "")
+    control_token = headers.get("x-jarvis-control-token", "")
+    if status != 201 or not answer or not session_id or not control_token:
+        with _VOICE_INLINE_LOCK:
+            _VOICE_INLINE.update({
+                "phase": "error",
+                "bootstrap_id": None,
+                "bootstrap_token": None,
+                "nonce": None,
+            })
+        return {
+            "ok": False,
+            "status": "session_unavailable",
+            "message": (
+                "WebRTC-Session konnte nicht bestätigt werden. "
+                "Keine automatische Provider-Wiederholung."
+            ),
+        }
+    try:
+        answer_text = answer.decode("utf-8")
+    except UnicodeDecodeError:
+        answer_text = ""
+    if not answer_text:
+        with _VOICE_INLINE_LOCK:
+            _VOICE_INLINE["phase"] = "error"
+        return {
+            "ok": False,
+            "status": "sdp_answer_invalid",
+            "message": "WebRTC-Antwort ist ungültig; keine automatische Wiederholung.",
+        }
+
+    with _VOICE_INLINE_LOCK:
+        _VOICE_INLINE.update({
+            "phase": "active",
+            "session_id": session_id,
+            "control_token": control_token,
+            "control_sequence": 0,
+            "bootstrap_id": None,
+            "bootstrap_token": None,
+            "nonce": None,
+        })
+        public = _voice_inline_public()
+    return {"ok": True, "sdp": answer_text, **public}
+
+
+def jarvis_voice_inline_control(inline_id: str, action: str) -> Dict[str, Any]:
+    """Serialized status/hangup control; returns only a sanitized readback."""
+    requested = str(action or "").strip().lower()
+    if requested not in {"status", "hangup"}:
+        raise HTTPException(status_code=400, detail={
+            "status": "control_invalid",
+            "message": "Nur status oder hangup ist erlaubt.",
+        })
+    with _VOICE_INLINE_LOCK:
+        if (
+            not inline_id
+            or not secrets.compare_digest(
+                str(_VOICE_INLINE.get("handle") or ""), str(inline_id))
+            or _VOICE_INLINE.get("phase") not in {"active", "stopping"}
+        ):
+            raise HTTPException(status_code=409, detail={
+                "status": "no_active_session",
+                "message": "Keine aktive eingebettete Realtime-Session.",
+            })
+        session_id = str(_VOICE_INLINE.get("session_id") or "")
+        control_token = str(_VOICE_INLINE.get("control_token") or "")
+        _VOICE_INLINE["control_sequence"] = int(
+            _VOICE_INLINE.get("control_sequence") or 0) + 1
+        sequence = int(_VOICE_INLINE["control_sequence"])
+        if requested == "hangup":
+            _VOICE_INLINE["phase"] = "stopping"
+
+        status, body, _headers = _voice_json_response(
+            "/control",
+            {
+                "session_id": session_id,
+                "sequence": sequence,
+                "request_timestamp": int(time.time()),
+                "action": requested,
+            },
+            scheme="Jarvis-Control",
+            credential=control_token,
+        )
+        safe = {
+            key: body.get(key)
+            for key in (
+                "status", "turns", "tool_calls", "cost_enforcement",
+                "mission_state", "reconcile_reason",
+            )
+            if key in body
+        }
+        if requested == "hangup":
+            _voice_inline_reset_locked(
+                phase="ended" if status == 200 else "reconcile_required")
+        elif status != 200:
+            _VOICE_INLINE["phase"] = "reconcile_required"
+
+    if status != 200:
+        return {
+            "ok": False,
+            "status": "control_unavailable",
+            "message": "Realtime-Control konnte nicht sicher bestätigt werden.",
+            **safe,
+        }
+    return {"ok": True, "action": requested, **safe}
+
+
+# ---------------------------------------------------------------------------
 # HTTP surface. GET reads are zero-write. The single POST route is propose-only:
 # dry-run previews with no network; a live submit hands the intent to the gated
 # :18083/actions seam. Neither path ever calls /approvals/decide.
@@ -5243,34 +5753,65 @@ def jarvis_voice_launch_route(payload: Dict[str, Any] = Body(default={})) -> Dic
     return jarvis_voice_launch(purpose)
 
 
+@router.get("/jarvis/voice/status")
+def jarvis_voice_inline_status_route() -> Dict[str, Any]:
+    """Read-only, sanitized status for the embedded WebRTC lane."""
+    return jarvis_voice_inline_status()
+
+
+@router.get("/jarvis/voice/healthz")
+def jarvis_voice_inline_health_route() -> Dict[str, Any]:
+    """Health contract consumed by MIKAEL OS and Tailnet verification."""
+    status = jarvis_voice_inline_status()
+    return {
+        "ok": status.get("state") in {"ready", "disabled"},
+        "state": status.get("state"),
+        "voiceWeb": status.get("voiceWeb"),
+        "observedAt": status.get("observedAt"),
+    }
+
+
+@router.post("/jarvis/voice/prepare")
+def jarvis_voice_inline_prepare_route(
+    payload: Dict[str, Any] = Body(default={}),
+) -> Dict[str, Any]:
+    """Explicit operator start: reserve, mint and exchange server-side."""
+    if not isinstance(payload, dict):
+        payload = {}
+    purpose = str(payload.get("purpose") or payload.get("zweck") or "")
+    return jarvis_voice_inline_prepare(purpose)
+
+
+@router.post("/jarvis/voice/session")
+def jarvis_voice_inline_session_route(
+    payload: Dict[str, Any] = Body(default={}),
+) -> Dict[str, Any]:
+    """Proxy one SDP exchange; provider and control credentials stay server-side."""
+    if not isinstance(payload, dict):
+        payload = {}
+    return jarvis_voice_inline_session(
+        inline_id=str(payload.get("inlineId") or ""),
+        sdp_offer=str(payload.get("sdp") or ""),
+    )
+
+
+@router.post("/jarvis/voice/control")
+def jarvis_voice_inline_control_route(
+    payload: Dict[str, Any] = Body(default={}),
+) -> Dict[str, Any]:
+    """Serialized status/hangup for the active embedded session."""
+    if not isinstance(payload, dict):
+        payload = {}
+    return jarvis_voice_inline_control(
+        inline_id=str(payload.get("inlineId") or ""),
+        action=str(payload.get("action") or ""),
+    )
+
+
 @router.get("/jarvis/launch/go")
 def jarvis_voice_launch_go():
-    """Ein-Tap-Voice: mintet EINE Sprachsession und leitet per 302 direkt in
-    die Session (Home-Screen-Lesezeichen; Auth = bestehendes Dashboard-Cookie).
-    Nutzt exakt denselben gated Mint-Pfad wie POST /jarvis/launch — gleiche
-    5,50-$-Reservierung, gleiche Debounce, KEINE neue Authority. Die Launch-URL
-    wandert nur in den Location-Header (Einmal-Token, TTL ~120 s) — nie in ein
-    HTML-Body, nie in ein Log. Kein iframe."""
-    try:
-        result = jarvis_voice_launch("Jarvis Sprachsession (Ein-Tap)")
-    except HTTPException as exc:
-        detail = exc.detail if isinstance(exc.detail, dict) else {}
-        secs = detail.get("remainingSeconds")
-        hint = f" Neuer Start in ~{int(secs)} s moeglich." if isinstance(secs, (int, float)) else ""
-        message = str(detail.get("message") or "Ein Start-Link ist bereits aktiv.")
-        return HTMLResponse(
-            "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-            f"<h2>&#127908; Jarvis</h2><p>{message}{hint}</p>"
-            "<p><a href=\"\">Erneut versuchen</a></p>",
-            status_code=409)
-    if not result.get("ok") or not result.get("launch_url"):
-        message = str(result.get("message") or result.get("status") or "unbekannt")
-        return HTMLResponse(
-            "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-            f"<h2>&#127908; Jarvis</h2><p>Start nicht m&ouml;glich: {message}</p>"
-            "<p><a href=\"\">Erneut versuchen</a></p>",
-            status_code=503)
-    return RedirectResponse(result["launch_url"], status_code=302)
+    """Stable compatibility bookmark: open the embedded deck without minting."""
+    return RedirectResponse("/mikael-os?voice=1", status_code=307)
 
 
 @router.get("/cockpit/approvals")
@@ -5390,10 +5931,10 @@ def pwa_manifest_route() -> Response:
 @router.get("/pwa/sw.js")
 def pwa_sw_route() -> Response:
     """Minimal offline-shell service worker (plugin-served). Service-Worker-Allowed
-    widens the scope to '/' so a returning Kiosk window can show the shell after
-    reconnect. Caches GET only — never a write/propose route."""
+    permits only the Mikael-OS app scope. API JSON is never cached."""
     return Response(content=_PWA_SW_JS, media_type="application/javascript",
-                    headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
+                    headers={"Service-Worker-Allowed": "/mikael-os",
+                             "Cache-Control": "no-cache"})
 
 
 @router.get("/pwa/offline.html")
@@ -5669,8 +6210,8 @@ def health() -> Dict[str, Any]:
     return {
         "status": "ok",
         "plugin": "mikael-os",
-        "version": "0.9.0",
-        "phase": 5,
+        "version": "1.0.0",
+        "phase": 6,
         "readPaths": {
             "missions_dir": str(MISSIONS_DIR),
             "missions_readable": MISSIONS_DIR.exists(),
