@@ -4098,11 +4098,10 @@ function KommunikationScene(props) {
 }
 
 // ---- SESSIONS / AGENTEN ----------------------------------------------------
-// Three work-strand cards (Jarvis / Codex / Claude) + the mission.v2 job list.
-// steer/continue/bind are GATED — the öffnen/verfolgen affordances render only as
-// visibly disabled buttons (never live). Codex/Claude strands come from the
-// broker inventory; the "attested"/authority badge is honestly absent (inventory
-// does not carry it), never inferred from status alone.
+// Three work-strand cards (Jarvis / Codex / Claude), the mission.v2 job list,
+// and Hermes 0.19's redacted live subagent transcripts. This remains an honest
+// read surface: commands go to Jarvis through the shell command bar rather than
+// mutating broker state from inventory cards.
 function SessionRow(props) {
   const s = props.session;
   const running = s.status === "running";
@@ -4116,14 +4115,15 @@ function SessionRow(props) {
           s.status || "—"),
         s.cwd ? h("span", { className: "mos__sess-cwd", title: s.cwd }, s.cwd) : null,
         s.startedAt ? h("span", { className: "mos__sess-when" }, freshnessLabel(s.startedAt) || "") : null)),
-    // Gated controls — sichtbar-aber-gesperrt, never a working steer/continue.
+    // Inventory is read-only. The shell command bar is the actual Jarvis control
+    // path, so these buttons never pretend to mutate a broker session directly.
     h("span", { className: "mos__sess-acts" },
       h("button", { type: "button", disabled: true, "aria-disabled": "true", className: "mos__sess-act is-gated",
-        title: "Öffnen/Steuern nur über den propose-Weg (gated) — hier nicht ausführbar." },
-        h(Icon, { name: "eye", size: 12 }), "öffnen"),
+        title: "Diese Inventory-Karte ist nur lesend. Änderungen per Text oder Sprache an Jarvis geben." },
+        h(Icon, { name: "eye", size: 12 }), "Inventar"),
       h("button", { type: "button", disabled: true, "aria-disabled": "true", className: "mos__sess-act is-gated",
-        title: "Verfolgen/Steer bleibt gated (propose-only) — hier nicht ausführbar." },
-        h(Icon, { name: "waypoints", size: 12 }), "verfolgen", h(Icon, { name: "lock", size: 11 }))));
+        title: "Live-Arbeit erscheint unten automatisch, sobald Hermes delegiert." },
+        h(Icon, { name: "waypoints", size: 12 }), "Live unten")));
 }
 function StrandCard(props) {
   const s = props.strand || {};
@@ -4174,6 +4174,8 @@ function SessionsScene(props) {
   const offline = load === "offline" || (!ov && load !== "loading");
   const strands = (ov && Array.isArray(ov.strands)) ? ov.strands : [];
   const missions = (ov && Array.isArray(ov.missions)) ? ov.missions : [];
+  const delegations = ov && ov.delegations;
+  const liveRows = (delegations && Array.isArray(delegations.rows)) ? delegations.rows : [];
   if (offline && !ov) {
     return h("div", { className: "mos__sessions" },
       h(ZoneEmpty, { state: "unavailable", icon: "waypoints",
@@ -4184,6 +4186,32 @@ function SessionsScene(props) {
     h("div", { className: "mos__sgrid" },
       (strands.length ? strands : [{ id: "jarvis" }, { id: "codex" }, { id: "claude" }]).map((s) =>
         h(StrandCard, { key: s.id, strand: (ov ? s : null), load: load }))),
+    h("section", { className: "mos__card mos__livework" },
+      h("header", { className: "mos__card-head" },
+        h(Icon, { name: "activity", size: 16 }),
+        h("span", { className: "mos__card-title" }, "Live-Arbeit der Agenten"),
+        liveRows.length ? h("span", { className: "mos__appc-count" }, liveRows.length) : null,
+        h(ZonePip, {
+          state: delegations ? (delegations.state || "empty") : (load === "loading" ? "loading" : "empty"),
+          observedAt: delegations && delegations.observedAt,
+          source: delegations && delegations.source,
+          note: delegations && delegations.note,
+        })),
+      h("div", { className: "mos__livework-body" },
+        load === "loading" && !ov
+          ? [0, 1].map((i) => h("div", { key: i, className: "mos__skrow" }))
+          : liveRows.length
+            ? liveRows.map((delegation) => h(LiveDelegation, {
+                key: delegation.delegationId,
+                delegation: delegation,
+              }))
+            : h(ZoneEmpty, {
+                state: delegations ? (delegations.state || "empty") : "empty",
+                icon: "activity",
+                title: "Gerade keine delegierte Live-Arbeit",
+                note: (delegations && delegations.note)
+                  || "Sobald Jarvis einen Subagenten startet, erscheinen Denken, Tools und Ergebnisse hier automatisch.",
+              }))),
     h("section", { className: "mos__card mos__slist" },
       h("header", { className: "mos__card-head" },
         h(Icon, { name: "list-checks", size: 16 }),
@@ -4197,11 +4225,60 @@ function SessionsScene(props) {
           : missions.length
             ? missions.map((r, i) => h(LensRow, { key: i, row: r, index: i + 1 }))
             : h(ZoneEmpty, { state: "empty", icon: "list-checks", title: "Keine Missionen", note: ov && ov.note }))),
-    // The gated-controls caption — steer/continue/bind never execute from here.
+    // One clear control model: observe here, direct Jarvis via the persistent
+    // text/voice command bar below.
     h("div", { className: "mos__kbanner mos__kbanner--sessions" },
-      h(Icon, { name: "lock", size: 14 }),
+      h(Icon, { name: "message-square", size: 14 }),
       h("span", null, (ov && ov.controls && ov.controls.note)
-        || "Steuern/Continue/Steer/Bind bleiben gated (propose-only) — hier nicht ausführbar.")));
+        || "Hier beobachten; Änderungen per Text oder Sprache an Jarvis geben.")));
+}
+
+function LiveDelegation(props) {
+  const delegation = props.delegation || {};
+  const tasks = Array.isArray(delegation.tasks) ? delegation.tasks : [];
+  const running = delegation.state === "running";
+  return h("article", { className: "mos__delegation" + (running ? " is-running" : "") },
+    h("div", { className: "mos__delegation-head" },
+      h("span", { className: "mos__delegation-state" },
+        h(Icon, { name: running ? "activity" : "circle-check-big", size: 13 }),
+        running ? "läuft live" : (delegation.state || "fertig")),
+      h("span", { className: "mos__delegation-id" }, delegation.delegationId || "Delegation"),
+      delegation.started ? h("span", { className: "mos__delegation-time" }, delegation.started) : null),
+    h("div", { className: "mos__delegation-tasks" },
+      tasks.map((task) => h(LiveTask, {
+        key: String(task.index),
+        task: task,
+      }))));
+}
+
+function LiveTask(props) {
+  const task = props.task || {};
+  const events = Array.isArray(task.events) ? task.events : [];
+  return h("section", { className: "mos__livetask" },
+    h("div", { className: "mos__livetask-head" },
+      h("span", { className: "mos__livetask-index" }, String((task.index || 0) + 1)),
+      h("span", { className: "mos__livetask-goal" }, task.goal || "Delegierte Aufgabe"),
+      h("span", { className: "mos__livetask-status is-" + (task.status || "unknown") }, task.status || "—")),
+    events.length
+      ? h("ol", { className: "mos__liveevents" }, events.map((event, i) =>
+          h("li", { key: i, className: "mos__liveevent is-" + (event.kind || "event") },
+            h("time", null, event.time || ""),
+            h("span", { className: "mos__liveevent-kind" }, liveEventLabel(event.kind)),
+            h("span", { className: "mos__liveevent-text" }, event.text || "—"))))
+      : h("div", { className: "mos__liveevent-empty" },
+          h(Icon, { name: "clock", size: 12 }), "Startet — noch kein Ereignis geschrieben."));
+}
+
+function liveEventLabel(kind) {
+  return {
+    think: "Denkt",
+    tool: "Tool",
+    result: "Ergebnis",
+    assistant: "Antwort",
+    start: "Start",
+    final: "Abschluss",
+    user: "Auftrag",
+  }[kind] || "Ereignis";
 }
 
 // ===========================================================================
@@ -5075,6 +5152,16 @@ function MikaelOS() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [loadOverview, loadCockpit, loadFirma, loadKomm, loadSessions, loadZiele, loadReflexion, loadGesundheit, loadBetrieb]);
+  // Hermes 0.19 live transcript refresh. Poll only while the Agenten-Leitstand
+  // is actually visible; everywhere else the normal focus/reconnect refresh is
+  // enough and creates no background dashboard chatter.
+  useEffect(() => {
+    const visible = scene === "sessions" || (isMobile && mobileScreen === "sessions");
+    if (!visible || typeof window === "undefined") return undefined;
+    loadSessions();
+    const timer = window.setInterval(loadSessions, 4000);
+    return () => window.clearInterval(timer);
+  }, [scene, isMobile, mobileScreen, loadSessions]);
   // M5 — PWA: inject the plugin-served manifest link + theme-color into the shared
   // host <head> (soweit im Plugin machbar) and register the offline-shell service
   // worker at scope "/". Honest: a fully installable PWA still needs a host-side
@@ -5669,8 +5756,8 @@ function MikaelOS() {
               h(Icon, { name: "waypoints", size: 20 }),
               h("div", { className: "mos__scenehead-t" },
                 h("h2", null, "Sessions / Agenten"),
-                h("span", null, "mission.v2 + Session-Broker :18087 (inventory) · Steuern/Continue/Steer bleiben gated")),
-              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "lock", size: 12 }), "Nur lesen")),
+                h("span", null, "mission.v2 + Session-Broker + Hermes-0.19-Live-Transkripte · Steuerung über Jarvis")),
+              h("span", { className: "mos__scenehead-ro" }, h(Icon, { name: "activity", size: 12 }), "Live beobachten")),
             h(SessionsScene, { data: sessions, load: sessionsLoad }),
             h("div", { className: "mos__scene-orb", "aria-hidden": "true" }, h(Orb, { label: false })))
         : scene === "ziele"
