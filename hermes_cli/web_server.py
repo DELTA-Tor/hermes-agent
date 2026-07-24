@@ -16610,6 +16610,38 @@ def _ws_auth_reason(ws: "WebSocket") -> tuple[Optional[str], str]:
             )
             return "ticket_invalid", "ticket"
 
+    # Loopback / --insecure mode. The dashboard runs behind an external
+    # identity proxy (the Mikael-OS Tailnet frontdoor) that binds the backend
+    # to 127.0.0.1 without setting auth_required. The SPA and the Hermes
+    # Desktop client both drive /api/ws with a minted ``?ticket=`` (or the
+    # process ``?internal=`` credential) rather than the legacy ``?token=``,
+    # so accept those here too — they are minted only by an already
+    # identity-verified caller and consumed single-use. The legacy token path
+    # stays as a fallback for direct loopback tooling.
+    ticket = ws.query_params.get("ticket", "")
+    internal = ws.query_params.get("internal", "")
+    if ticket or internal:
+        try:
+            from hermes_cli.dashboard_auth.ws_tickets import (
+                TicketInvalid,
+                consume_internal_credential,
+                consume_ticket,
+            )
+        except Exception:
+            TicketInvalid = None  # type: ignore[assignment]
+        if TicketInvalid is not None:
+            if internal:
+                try:
+                    consume_internal_credential(internal)
+                    return None, "internal"
+                except TicketInvalid:
+                    return "internal_invalid", "internal"
+            try:
+                consume_ticket(ticket)
+                return None, "ticket"
+            except TicketInvalid:
+                return "ticket_invalid", "ticket"
+
     token = ws.query_params.get("token", "")
     if not token:
         return "no_credential", "none"

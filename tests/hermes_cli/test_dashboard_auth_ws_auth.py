@@ -213,11 +213,22 @@ class TestWsAuthOkLoopback:
         ws = _fake_ws(query={})
         assert web_server._ws_auth_ok(ws) is False
 
-    def test_ticket_param_ignored_in_loopback(self, loopback_app):
-        # Even if someone sneaks a ticket through, loopback mode only
-        # cares about ?token=. A naked ticket isn't a token.
+    def test_valid_ticket_accepted_in_loopback(self, loopback_app):
+        # Loopback mode runs behind the Mikael-OS identity frontdoor; the SPA
+        # and Hermes Desktop both drive /api/ws with a minted single-use
+        # ticket, so a valid ticket authenticates here too.
         ticket = mint_ticket(user_id="u1", provider="stub")
         ws = _fake_ws(query={"ticket": ticket})
+        assert web_server._ws_auth_ok(ws) is True
+
+    def test_consumed_ticket_rejected_in_loopback(self, loopback_app):
+        ticket = mint_ticket(user_id="u1", provider="stub")
+        assert web_server._ws_auth_ok(_fake_ws(query={"ticket": ticket})) is True
+        # Single-use — a replay of the same ticket fails.
+        assert web_server._ws_auth_ok(_fake_ws(query={"ticket": ticket})) is False
+
+    def test_invalid_ticket_rejected_in_loopback(self, loopback_app):
+        ws = _fake_ws(query={"ticket": "not-a-real-ticket"})
         assert web_server._ws_auth_ok(ws) is False
 
 
@@ -295,12 +306,13 @@ class TestWsAuthOkGated:
         ws = _fake_ws(query={"internal": "not-the-internal-credential"})
         assert web_server._ws_auth_ok(ws) is False
 
-    def test_internal_credential_not_accepted_in_loopback(self, loopback_app):
-        """Outside gated mode, ?internal= is meaningless — only ?token= works.
-        A naked internal credential must not authenticate."""
+    def test_internal_credential_accepted_in_loopback(self, loopback_app):
+        """Behind the identity frontdoor (loopback bind, no auth_required),
+        the process-lifetime internal credential is honoured so server-spawned
+        WS children reconnect just like in gated mode."""
         cred = internal_ws_credential()
         ws = _fake_ws(query={"internal": cred})
-        assert web_server._ws_auth_ok(ws) is False
+        assert web_server._ws_auth_ok(ws) is True
 
 
 class TestWsRequestIsAllowedGated:
